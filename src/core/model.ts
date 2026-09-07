@@ -97,9 +97,10 @@ export type ContentEntry = Base & {
   type: 'anime' | 'series' | 'film' | 'game' | 'book' | 'course'
   title: string
   titleOrig?: string
-  start: string
+  /** null → лежит в списке «к просмотру», ещё не начато */
+  start: string | null
   end: string | null
-  status: 'active' | 'done' | 'dropped'
+  status: 'planned' | 'active' | 'done' | 'dropped'
   /** 1..10 */
   score: number | null
   comment?: string
