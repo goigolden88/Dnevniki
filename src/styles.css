@@ -341,3 +341,76 @@ p {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* ─── Мелочи экранов ─────────────────────────────────────────────────────── */
+
+.back,
+.cycle__name {
+  color: inherit;
+  text-decoration: none;
+}
+
+.cycle__name {
+  font-weight: 600;
+}
+
+.back {
+  color: var(--accent);
+}
+
+.link-btn {
+  padding: 4px 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.plain {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plain a {
+  color: var(--accent);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row--end {
+  justify-content: flex-end;
+  margin-top: 12px;
+}
+
+.row input {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+}
+
+.btn--danger {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+/* Карточка на экране позиции — без рамки, она там одна на весь блок. */
+.block.cycle {
+  padding: 12px 14px;
+}

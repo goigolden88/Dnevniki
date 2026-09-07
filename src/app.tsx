@@ -1,6 +1,7 @@
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './ui/Layout.tsx'
 import { Today } from './screens/Today.tsx'
+import { ItemScreen } from './modules/cycles/ItemScreen.tsx'
 import { Feed } from './screens/Feed.tsx'
 import { Settings } from './screens/Settings.tsx'
 
@@ -15,6 +16,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Today />} />
+          <Route path="cycle/:id" element={<ItemScreen />} />
           <Route path="feed" element={<Feed />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />

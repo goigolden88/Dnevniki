@@ -1,14 +1,18 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import type { CycleState } from '../../core/cycles.ts'
 import type { CycleItem } from '../../core/model.ts'
+import { CategoryField } from './CategoryField.tsx'
 import { barPercent, CATEGORIES, detailText, intervalText, statusText } from './labels.ts'
-import { useCycles } from './useCycles.ts'
+import { useCycles, type ItemDraft } from './useCycles.ts'
 
 export function CycleList() {
   const cycles = useCycles()
 
   if (cycles.status === 'loading') return <p className="muted">Открываю базу…</p>
   if (cycles.status === 'failed') return <p className="error">База не открылась: {cycles.error}</p>
+
+  const archived = cycles.items.filter((item) => item.archived)
 
   return (
     <>
@@ -27,6 +31,8 @@ export function CycleList() {
       )}
 
       <AddItem onAdd={cycles.addItem} />
+
+      {archived.length > 0 && <Archived items={archived} />}
     </>
   )
 }
@@ -46,7 +52,9 @@ function CycleCard({
   return (
     <li className={`cycle cycle--${state.status}`}>
       <div className="cycle__head">
-        <span className="cycle__name">{state.item.name}</span>
+        <Link className="cycle__name" to={`/cycle/${state.item.id}`}>
+          {state.item.name}
+        </Link>
         <span className="cycle__cat muted">{state.item.cat}</span>
       </div>
 
@@ -75,17 +83,30 @@ function CycleCard({
   )
 }
 
-/**
- * Минимальное заведение позиции: название, категория, интервал.
- *
- * Полное управление — правка, архив, удаление — идёт следующим шагом.
- * Без формы экран нечем наполнить, и проверить его на телефоне нельзя.
- */
-function AddItem({
-  onAdd,
-}: {
-  onAdd: (draft: { name: string; cat: string; intervalDays: number | null }) => Promise<void>
-}) {
+/** Архивные позиции. Не считаются и не мешают, но должны быть достижимы. */
+function Archived({ items }: { items: CycleItem[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <section className="block">
+      <button type="button" className="link-btn" onClick={() => setOpen(!open)}>
+        {open ? 'Скрыть архив' : `Архив (${items.length})`}
+      </button>
+      {open && (
+        <ul className="plain">
+          {items.map((item) => (
+            <li key={item.id}>
+              <Link to={`/cycle/${item.id}`}>{item.name}</Link>
+              <span className="muted"> · {item.cat}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+function AddItem({ onAdd }: { onAdd: (draft: ItemDraft) => Promise<CycleItem | null> }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [cat, setCat] = useState<string>(CATEGORIES[0])
@@ -108,7 +129,7 @@ function AddItem({
     const parsed = Number(interval)
     const intervalDays = interval.trim() && Number.isFinite(parsed) && parsed > 0 ? parsed : null
 
-    void onAdd({ name: trimmed, cat, intervalDays })
+    void onAdd({ name: trimmed, cat: cat.trim(), intervalDays })
     setName('')
     setInterval('')
     setOpen(false)
@@ -121,16 +142,7 @@ function AddItem({
         <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       </label>
 
-      <label className="field">
-        <span>Категория</span>
-        <select value={cat} onChange={(e) => setCat(e.target.value)}>
-          {CATEGORIES.map((category) => (
-            <option key={category} value={category}>
-              {category}
-            </option>
-          ))}
-        </select>
-      </label>
+      <CategoryField value={cat} onChange={setCat} />
 
       <label className="field">
         <span>Интервал, дней</span>

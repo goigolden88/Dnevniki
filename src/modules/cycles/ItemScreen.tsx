@@ -1,0 +1,264 @@
+import { useState, type FormEvent } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { daysBetween, days, formatDate, today } from '../../core/dates.ts'
+import type { CycleEvent } from '../../core/model.ts'
+import { CategoryField } from './CategoryField.tsx'
+import { barPercent, detailText, intervalText, statusText } from './labels.ts'
+import { useCycles, type ItemDraft } from './useCycles.ts'
+
+/** Позиция целиком: состояние, история, разброс, правка. */
+export function ItemScreen() {
+  const { id = '' } = useParams()
+  const cycles = useCycles()
+
+  if (cycles.status === 'loading') return <p className="muted">Открываю базу…</p>
+  if (cycles.status === 'failed') return <p className="error">База не открылась: {cycles.error}</p>
+
+  const state = cycles.stateOf(id)
+  if (!state) {
+    return (
+      <>
+        <p className="stub">Позиция не найдена. Возможно, удалена.</p>
+        <Link className="btn btn--wide" to="/">
+          К списку
+        </Link>
+      </>
+    )
+  }
+
+  const marks = cycles.marksOf(id)
+  const markedToday = state.daysSince === 0
+
+  return (
+    <>
+      <p>
+        <Link className="back" to="/">
+          ← Сейчас
+        </Link>
+      </p>
+
+      <header className="screen-head">
+        <h1>{state.item.name}</h1>
+        <p className="muted">
+          {state.item.cat}
+          {state.item.archived && ' · в архиве'}
+        </p>
+      </header>
+
+      {cycles.error && <p className="error">Не сохранилось: {cycles.error}</p>}
+
+      <section className={`block cycle cycle--${state.status}`}>
+        <div className="bar" aria-hidden="true">
+          <span className="bar__fill" style={{ width: `${barPercent(state)}%` }} />
+        </div>
+        <div className="cycle__foot">
+          <div className="cycle__facts">
+            <span className="cycle__status">{statusText(state)}</span>
+            <span className="muted">
+              {detailText(state)}
+              {intervalText(state) && ` · ${intervalText(state)}`}
+            </span>
+          </div>
+          <button
+            type="button"
+            className={markedToday ? 'mark mark--done' : 'mark'}
+            onClick={() => void cycles.mark(state.item)}
+          >
+            {markedToday ? 'Отмечено' : 'Отметить'}
+          </button>
+        </div>
+      </section>
+
+      {state.spread && (
+        <section className="block">
+          <h2>Разброс</h2>
+          <dl className="facts">
+            <dt>Минимум</dt>
+            <dd>{days(state.spread.min)}</dd>
+            <dt>Медиана</dt>
+            <dd>{days(state.spread.median)}</dd>
+            <dt>Максимум</dt>
+            <dd>{days(state.spread.max)}</dd>
+            <dt>Интервалов</dt>
+            <dd>{state.spread.count}</dd>
+          </dl>
+          {state.spread.max > state.spread.median * 2 && (
+            <p className="muted">
+              Разрыв между максимумом и медианой больше чем вдвое — в истории есть пропуск
+              или лишняя запись.
+            </p>
+          )}
+        </section>
+      )}
+
+      <History marks={marks} onRemove={cycles.removeMark} />
+
+      <AddMark itemId={id} onAdd={cycles.addMark} />
+
+      <ItemForm
+        draft={{
+          name: state.item.name,
+          cat: state.item.cat,
+          intervalDays: state.item.intervalDays,
+          ...(state.item.note === undefined ? {} : { note: state.item.note }),
+        }}
+        archived={state.item.archived === true}
+        onSave={(patch) => cycles.updateItem(id, patch)}
+        onRemove={() => cycles.removeItem(id)}
+        name={state.item.name}
+      />
+    </>
+  )
+}
+
+/**
+ * История отметок, новые сверху. Рядом с каждой — промежуток до предыдущей:
+ * ради этих чисел экран и открывают, в плоском списке дат они не видны.
+ */
+function History({
+  marks,
+  onRemove,
+}: {
+  marks: CycleEvent[]
+  onRemove: (id: string) => Promise<void>
+}) {
+  if (marks.length === 0) {
+    return (
+      <section className="block">
+        <h2>История</h2>
+        <p className="muted">Отметок пока нет.</p>
+      </section>
+    )
+  }
+
+  return (
+    <section className="block">
+      <h2>История</h2>
+      <table className="stats">
+        <tbody>
+          {marks.map((mark, index) => {
+            const older = marks[index + 1]
+            const gap = older ? daysBetween(older.date, mark.date) : null
+            return (
+              <tr key={mark.id}>
+                <td>{formatDate(mark.date)}</td>
+                <td className="num muted">{gap === null ? '' : `+${days(gap)}`}</td>
+                <td className="num">
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => void onRemove(mark.id)}
+                    aria-label={`Удалить отметку ${formatDate(mark.date)}`}
+                  >
+                    ×
+                  </button>
+                </td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </section>
+  )
+}
+
+/** Ввод задним числом: дату выбирают, а не вспоминают формат. */
+function AddMark({
+  itemId,
+  onAdd,
+}: {
+  itemId: string
+  onAdd: (itemId: string, date: string) => Promise<void>
+}) {
+  const [date, setDate] = useState(today())
+
+  return (
+    <section className="block">
+      <h2>Отметка задним числом</h2>
+      <div className="row">
+        {/* type="date" отдаёт ровно YYYY-MM-DD — тот же формат, что в модели. */}
+        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <button type="button" className="btn" onClick={() => void onAdd(itemId, date)}>
+          Добавить
+        </button>
+      </div>
+    </section>
+  )
+}
+
+function ItemForm({
+  draft,
+  archived,
+  name,
+  onSave,
+  onRemove,
+}: {
+  draft: ItemDraft
+  archived: boolean
+  name: string
+  onSave: (patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
+  onRemove: () => Promise<void>
+}) {
+  const navigate = useNavigate()
+  const [form, setForm] = useState({
+    name: draft.name,
+    cat: draft.cat,
+    interval: draft.intervalDays === null ? '' : String(draft.intervalDays),
+  })
+
+  function submit(formEvent: FormEvent) {
+    formEvent.preventDefault()
+    const trimmed = form.name.trim()
+    if (!trimmed) return
+
+    const parsed = Number(form.interval)
+    const intervalDays =
+      form.interval.trim() && Number.isFinite(parsed) && parsed > 0 ? parsed : null
+
+    void onSave({ name: trimmed, cat: form.cat.trim(), intervalDays })
+  }
+
+  function remove() {
+    if (!window.confirm(`Удалить позицию «${name}»? Отметки останутся в данных.`)) return
+    void onRemove().then(() => navigate('/'))
+  }
+
+  return (
+    <section className="block">
+      <h2>Позиция</h2>
+      <form className="form" onSubmit={submit}>
+        <label className="field">
+          <span>Название</span>
+          <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </label>
+
+        <CategoryField value={form.cat} onChange={(cat) => setForm({ ...form, cat })} />
+
+        <label className="field">
+          <span>Интервал, дней</span>
+          <input
+            value={form.interval}
+            onChange={(e) => setForm({ ...form, interval: e.target.value })}
+            inputMode="numeric"
+            placeholder="по истории"
+          />
+        </label>
+
+        <div className="form__actions">
+          <button type="submit" className="btn btn--primary">
+            Сохранить
+          </button>
+        </div>
+      </form>
+
+      <div className="row row--end">
+        <button type="button" className="btn" onClick={() => void onSave({ archived: !archived })}>
+          {archived ? 'Вернуть из архива' : 'В архив'}
+        </button>
+        <button type="button" className="btn btn--danger" onClick={remove}>
+          Удалить
+        </button>
+      </div>
+    </section>
+  )
+}
