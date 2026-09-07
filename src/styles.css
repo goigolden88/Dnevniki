@@ -1,5 +1,165 @@
-/* Наполняется на шаге 6. */
+:root {
+  --bg: #ffffff;
+  --surface: #f4f4f5;
+  --text: #16181d;
+  --muted: #6b7280;
+  --line: #e4e4e7;
+  --accent: #2f6fed;
+  --error: #c02626;
+
+  --tabs-height: 56px;
+
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1b1c1e;
+    --surface: #232427;
+    --text: #ececee;
+    --muted: #9497a1;
+    --line: #33353a;
+    --accent: #6f9dff;
+    --error: #ff7b7b;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  /* Двойной тап по вкладке не должен зумить страницу. */
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+p {
+  margin: 0 0 12px;
+}
+
+.layout {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+
+.content {
+  flex: 1;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px calc(var(--tabs-height) + 24px);
+}
+
+.screen-head {
+  margin-bottom: 24px;
+}
+
+.screen-head p {
+  margin: 4px 0 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--error);
+}
+
+.stub {
+  color: var(--muted);
+  padding: 16px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+}
+
+.block {
+  margin-bottom: 28px;
+}
+
+.stats {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 12px;
+}
+
+.stats td {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.stats .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 12px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Нижняя навигация.
+   safe-area-inset-bottom обязателен: без него панель уезжает под полосу
+   жестов на iPhone и последняя вкладка перестаёт нажиматься. */
+.tabs {
+  position: fixed;
+  inset: auto 0 0 0;
+  display: flex;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.tab {
+  flex: 1;
+  height: var(--tabs-height);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab--active {
+  color: var(--accent);
+  box-shadow: inset 0 2px 0 var(--accent);
 }

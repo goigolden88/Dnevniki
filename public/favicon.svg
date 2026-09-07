@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#1b1c1e"/>
+  <!-- Корешок тетради -->
+  <rect x="118" y="118" width="16" height="276" rx="8" fill="#6f9dff"/>
+  <!-- Строки записей: разной длины, чтобы читалось как список, а не как решётка -->
+  <rect x="166" y="150" width="228" height="18" rx="9" fill="#ececee"/>
+  <rect x="166" y="212" width="164" height="18" rx="9" fill="#ececee" opacity="0.72"/>
+  <rect x="166" y="274" width="196" height="18" rx="9" fill="#ececee" opacity="0.52"/>
+  <rect x="166" y="336" width="120" height="18" rx="9" fill="#ececee" opacity="0.32"/>
+</svg>
