@@ -12,7 +12,7 @@ import {
   sortByUrgency,
   spread,
 } from './cycles.ts'
-import type { CycleEvent, CycleItem } from './model.ts'
+import type { CycleEvent, CycleItem } from '../../core/model.ts'
 
 function item(over: Partial<CycleItem> = {}): CycleItem {
   return {

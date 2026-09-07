@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { db } from './db.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from './model.ts'
+import type { Migration } from './model.ts'
 
 /**
- * Здесь только `parseSnapshot`: он чистый и работает без IndexedDB,
- * которого в node нет. Остальное в `db` проверяется на устройстве.
+ * Здесь только чистые проверки — разбор файла и совместимость версий.
+ * Они работают без IndexedDB, которого в node нет; остальное в `db`
+ * проверяется на устройстве.
  */
 
 function snapshot(over: Record<string, unknown> = {}): string {
@@ -60,5 +62,47 @@ describe('parseSnapshot', () => {
   it('подставляет время разбора, если в файле нет exportedAt', () => {
     const parsed = db.parseSnapshot(snapshot({ exportedAt: undefined }))
     expect(parsed.exportedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+})
+
+describe('checkSnapshotVersion', () => {
+  const noop = () => {}
+  const additive: Migration = {
+    to: 2,
+    note: 'добавлено хранилище depra',
+    additive: true,
+    run: noop,
+  }
+  const reshaping: Migration = {
+    to: 3,
+    note: 'score стал обязательным',
+    additive: false,
+    run: noop,
+  }
+
+  it('свою версию принимает', () => {
+    expect(() => db.checkSnapshotVersion(SCHEMA_VERSION)).not.toThrow()
+  })
+
+  it('файл из будущего отвергает', () => {
+    expect(() => db.checkSnapshotVersion(SCHEMA_VERSION + 1)).toThrow('более новой версии')
+  })
+
+  it('отставание из-за одного лишь нового модуля не мешает', () => {
+    expect(() => db.checkSnapshotVersion(1, [additive], 2)).not.toThrow()
+  })
+
+  it('изменение формы записей отвергает и называет причину', () => {
+    expect(() => db.checkSnapshotVersion(2, [additive, reshaping], 3)).toThrow(
+      'score стал обязательным',
+    )
+  })
+
+  it('аддитивный шаг не спасает, если следом форма всё-таки менялась', () => {
+    expect(() => db.checkSnapshotVersion(1, [additive, reshaping], 3)).toThrow('форма')
+  })
+
+  it('шаги вне промежутка между версиями не учитываются', () => {
+    expect(() => db.checkSnapshotVersion(3, [reshaping], 3)).not.toThrow()
   })
 })

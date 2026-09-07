@@ -25,7 +25,7 @@
 
 import { nowIso } from './dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES, migrations } from './model.ts'
-import type { Base, StoreRecord, SyncedStore } from './model.ts'
+import type { Base, Migration, StoreRecord, SyncedStore } from './model.ts'
 
 const DB_NAME = 'dnevniki'
 
@@ -438,19 +438,44 @@ async function exportAll(): Promise<Snapshot> {
  * Записи метятся грязными — они пришли из файла, а не с сервера, и должны
  * уехать в синхронизацию.
  */
+/**
+ * Можно ли принять файл со схемой `fileVersion`. Кидает с объяснением, если нет.
+ *
+ * Отставание схемы само по себе не мешает: добавление модуля поднимает версию,
+ * но записей прошлых модулей не касается. Отвергать выгрузку месячной давности
+ * из-за появления нового хранилища — терять единственную копию данных на ровном
+ * месте. Мешает только изменение формы записей, и ровно его тут и ищем (Р-24).
+ *
+ * Реестр и текущая версия — параметры: иначе проверку не проверить тестами,
+ * пока реестр пуст.
+ */
+function checkSnapshotVersion(
+  fileVersion: number,
+  steps: readonly Migration[] = migrations,
+  current: number = SCHEMA_VERSION,
+): void {
+  if (fileVersion > current) {
+    throw new Error(
+      `Файл сделан в более новой версии приложения (схема ${fileVersion}, ` +
+        `здесь ${current}). Обновите приложение.`,
+    )
+  }
+  if (fileVersion === current) return
+
+  const blocking = steps.filter(
+    (step) => step.to > fileVersion && step.to <= current && !step.additive,
+  )
+  if (blocking.length === 0) return
+
+  throw new Error(
+    `Файл со схемой ${fileVersion}, здесь ${current}. С тех пор изменилась форма ` +
+      `записей (${blocking.map((step) => step.note).join('; ')}), ` +
+      'а миграция содержимого файла не написана.',
+  )
+}
+
 async function importAll(snapshot: Snapshot): Promise<number> {
-  if (snapshot.schemaVersion > SCHEMA_VERSION) {
-    throw new Error(
-      `Файл сделан в более новой версии приложения (схема ${snapshot.schemaVersion}, ` +
-        `здесь ${SCHEMA_VERSION}). Обновите приложение.`,
-    )
-  }
-  if (snapshot.schemaVersion < SCHEMA_VERSION) {
-    throw new Error(
-      `Файл со схемой ${snapshot.schemaVersion}, здесь ${SCHEMA_VERSION}. ` +
-        'Миграция данных при загрузке ещё не написана.',
-    )
-  }
+  checkSnapshotVersion(snapshot.schemaVersion)
 
   let applied = 0
   for (const store of SYNCED_STORES) {
@@ -475,6 +500,7 @@ export const db = {
   exportAll,
   importAll,
   parseSnapshot,
+  checkSnapshotVersion,
   settings,
   meta,
 

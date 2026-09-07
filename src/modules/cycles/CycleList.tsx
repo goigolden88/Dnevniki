@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import type { CycleState } from '../../core/cycles.ts'
+import type { CycleState } from './cycles.ts'
 import type { CycleItem } from '../../core/model.ts'
 import { CategoryField } from './CategoryField.tsx'
 import { barPercent, CATEGORIES, detailText, intervalText, statusText } from './labels.ts'

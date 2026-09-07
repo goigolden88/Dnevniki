@@ -2,7 +2,7 @@
  * Данные модуля циклов: чтение из `db`, отметки, управление позициями.
  *
  * Экран сюда за состоянием не лезет напрямую — он получает готовый список
- * `CycleState`. Расчёт живёт в `core/cycles.ts`, хранилище за `db`,
+ * `CycleState`. Расчёт живёт в `cycles.ts`, хранилище за `db`,
  * здесь только связывание и оптимистичные правки.
  *
  * Хук грузит все позиции и все отметки целиком, и каждый экран делает это
@@ -12,7 +12,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { cycleState, cycleStates, type CycleState } from '../../core/cycles.ts'
+import { cycleState, cycleStates, type CycleState } from './cycles.ts'
 import { db } from '../../core/db.ts'
 import { nowIso, today, type DateStr } from '../../core/dates.ts'
 import { ulid } from '../../core/id.ts'
