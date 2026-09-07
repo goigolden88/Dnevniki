@@ -1,4 +1,5 @@
 import { formatDateLong, today } from '../core/dates.ts'
+import { CycleList } from '../modules/cycles/CycleList.tsx'
 
 export function Today() {
   return (
@@ -8,7 +9,7 @@ export function Today() {
         <p className="muted">{formatDateLong(today())}</p>
       </header>
 
-      <p className="stub">Просроченное появится на Этапе 1, вместе с модулем циклов.</p>
+      <CycleList />
     </>
   )
 }

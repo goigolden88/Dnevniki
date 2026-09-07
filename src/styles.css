@@ -6,6 +6,8 @@
   --line: #e4e4e7;
   --accent: #2f6fed;
   --error: #c02626;
+  --ok: #3f8f4a;
+  --due: #b07708;
 
   --tabs-height: 56px;
 
@@ -21,6 +23,8 @@
     --line: #33353a;
     --accent: #6f9dff;
     --error: #ff7b7b;
+    --ok: #6fbf7c;
+    --due: #e3a83a;
   }
 }
 
@@ -162,4 +166,178 @@ p {
 .tab--active {
   color: var(--accent);
   box-shadow: inset 0 2px 0 var(--accent);
+}
+
+/* ─── Циклы ──────────────────────────────────────────────────────────────── */
+
+.cycles {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cycle {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 14px;
+}
+
+.cycle__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.cycle__name {
+  font-weight: 600;
+}
+
+.cycle__cat {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.bar {
+  height: 6px;
+  margin: 10px 0;
+  border-radius: 3px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--ok);
+  /* Полоса догоняет отметку, а не прыгает: тап должен читаться как действие. */
+  transition: width 180ms ease-out;
+}
+
+.cycle--due .bar__fill {
+  background: var(--due);
+}
+
+.cycle--overdue .bar__fill {
+  background: var(--error);
+}
+
+.cycle__foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.cycle__facts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.cycle__status {
+  font-weight: 500;
+}
+
+.cycle--due .cycle__status {
+  color: var(--due);
+}
+
+.cycle--overdue .cycle__status {
+  color: var(--error);
+}
+
+.cycle--never .cycle__status,
+.cycle--unset .cycle__status {
+  color: var(--muted);
+}
+
+/* Кнопка отметки. 44px — минимальная цель для пальца, меньше промахивается. */
+.mark {
+  flex: none;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mark--done {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+/* ─── Формы ──────────────────────────────────────────────────────────────── */
+
+.btn {
+  min-height: 44px;
+  padding: 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn--primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.btn--wide {
+  width: 100%;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.field input,
+.field select {
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  /* 16px обязательны: на меньшем шрифте Safari зумит страницу при фокусе. */
+  font: inherit;
+  font-size: 16px;
+}
+
+.form__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
