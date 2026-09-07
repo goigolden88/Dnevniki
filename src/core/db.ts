@@ -25,7 +25,7 @@
 
 import { nowIso } from './dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES, migrations } from './model.ts'
-import type { StoreRecord, SyncedStore } from './model.ts'
+import type { Base, StoreRecord, SyncedStore } from './model.ts'
 
 const DB_NAME = 'dnevniki'
 
@@ -358,6 +358,64 @@ const meta = keyValue('meta')
 // ─── Перенос файлом ────────────────────────────────────────────────────────
 
 /**
+ * Разбор файла слепка.
+ *
+ * Единственное место, где в базу может заехать что угодно: файл приходит
+ * из файловой системы, его никто не проверял. Поэтому форма сверяется до
+ * записи, и при несходстве файл отвергается целиком — половина
+ * импортированных данных хуже, чем внятный отказ.
+ */
+function parseSnapshot(text: string): Snapshot {
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch {
+    throw new Error('Это не JSON')
+  }
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('В файле не объект')
+  }
+
+  const raw = value as Partial<Snapshot>
+  if (typeof raw.schemaVersion !== 'number') {
+    throw new Error('В файле нет версии схемы — это не слепок Дневников')
+  }
+  if (typeof raw.data !== 'object' || raw.data === null) {
+    throw new Error('В файле нет данных')
+  }
+
+  const source = raw.data as Record<string, unknown>
+  const data = {} as Snapshot['data']
+
+  for (const store of SYNCED_STORES) {
+    const records = source[store]
+    // Отсутствующее хранилище — пустое. Файл мог уехать с устройства,
+    // где этого модуля ещё не было, и это не повод отвергать весь слепок.
+    if (records === undefined) {
+      Object.assign(data, { [store]: [] })
+      continue
+    }
+    if (!Array.isArray(records)) throw new Error(`Хранилище «${store}» не массив`)
+
+    for (const record of records) {
+      const id = (record as Partial<Base>)?.id
+      const updatedAt = (record as Partial<Base>)?.updatedAt
+      if (typeof id !== 'string' || !id || typeof updatedAt !== 'string' || !updatedAt) {
+        throw new Error(`В хранилище «${store}» запись без id или updatedAt`)
+      }
+    }
+    Object.assign(data, { [store]: records })
+  }
+
+  return {
+    schemaVersion: raw.schemaVersion,
+    exportedAt: typeof raw.exportedAt === 'string' ? raw.exportedAt : nowIso(),
+    data,
+  }
+}
+
+/**
  * Полный слепок синхронизируемых данных.
  * Удалённые записи включены: без надгробий второе устройство их воскресит.
  */
@@ -416,6 +474,7 @@ export const db = {
   clearDirty,
   exportAll,
   importAll,
+  parseSnapshot,
   settings,
   meta,
 
