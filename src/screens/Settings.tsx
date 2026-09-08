@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { db } from '../core/db.ts'
-import { today } from '../core/dates.ts'
+import { daysAgo, days, formatDate, toDateStr, today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
 import type { SyncedStore } from '../core/model.ts'
 import { seedKind, seedToSnapshot, type SeedFiles } from '../seed/seed.ts'
@@ -210,6 +210,13 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
+  const [lastSaved, setLastSaved] = useState<string | null | undefined>(undefined)
+
+  // Дата последней выгрузки лежит в настройках: они не синхронизируются,
+  // и это правильно — «когда я забирал копию» у каждого устройства своё.
+  useEffect(() => {
+    void db.settings.get<string>(LAST_EXPORT).then((value) => setLastSaved(value ?? null))
+  }, [])
 
   async function save() {
     setBusy(true)
@@ -224,6 +231,11 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       link.click()
       // Ссылка держит слепок в памяти, пока её не отпустить.
       URL.revokeObjectURL(url)
+      // Браузер не сообщает, дошёл ли файл до диска: диалог мог быть отменён.
+      // Отметка означает «выгрузку запускали», а не «копия точно есть».
+      const at = new Date().toISOString()
+      await db.settings.set(LAST_EXPORT, at)
+      setLastSaved(at)
       setNote('Файл сохранён')
     } catch (failure) {
       setError(describe(failure))
@@ -287,10 +299,49 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       {note && <p className="muted">{note}</p>}
       {error && <p className="error">{error}</p>}
 
+      <LastExport at={lastSaved} />
+
       <p className="muted">
         Загрузка не стирает то, что уже есть: записи сливаются по времени правки, побеждает
         более поздняя.
       </p>
     </section>
+  )
+}
+
+const LAST_EXPORT = 'lastExportAt'
+
+/** Через сколько дней без выгрузки напоминание становится тревожным. */
+const STALE_DAYS = 14
+
+/**
+ * Когда в последний раз забирали копию.
+ *
+ * Пока синхронизации нет, файл — единственное место, где данные лежат
+ * вне этого браузера. Очистка данных сайта стирает базу целиком, и без
+ * этой строки о ней вспоминают уже после.
+ */
+function LastExport({ at }: { at: string | null | undefined }) {
+  if (at === undefined) return null
+
+  if (at === null) {
+    return (
+      <p className="error">
+        Копию ещё ни разу не забирали. Данные есть только в этом браузере — очистка данных сайта
+        сотрёт их целиком.
+      </p>
+    )
+  }
+
+  const day = toDateStr(new Date(at))
+  const ago = daysAgo(day)
+  const when =
+    ago === 0 ? 'сегодня' : ago === 1 ? 'вчера' : `${days(ago)} назад, ${formatDate(day)}`
+
+  return (
+    <p className={ago >= STALE_DAYS ? 'error' : 'muted'}>
+      Последняя выгрузка: {when}.
+      {ago >= STALE_DAYS && ' С тех пор всё новое живёт только здесь.'}
+    </p>
   )
 }
