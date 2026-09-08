@@ -38,7 +38,7 @@ export type SeedItem = {
   note?: string
   marks: SeedMark[]
 }
-export type SeedCycles = { items: SeedItem[] }
+export type SeedCycles = { items: SeedItem[]; seedUpdatedAt?: string }
 
 export type SeedEpisode = {
   title: string
@@ -66,6 +66,7 @@ export type SeedHealth = {
   episodes: SeedEpisode[]
   measures: SeedMeasure[]
   sessions: SeedSession[]
+  seedUpdatedAt?: string
 }
 
 export type SeedEntry = {
@@ -78,7 +79,7 @@ export type SeedEntry = {
   score: number | null
   comment?: string
 }
-export type SeedContent = { entries: SeedEntry[] }
+export type SeedContent = { entries: SeedEntry[]; seedUpdatedAt?: string }
 
 export type SeedFiles = {
   cycles?: SeedCycles
@@ -135,14 +136,36 @@ function optionalNumber(value: unknown, what: string): number | undefined {
 
 // ─── Циклы ─────────────────────────────────────────────────────────────────
 
-function convertCycles(seed: SeedCycles, items: CycleItem[], events: CycleEvent[]): void {
+/**
+ * Когда файл считается изменённым. Р-31.
+ *
+ * По умолчанию — неподвижный момент переноса: файл не должен затирать то,
+ * что ты поправил в приложении позже. Но если файл сам исправили — скажем,
+ * дописали кусты, — он объявляет об этом собственным `seedUpdatedAt`,
+ * и тогда побеждает уже он.
+ */
+function stampOf(seed: { seedUpdatedAt?: string }, what: string): string {
+  const raw = seed.seedUpdatedAt
+  if (raw === undefined) return SEED_UPDATED_AT
+  if (typeof raw !== 'string' || Number.isNaN(Date.parse(raw))) {
+    fail(`${what}: seedUpdatedAt не похож на время в формате ISO`)
+  }
+  return raw
+}
+
+function convertCycles(
+  seed: SeedCycles,
+  items: CycleItem[],
+  events: CycleEvent[],
+  stamp: string,
+): void {
   if (!Array.isArray(seed.items)) fail('seed-cycles: нет массива items')
 
   for (const raw of seed.items) {
     const name = text(raw?.name, 'позиция без названия')
     const item: CycleItem = {
       id: seedId(`item:${name}`),
-      updatedAt: SEED_UPDATED_AT,
+      updatedAt: stamp,
       name,
       cat: text(raw.cat, `позиция «${name}»: категория`),
       ...(raw.group ? { group: String(raw.group).trim() } : {}),
@@ -160,7 +183,7 @@ function convertCycles(seed: SeedCycles, items: CycleItem[], events: CycleEvent[
       const price = optionalNumber(mark.price, `позиция «${name}», отметка ${date}: цена`)
       events.push({
         id: seedId(`mark:${item.id}:${date}`),
-        updatedAt: SEED_UPDATED_AT,
+        updatedAt: stamp,
         itemId: item.id,
         date,
         ...(price === undefined ? {} : { price }),
@@ -177,14 +200,14 @@ function convertCycles(seed: SeedCycles, items: CycleItem[], events: CycleEvent[
  * на слово: в этом и был смысл тегов, иначе повторяющиеся симптомы не
  * собираются в аналитику.
  */
-function tagFor(name: string, tags: Map<string, Tag>): string {
+function tagFor(name: string, tags: Map<string, Tag>, stamp: string): string {
   const key = name.trim().toLowerCase()
   const existing = tags.get(key)
   if (existing) return existing.id
 
   const tag: Tag = {
     id: seedId(`tag:symptom:${key}`),
-    updatedAt: SEED_UPDATED_AT,
+    updatedAt: stamp,
     name: key,
     scope: 'symptom',
   }
@@ -198,18 +221,21 @@ function convertHealth(
   measures: Measure[],
   sessions: Session[],
   tags: Map<string, Tag>,
+  stamp: string,
 ): void {
   for (const raw of seed.episodes ?? []) {
     const title = text(raw?.title, 'эпизод без названия')
     const start = day(raw.start, `эпизод «${title}»: начало`)
     episodes.push({
       id: seedId(`episode:${title}:${start}`),
-      updatedAt: SEED_UPDATED_AT,
+      updatedAt: stamp,
       title,
       source: raw.source === 'doctor' ? 'doctor' : 'self',
       start,
       end: raw.end === null || raw.end === undefined ? null : day(raw.end, `эпизод «${title}»: конец`),
-      symptoms: (raw.symptoms ?? []).map((name) => tagFor(text(name, `эпизод «${title}»: симптом`), tags)),
+      symptoms: (raw.symptoms ?? []).map((name) =>
+        tagFor(text(name, `эпизод «${title}»: симптом`), tags, stamp),
+      ),
       ...(raw.note ? { note: raw.note } : {}),
     })
   }
@@ -222,7 +248,7 @@ function convertHealth(
     const value2 = optionalNumber(raw.value2, `измерение ${metric} ${date}: второе значение`)
     measures.push({
       id: seedId(`measure:${metric}:${date}`),
-      updatedAt: SEED_UPDATED_AT,
+      updatedAt: stamp,
       metric,
       date,
       value,
@@ -239,7 +265,7 @@ function convertHealth(
     if (!activity) {
       activity = {
         id: seedId(`tag:activity:${key}`),
-        updatedAt: SEED_UPDATED_AT,
+        updatedAt: stamp,
         name: key,
         scope: 'activity',
       }
@@ -249,7 +275,7 @@ function convertHealth(
     const distanceKm = optionalNumber(raw.distanceKm, `тренировка ${key} ${date}: дистанция`)
     sessions.push({
       id: seedId(`session:${key}:${date}`),
-      updatedAt: SEED_UPDATED_AT,
+      updatedAt: stamp,
       activity: activity.id,
       date,
       ...(durationMin === undefined ? {} : { durationMin }),
@@ -264,7 +290,7 @@ function convertHealth(
 const CONTENT_TYPES = ['anime', 'series', 'film', 'game', 'book', 'course'] as const
 const CONTENT_STATUSES = ['planned', 'active', 'done', 'dropped'] as const
 
-function convertContent(seed: SeedContent, entries: ContentEntry[]): void {
+function convertContent(seed: SeedContent, entries: ContentEntry[], stamp: string): void {
   if (!Array.isArray(seed.entries)) fail('seed-content: нет массива entries')
 
   for (const raw of seed.entries) {
@@ -283,7 +309,7 @@ function convertContent(seed: SeedContent, entries: ContentEntry[]): void {
 
     entries.push({
       id: seedId(`content:${raw.type}:${title}`),
-      updatedAt: SEED_UPDATED_AT,
+      updatedAt: stamp,
       type: raw.type,
       title,
       ...(raw.titleOrig ? { titleOrig: raw.titleOrig } : {}),
@@ -323,9 +349,22 @@ export function seedToSnapshot(files: SeedFiles): { snapshot: Snapshot; report: 
   const content: ContentEntry[] = []
   const tags = new Map<string, Tag>()
 
-  if (files.cycles) convertCycles(files.cycles, items, cycleEvents)
-  if (files.health) convertHealth(files.health, episodes, measures, sessions, tags)
-  if (files.content) convertContent(files.content, content)
+  let exportedAt = SEED_UPDATED_AT
+  const remember = (stamp: string) => {
+    if (stamp > exportedAt) exportedAt = stamp
+    return stamp
+  }
+
+  if (files.cycles) {
+    convertCycles(files.cycles, items, cycleEvents, remember(stampOf(files.cycles, 'seed-cycles')))
+  }
+  if (files.health) {
+    const stamp = remember(stampOf(files.health, 'seed-health'))
+    convertHealth(files.health, episodes, measures, sessions, tags, stamp)
+  }
+  if (files.content) {
+    convertContent(files.content, content, remember(stampOf(files.content, 'seed-content')))
+  }
 
   const tagList = [...tags.values()]
   const data = {
@@ -346,7 +385,7 @@ export function seedToSnapshot(files: SeedFiles): { snapshot: Snapshot; report: 
   }
 
   return {
-    snapshot: { schemaVersion: SCHEMA_VERSION, exportedAt: SEED_UPDATED_AT, data },
+    snapshot: { schemaVersion: SCHEMA_VERSION, exportedAt, data },
     report: {
       items: items.length,
       cycleEvents: cycleEvents.length,

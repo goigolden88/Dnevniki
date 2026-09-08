@@ -174,3 +174,36 @@ describe('seedToSnapshot — отказы', () => {
     })
   })
 })
+
+describe('seedUpdatedAt — исправленный файл побеждает (Р-31)', () => {
+  it('без поля запись помечена неподвижным моментом переноса', () => {
+    const { snapshot } = seedToSnapshot({ cycles })
+    expect(snapshot.data.items[0]?.updatedAt).toBe(SEED_UPDATED_AT)
+  })
+
+  it('с полем — им, и id при этом не меняется', () => {
+    const stamp = '2026-09-08T12:30:00.000Z'
+    const plain = seedToSnapshot({ cycles })
+    const fixed = seedToSnapshot({ cycles: { ...cycles!, seedUpdatedAt: stamp } })
+
+    expect(fixed.snapshot.data.items[0]?.updatedAt).toBe(stamp)
+    expect(fixed.snapshot.data.cycleEvents[0]?.updatedAt).toBe(stamp)
+    // Главное: id остаются прежними, иначе исправленный файл не обновил бы
+    // записи, а завёл бы вторые такие же.
+    expect(fixed.snapshot.data.items[0]?.id).toBe(plain.snapshot.data.items[0]?.id)
+  })
+
+  it('мусор вместо времени отвергается с указанием файла', () => {
+    expect(() =>
+      seedToSnapshot({ cycles: { ...cycles!, seedUpdatedAt: 'вчера' } }),
+    ).toThrow('seed-cycles')
+  })
+
+  it('exportedAt слепка — самый поздний штамп из файлов', () => {
+    const { snapshot } = seedToSnapshot({
+      cycles: { ...cycles!, seedUpdatedAt: '2026-09-08T12:30:00.000Z' },
+      content,
+    })
+    expect(snapshot.exportedAt).toBe('2026-09-08T12:30:00.000Z')
+  })
+})
