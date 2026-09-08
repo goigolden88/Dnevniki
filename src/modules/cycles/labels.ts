@@ -5,7 +5,7 @@
  * Расчёт не знает, что его читают глазами, и русских строк не содержит.
  */
 
-import type { CycleState, CycleStatus } from './cycles.ts'
+import { MIN_INTERVALS, type CycleState, type CycleStatus } from './cycles.ts'
 import { days, formatDate } from '../../core/dates.ts'
 
 /** Категории позиций из 01-Проект. Свободная строка, но выбор — из этих. */
@@ -27,10 +27,19 @@ const STATUS_TEXT: Record<CycleStatus, string> = {
  * экран открывают.
  */
 export function statusText(state: CycleState): string {
+  // «Срок не задан» и «мало отметок» — один статус, но разные причины,
+  // и человеку важна именно причина: во втором случае делать ничего не надо,
+  // срок появится сам после следующих отметок.
+  if (state.status === 'unset') {
+    return state.marks >= 2 ? 'мало отметок' : 'срок не задан'
+  }
   if (state.status !== 'overdue') return STATUS_TEXT[state.status]
   if (state.overdueDays === 0) return 'срок сегодня'
   return `перебор ${days(state.overdueDays)}`
 }
+
+/** Сколько отметок нужно, чтобы срок посчитался сам. */
+export const MARKS_FOR_INTERVAL = MIN_INTERVALS + 1
 
 /** `07.09.2026` → `07.09`. Год на экране «Сейчас» только занимает место. */
 function shortDate(date: string): string {
@@ -48,7 +57,14 @@ export function detailText(state: CycleState): string {
         ? `отмечено вперёд, ${shortDate(state.last)}`
         : `${days(state.daysSince)} назад`
 
-  if (state.next === null) return ago
+  if (state.next === null) {
+    // Молчать здесь нельзя: без объяснения непонятно, приложение сломалось
+    // или срок правда ещё не из чего считать.
+    if (state.interval === null && state.marks > 0) {
+      return `${ago} · отметок ${state.marks} из ${MARKS_FOR_INTERVAL}`
+    }
+    return ago
+  }
   const when = state.status === 'overdue' ? 'срок был' : 'следующий'
   return `${ago} · ${when} ${shortDate(state.next)}`
 }

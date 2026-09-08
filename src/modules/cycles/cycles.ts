@@ -24,6 +24,18 @@ export const DUE_RATIO = 0.8
 export const MEDIAN_WINDOW = 5
 
 /**
+ * Сколько интервалов нужно, чтобы вообще считать срок по истории. Р-27.
+ *
+ * Один интервал — это не медиана, а одно наблюдение, названное сроком.
+ * Два — их среднее, и разброс между ними ничем не ограничен. С трёх
+ * медиана становится средним элементом, и один выброс её уже не ломает.
+ *
+ * Ниже порога срок не выводится вовсе: лучше сказать «мало отметок»,
+ * чем нарисовать красную полосу на основании одного случая.
+ */
+export const MIN_INTERVALS = 3
+
+/**
  * Пять статусов из 01-Проект.
  *
  * `never` — записей нет вообще, считать не из чего.
@@ -36,8 +48,12 @@ export type CycleStatus = 'overdue' | 'due' | 'ok' | 'never' | 'unset'
 export type Spread = {
   min: number
   max: number
-  /** Тот же, что управляет статусом: по окну, а не по всей истории. */
-  median: number
+  /**
+   * Тот же, что управляет статусом: по окну, а не по всей истории.
+   * Null, пока интервалов меньше `MIN_INTERVALS` — считать не из чего,
+   * а показать число, похожее на срок, хуже, чем не показать ничего.
+   */
+  median: number | null
   /** Сколько интервалов посчитано — на единицу меньше числа отметок. */
   count: number
 }
@@ -45,6 +61,8 @@ export type Spread = {
 export type CycleState = {
   item: CycleItem
   status: CycleStatus
+  /** Сколько отметок у позиции. Ниже порога срок не считается. */
+  marks: number
   /** Последняя отметка. */
   last: DateStr | null
   /** Дней с последней отметки. Отрицательное — отметка датирована вперёд. */
@@ -123,13 +141,22 @@ export function medianInterval(dates: DateStr[], window = MEDIAN_WINDOW): number
   return value === null ? null : Math.round(value)
 }
 
-/** Разброс по всей истории, медиана — по окну. Null, если интервалов нет. */
+/**
+ * Разброс по всей истории, медиана — по окну и только с `MIN_INTERVALS`.
+ * Null, если интервалов нет вовсе.
+ *
+ * Минимум и максимум показываются с первого же интервала: это факты из
+ * истории, а не оценка, и врать они не могут.
+ */
 export function spread(dates: DateStr[], window = MEDIAN_WINDOW): Spread | null {
   const all = intervals(dates)
   if (all.length === 0) return null
-  const med = medianInterval(dates, window)
-  if (med === null) return null
-  return { min: Math.min(...all), max: Math.max(...all), median: med, count: all.length }
+  return {
+    min: Math.min(...all),
+    max: Math.max(...all),
+    median: all.length >= MIN_INTERVALS ? medianInterval(dates, window) : null,
+    count: all.length,
+  }
 }
 
 /**
@@ -150,7 +177,10 @@ export function cycleState(
   // Ноль и отрицательные значения в `intervalDays` считаются не заданными:
   // интервал в ноль дней сделал бы позицию вечно просроченной.
   const manual = item.intervalDays !== null && item.intervalDays > 0 ? item.intervalDays : null
-  const computed = manual === null ? medianInterval(dates) : null
+  // Порог Р-27: пока отметок мало, срок по истории не выводится. Ручной
+  // интервал работает всегда — там срок назвал человек, а не статистика.
+  const enough = intervals(dates).length >= MIN_INTERVALS
+  const computed = manual === null && enough ? medianInterval(dates) : null
   const interval = manual ?? computed
   const intervalSource = manual !== null ? 'manual' : computed !== null ? 'median' : null
 
@@ -170,6 +200,7 @@ export function cycleState(
   return {
     item,
     status,
+    marks: dates.length,
     last,
     daysSince,
     interval,
@@ -217,4 +248,34 @@ export function cycleStates(
 ): CycleState[] {
   const live = items.filter((item) => !item.deleted && !item.archived)
   return sortByUrgency(live.map((item) => cycleState(item, events, now)))
+}
+
+export type CycleGroup = { cat: string; states: CycleState[] }
+
+/**
+ * Разбивка по категориям для нижней части экрана «Сейчас».
+ *
+ * Порядок групп задаётся снаружи: сам расчёт не знает и не должен знать,
+ * что категории называются по-русски и что «Гигиена» идёт раньше «Дачи».
+ * Категории вне списка уходят в конец по алфавиту.
+ */
+export function groupByCategory(
+  states: CycleState[],
+  order: readonly string[] = [],
+): CycleGroup[] {
+  const groups = new Map<string, CycleState[]>()
+  for (const state of states) {
+    const list = groups.get(state.item.cat)
+    if (list) list.push(state)
+    else groups.set(state.item.cat, [state])
+  }
+
+  const rank = (cat: string) => {
+    const index = order.indexOf(cat)
+    return index === -1 ? order.length : index
+  }
+
+  return [...groups.entries()]
+    .map(([cat, list]) => ({ cat, states: sortByUrgency(list) }))
+    .sort((a, b) => rank(a.cat) - rank(b.cat) || a.cat.localeCompare(b.cat, 'ru'))
 }

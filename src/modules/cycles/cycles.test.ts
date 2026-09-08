@@ -4,6 +4,8 @@ import {
   cycleState,
   cycleStates,
   DUE_RATIO,
+  groupByCategory,
+  MIN_INTERVALS,
   intervals,
   markDates,
   median,
@@ -131,6 +133,11 @@ describe('spread', () => {
     expect(spread(dates)).toEqual({ min: 30, max: 120, median: 30, count: 6 })
   })
 
+  it('минимум и максимум есть с первого интервала, медианы ещё нет', () => {
+    const two = spread(['2026-01-01', '2026-01-11', '2026-02-10'])
+    expect(two).toEqual({ min: 10, max: 30, median: null, count: 2 })
+  })
+
   it('без интервалов — null', () => {
     expect(spread(['2026-01-01'])).toBeNull()
   })
@@ -197,12 +204,38 @@ describe('cycleState — интервал', () => {
   })
 
   it('без ручного интервала берётся медиана истории', () => {
-    const events = [event('2026-08-01'), event('2026-08-11'), event('2026-08-21')]
+    const events = [
+      event('2026-07-01'),
+      event('2026-07-11'),
+      event('2026-07-21'),
+      event('2026-07-31'),
+    ]
     const state = cycleState(item(), events, '2026-09-07')
     expect(state.interval).toBe(10)
     expect(state.intervalSource).toBe('median')
-    expect(state.next).toBe('2026-08-31')
+    expect(state.next).toBe('2026-08-10')
     expect(state.status).toBe('overdue')
+  })
+
+  it('двух интервалов мало: срок не выводится, статус «срок не задан»', () => {
+    const events = [event('2026-08-01'), event('2026-08-11'), event('2026-08-21')]
+    const state = cycleState(item(), events, '2026-09-07')
+    expect(state.marks).toBe(3)
+    expect(state.interval).toBeNull()
+    expect(state.intervalSource).toBeNull()
+    expect(state.status).toBe('unset')
+    expect(state.next).toBeNull()
+  })
+
+  it('ручной интервал работает и с одной отметкой — срок назвал человек', () => {
+    const state = cycleState(item({ intervalDays: 30 }), [event('2026-08-01')], '2026-09-07')
+    expect(state.interval).toBe(30)
+    expect(state.intervalSource).toBe('manual')
+    expect(state.status).toBe('overdue')
+  })
+
+  it('порог — три интервала', () => {
+    expect(MIN_INTERVALS).toBe(3)
   })
 
   it('нулевой и отрицательный интервал считаются не заданными', () => {
@@ -276,5 +309,36 @@ describe('cycleStates', () => {
     ]
     const states = cycleStates(items, [event('2026-08-01', { itemId: 'a' })], '2026-09-07')
     expect(states.map((state) => state.item.id)).toEqual(['a'])
+  })
+})
+
+describe('groupByCategory', () => {
+  const state = (id: string, name: string, cat: string) =>
+    cycleState(item({ id, name, cat, intervalDays: 10 }), [], '2026-09-07')
+
+  it('группы идут в заданном порядке, незнакомые категории — в конец', () => {
+    const groups = groupByCategory(
+      [
+        state('a', 'Пылесос', 'Дом'),
+        state('b', 'Стрижка', 'Гигиена'),
+        state('c', 'Грядки', 'Огород'),
+      ],
+      ['Гигиена', 'Дом', 'Техника'],
+    )
+    expect(groups.map((group) => group.cat)).toEqual(['Гигиена', 'Дом', 'Огород'])
+  })
+
+  it('внутри группы порядок по срочности', () => {
+    const overdue = cycleState(
+      item({ id: 'x', name: 'Просрочено', cat: 'Дом', intervalDays: 5 }),
+      [event('2026-08-01', { itemId: 'x' })],
+      '2026-09-07',
+    )
+    const groups = groupByCategory([state('a', 'Спокойное', 'Дом'), overdue], ['Дом'])
+    expect(groups[0]?.states.map((each) => each.item.id)).toEqual(['x', 'a'])
+  })
+
+  it('пустой вход — пустой выход', () => {
+    expect(groupByCategory([])).toEqual([])
   })
 })

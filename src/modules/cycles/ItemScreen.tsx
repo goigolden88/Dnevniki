@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { daysBetween, days, formatDate, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
+import { MIN_INTERVALS } from './cycles.ts'
 import { CategoryField } from './CategoryField.tsx'
 import { barPercent, detailText, intervalText, statusText } from './labels.ts'
 import { useCycles, type ItemDraft } from './useCycles.ts'
@@ -76,16 +77,22 @@ export function ItemScreen() {
             <dt>Минимум</dt>
             <dd>{days(state.spread.min)}</dd>
             <dt>Медиана</dt>
-            <dd>{days(state.spread.median)}</dd>
+            <dd>{state.spread.median === null ? '—' : days(state.spread.median)}</dd>
             <dt>Максимум</dt>
             <dd>{days(state.spread.max)}</dd>
             <dt>Интервалов</dt>
             <dd>{state.spread.count}</dd>
           </dl>
-          {state.spread.max > state.spread.median * 2 && (
+          {state.spread.median !== null && state.spread.max > state.spread.median * 2 && (
             <p className="muted">
               Разрыв между максимумом и медианой больше чем вдвое — в истории есть пропуск
               или лишняя запись.
+            </p>
+          )}
+          {state.spread.median === null && (
+            <p className="muted">
+              Срок считается с {MIN_INTERVALS} интервалов, сейчас {state.spread.count}. Если знаешь
+              интервал — задай его руками ниже, позиция заработает сразу.
             </p>
           )}
         </section>

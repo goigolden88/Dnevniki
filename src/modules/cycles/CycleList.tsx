@@ -1,9 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import type { CycleState } from './cycles.ts'
+import { groupByCategory, type CycleState } from './cycles.ts'
 import type { CycleItem } from '../../core/model.ts'
 import { CategoryField } from './CategoryField.tsx'
-import { barPercent, CATEGORIES, detailText, intervalText, statusText } from './labels.ts'
+import {
+  barPercent,
+  CATEGORIES,
+  detailText,
+  intervalText,
+  MARKS_FOR_INTERVAL,
+  statusText,
+} from './labels.ts'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
 export function CycleList() {
@@ -14,26 +21,70 @@ export function CycleList() {
 
   const archived = cycles.items.filter((item) => item.archived)
 
+  // Срочное вынесено наверх и не разложено по категориям: просроченный
+  // таймер на даче не должен теряться внизу экрана из-за того, что дача
+  // идёт последней. Всё остальное категориями — иначе получается каша.
+  const attention = cycles.states.filter(
+    (state) => state.status === 'overdue' || state.status === 'due',
+  )
+  const rest = cycles.states.filter(
+    (state) => state.status !== 'overdue' && state.status !== 'due',
+  )
+  const groups = groupByCategory(rest, CATEGORIES)
+  const waiting = cycles.states.filter((state) => state.status === 'unset').length
+
   return (
     <>
       {cycles.error && <p className="error">Не сохранилось: {cycles.error}</p>}
 
-      {cycles.states.length === 0 ? (
+      {cycles.states.length === 0 && (
         <p className="stub">
           Позиций пока нет. Заведи первую — стрижку, замену фильтра, что угодно повторяющееся.
         </p>
-      ) : (
-        <ul className="cycles">
-          {cycles.states.map((state) => (
-            <CycleCard key={state.item.id} state={state} onMark={cycles.mark} />
-          ))}
-        </ul>
+      )}
+
+      {attention.length > 0 && (
+        <section className="block">
+          <h2>Требует внимания</h2>
+          <CardList states={attention} onMark={cycles.mark} />
+        </section>
+      )}
+
+      {groups.map((group) => (
+        <section className="block" key={group.cat}>
+          <h2>{group.cat}</h2>
+          <CardList states={group.states} onMark={cycles.mark} />
+        </section>
+      ))}
+
+      {waiting > 0 && (
+        <p className="muted">
+          У {waiting} {waiting === 1 ? 'позиции' : 'позиций'} срок ещё не посчитан: для этого нужно{' '}
+          {MARKS_FOR_INTERVAL} отметки. Если интервал известен заранее — открой позицию и задай его
+          руками.
+        </p>
       )}
 
       <AddItem onAdd={cycles.addItem} />
 
       {archived.length > 0 && <Archived items={archived} />}
     </>
+  )
+}
+
+function CardList({
+  states,
+  onMark,
+}: {
+  states: CycleState[]
+  onMark: (item: CycleItem) => Promise<void>
+}) {
+  return (
+    <ul className="cycles">
+      {states.map((state) => (
+        <CycleCard key={state.item.id} state={state} onMark={onMark} />
+      ))}
+    </ul>
   )
 }
 
