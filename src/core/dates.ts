@@ -14,6 +14,15 @@
 /** Календарный день в формате `YYYY-MM-DD`. */
 export type DateStr = string
 
+/**
+ * Месяц в формате `YYYY-MM` — дата, у которой день неизвестен.
+ *
+ * Заведён под контент (Р-25): в дневнике просмотренного дней нет вовсе.
+ * Арифметике по дням не поддаётся, и функции ниже на нём кидают, а не
+ * подставляют первое число молча.
+ */
+export type MonthStr = string
+
 const MS_PER_DAY = 86_400_000
 
 const MONTHS_GENITIVE = [
@@ -22,6 +31,7 @@ const MONTHS_GENITIVE = [
 ]
 
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
+const ISO_MONTH = /^(\d{4})-(\d{2})$/
 // Разделители разбираются по отдельности: в данных Obsidian встречается
 // «03.03-2026» — точка и дефис в одной дате.
 const YMD = /^(\d{4})[-.\/](\d{1,2})[-.\/](\d{1,2})$/
@@ -53,6 +63,30 @@ function expandYear(y: number): number {
 export function isDateStr(value: string): boolean {
   const m = ISO_DATE.exec(value)
   return m ? compose(Number(m[1]), Number(m[2]), Number(m[3])) !== null : false
+}
+
+/** `2026-01` — да. `2026-01-05` и `2026-13` — нет. */
+export function isMonthStr(value: string): boolean {
+  const m = ISO_MONTH.exec(value)
+  if (!m) return false
+  const month = Number(m[2])
+  return month >= 1 && month <= 12
+}
+
+/**
+ * Дата известной точности: полный день либо месяц. Р-25.
+ *
+ * Сравнивать такие строки между собой можно как есть — лексикографический
+ * порядок совпадает с хронологическим, и `2026-01` встаёт перед `2026-01-05`.
+ * Считать разницу в днях нельзя, для этого есть `isDateStr`.
+ */
+export function isDateOrMonth(value: string): boolean {
+  return isDateStr(value) || isMonthStr(value)
+}
+
+/** Год из даты любой точности. `2026-01` и `2026-01-05` → `2026`. */
+export function yearOf(value: string): number | null {
+  return isDateOrMonth(value) ? Number(value.slice(0, 4)) : null
 }
 
 /** Разбирает DateStr в локальную полночь. Кидает на мусоре — см. `parseDate`. */
