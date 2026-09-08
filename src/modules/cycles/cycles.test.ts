@@ -342,3 +342,36 @@ describe('groupByCategory', () => {
     expect(groupByCategory([])).toEqual([])
   })
 })
+
+describe('расхождение «как надо» и «как есть» (Р-29)', () => {
+  // Четыре отметки раз в 30 дней при ручном интервале 90.
+  const events = [
+    event('2026-06-01'),
+    event('2026-07-01'),
+    event('2026-07-31'),
+    event('2026-08-30'),
+  ]
+
+  it('ручной интервал остаётся действующим, медиана его не подменяет', () => {
+    const state = cycleState(item({ intervalDays: 90 }), events, '2026-09-07')
+    expect(state.interval).toBe(90)
+    expect(state.intervalSource).toBe('manual')
+  })
+
+  it('но история считается рядом и доступна', () => {
+    const state = cycleState(item({ intervalDays: 90 }), events, '2026-09-07')
+    expect(state.byHistory).toBe(30)
+  })
+
+  it('без ручного интервала действует история, byHistory тот же', () => {
+    const state = cycleState(item(), events, '2026-09-07')
+    expect(state.interval).toBe(30)
+    expect(state.intervalSource).toBe('median')
+    expect(state.byHistory).toBe(30)
+  })
+
+  it('пока отметок мало, истории нет даже при ручном интервале', () => {
+    const state = cycleState(item({ intervalDays: 90 }), [event('2026-08-01')], '2026-09-07')
+    expect(state.byHistory).toBeNull()
+  })
+})

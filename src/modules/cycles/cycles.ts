@@ -71,6 +71,11 @@ export type CycleState = {
   interval: number | null
   /** Откуда взят интервал: задан руками или посчитан по истории. */
   intervalSource: 'manual' | 'median' | null
+  /**
+   * Что выходит по истории, даже когда действует ручной интервал.
+   * Null, пока отметок меньше порога. Р-29.
+   */
+  byHistory: number | null
   /** Когда ожидается следующий раз. */
   next: DateStr | null
   /** Доля пройденного интервала: 1 — ровно срок, больше — перебор. Для полосы. */
@@ -180,7 +185,10 @@ export function cycleState(
   // Порог Р-27: пока отметок мало, срок по истории не выводится. Ручной
   // интервал работает всегда — там срок назвал человек, а не статистика.
   const enough = intervals(dates).length >= MIN_INTERVALS
-  const computed = manual === null && enough ? medianInterval(dates) : null
+  const computed = enough ? medianInterval(dates) : null
+  // Ручной интервал не подменяется медианой молча (Р-29): он говорит «как
+  // надо», медиана — «как есть». Расхождение между ними и есть то, ради чего
+  // дневник ведётся, и подменять одно другим значило бы его стереть.
   const interval = manual ?? computed
   const intervalSource = manual !== null ? 'manual' : computed !== null ? 'median' : null
 
@@ -205,6 +213,7 @@ export function cycleState(
     daysSince,
     interval,
     intervalSource,
+    byHistory: computed,
     next,
     ratio,
     overdueDays,

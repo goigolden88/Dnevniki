@@ -2,9 +2,10 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { daysBetween, days, formatDate, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
+import type { CycleState } from './cycles.ts'
 import { MIN_INTERVALS } from './cycles.ts'
 import { CategoryField } from './CategoryField.tsx'
-import { barPercent, detailText, intervalText, statusText } from './labels.ts'
+import { barPercent, detailText, divergence, intervalText, statusText } from './labels.ts'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
 /** Позиция целиком: состояние, история, разброс, правка. */
@@ -89,12 +90,13 @@ export function ItemScreen() {
               или лишняя запись.
             </p>
           )}
-          {state.spread.median === null && (
+          {state.spread.median === null && state.interval === null && (
             <p className="muted">
               Срок считается с {MIN_INTERVALS} интервалов, сейчас {state.spread.count}. Если знаешь
               интервал — задай его руками ниже, позиция заработает сразу.
             </p>
           )}
+          <Divergence state={state} onUseHistory={() => cycles.updateItem(id, { intervalDays: null })} />
         </section>
       )}
 
@@ -114,6 +116,38 @@ export function ItemScreen() {
         onRemove={() => cycles.removeItem(id)}
         name={state.item.name}
       />
+    </>
+  )
+}
+
+/**
+ * Расхождение «как надо» и «как есть».
+ *
+ * Ручной интервал остаётся действующим — медиана его не подменяет (Р-29).
+ * Но само расхождение и есть главная запись дневника: положено раз в 90,
+ * а по факту раз в 137. Поэтому оно показывается всегда, а переключиться
+ * на историю можно в один тап.
+ */
+function Divergence({
+  state,
+  onUseHistory,
+}: {
+  state: CycleState
+  onUseHistory: () => Promise<void>
+}) {
+  const gap = divergence(state)
+  if (!gap) return null
+
+  const rarer = gap.history > gap.manual
+  return (
+    <>
+      <p className="muted">
+        Задано руками: {days(gap.manual)}. По факту выходит {days(gap.history)} —{' '}
+        {rarer ? 'реже' : 'чаще'} задуманного в {gap.times} раза.
+      </p>
+      <button type="button" className="link-btn" onClick={() => void onUseHistory()}>
+        Считать по истории
+      </button>
     </>
   )
 }

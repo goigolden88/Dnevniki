@@ -41,6 +41,27 @@ export function statusText(state: CycleState): string {
 /** Сколько отметок нужно, чтобы срок посчитался сам. */
 export const MARKS_FOR_INTERVAL = MIN_INTERVALS + 1
 
+/**
+ * Расхождение между тем, как надо, и тем, как есть. Р-29.
+ *
+ * Возвращает null, когда сравнивать не с чем: интервал не задан руками
+ * либо истории ещё не хватает. Совпадение день в день — тоже null,
+ * говорить о нём нечего.
+ */
+export function divergence(
+  state: CycleState,
+): { manual: number; history: number; times: number } | null {
+  if (state.intervalSource !== 'manual' || state.interval === null) return null
+  if (state.byHistory === null || state.byHistory === state.interval) return null
+  const bigger = Math.max(state.interval, state.byHistory)
+  const smaller = Math.min(state.interval, state.byHistory)
+  return {
+    manual: state.interval,
+    history: state.byHistory,
+    times: Math.round((bigger / smaller) * 10) / 10,
+  }
+}
+
 /** `07.09.2026` → `07.09`. Год на экране «Сейчас» только занимает место. */
 function shortDate(date: string): string {
   return formatDate(date).slice(0, 5)
