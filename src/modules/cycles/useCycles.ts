@@ -24,6 +24,7 @@ export type Status = 'loading' | 'ready' | 'failed'
 export type ItemDraft = {
   name: string
   cat: string
+  group?: string
   intervalDays: number | null
   note?: string
 }

@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { groupByCategory, type CycleState } from './cycles.ts'
+import { groupByCategory, knownGroups, type CycleState, type CycleUnit } from './cycles.ts'
 import type { CycleItem } from '../../core/model.ts'
-import { CategoryField } from './CategoryField.tsx'
+import { CategoryField, GroupField } from './CategoryField.tsx'
 import {
   barPercent,
   CATEGORIES,
@@ -53,7 +53,9 @@ export function CycleList() {
       {groups.map((group) => (
         <section className="block" key={group.cat}>
           <h2>{group.cat}</h2>
-          <CardList states={group.states} onMark={cycles.mark} />
+          {group.units.map((unit) => (
+            <Unit key={unit.group ?? unit.states[0]?.item.id} unit={unit} onMark={cycles.mark} />
+          ))}
         </section>
       ))}
 
@@ -65,7 +67,7 @@ export function CycleList() {
         </p>
       )}
 
-      <AddItem onAdd={cycles.addItem} />
+      <AddItem onAdd={cycles.addItem} groups={knownGroups(cycles.items)} />
 
       {archived.length > 0 && <Archived items={archived} />}
     </>
@@ -85,6 +87,27 @@ function CardList({
         <CycleCard key={state.item.id} state={state} onMark={onMark} />
       ))}
     </ul>
+  )
+}
+
+/**
+ * Куст внутри категории. Одиночная позиция рисуется как раньше, без
+ * лишней обёртки: заголовок над одной карточкой — шум, а не структура.
+ */
+function Unit({
+  unit,
+  onMark,
+}: {
+  unit: CycleUnit
+  onMark: (item: CycleItem) => Promise<void>
+}) {
+  if (unit.group === null) return <CardList states={unit.states} onMark={onMark} />
+
+  return (
+    <div className="unit">
+      <h3 className="unit__name">{unit.group}</h3>
+      <CardList states={unit.states} onMark={onMark} />
+    </div>
   )
 }
 
@@ -157,10 +180,17 @@ function Archived({ items }: { items: CycleItem[] }) {
   )
 }
 
-function AddItem({ onAdd }: { onAdd: (draft: ItemDraft) => Promise<CycleItem | null> }) {
+function AddItem({
+  onAdd,
+  groups,
+}: {
+  onAdd: (draft: ItemDraft) => Promise<CycleItem | null>
+  groups: string[]
+}) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
   const [cat, setCat] = useState<string>(CATEGORIES[0])
+  const [group, setGroup] = useState('')
   const [interval, setInterval] = useState('')
 
   if (!open) {
@@ -180,7 +210,8 @@ function AddItem({ onAdd }: { onAdd: (draft: ItemDraft) => Promise<CycleItem | n
     const parsed = Number(interval)
     const intervalDays = interval.trim() && Number.isFinite(parsed) && parsed > 0 ? parsed : null
 
-    void onAdd({ name: trimmed, cat: cat.trim(), intervalDays })
+    const inGroup = group.trim()
+    void onAdd({ name: trimmed, cat: cat.trim(), intervalDays, ...(inGroup ? { group: inGroup } : {}) })
     setName('')
     setInterval('')
     setOpen(false)
@@ -194,6 +225,8 @@ function AddItem({ onAdd }: { onAdd: (draft: ItemDraft) => Promise<CycleItem | n
       </label>
 
       <CategoryField value={cat} onChange={setCat} />
+
+      <GroupField value={group} options={groups} onChange={setGroup} />
 
       <label className="field">
         <span>Интервал, дней</span>

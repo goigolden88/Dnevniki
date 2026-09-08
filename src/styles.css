@@ -419,3 +419,17 @@ p {
   opacity: 0.5;
   cursor: default;
 }
+
+/* Куст внутри категории: несколько позиций про одну вещь. */
+.unit {
+  margin-bottom: 10px;
+  padding-left: 10px;
+  border-left: 2px solid var(--line);
+}
+
+.unit__name {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}

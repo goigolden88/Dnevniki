@@ -33,6 +33,7 @@ export type SeedMark = { date: string; price?: number; note?: string }
 export type SeedItem = {
   name: string
   cat: string
+  group?: string
   intervalDays: number | null
   note?: string
   marks: SeedMark[]
@@ -144,6 +145,7 @@ function convertCycles(seed: SeedCycles, items: CycleItem[], events: CycleEvent[
       updatedAt: SEED_UPDATED_AT,
       name,
       cat: text(raw.cat, `позиция «${name}»: категория`),
+      ...(raw.group ? { group: String(raw.group).trim() } : {}),
       // Ноль и отрицательные значения считаются не заданными — так же,
       // как их понимает расчёт в modules/cycles/cycles.ts.
       intervalDays:

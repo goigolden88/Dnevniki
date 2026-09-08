@@ -5,6 +5,7 @@ import {
   cycleStates,
   DUE_RATIO,
   groupByCategory,
+  knownGroups,
   MIN_INTERVALS,
   intervals,
   markDates,
@@ -13,6 +14,7 @@ import {
   MEDIAN_WINDOW,
   sortByUrgency,
   spread,
+  unitsOf,
 } from './cycles.ts'
 import type { CycleEvent, CycleItem } from '../../core/model.ts'
 
@@ -328,14 +330,17 @@ describe('groupByCategory', () => {
     expect(groups.map((group) => group.cat)).toEqual(['Гигиена', 'Дом', 'Огород'])
   })
 
-  it('внутри группы порядок по срочности', () => {
+  it('внутри категории порядок по срочности', () => {
     const overdue = cycleState(
       item({ id: 'x', name: 'Просрочено', cat: 'Дом', intervalDays: 5 }),
       [event('2026-08-01', { itemId: 'x' })],
       '2026-09-07',
     )
     const groups = groupByCategory([state('a', 'Спокойное', 'Дом'), overdue], ['Дом'])
-    expect(groups[0]?.states.map((each) => each.item.id)).toEqual(['x', 'a'])
+    expect(groups[0]?.units.flatMap((unit) => unit.states.map((each) => each.item.id))).toEqual([
+      'x',
+      'a',
+    ])
   })
 
   it('пустой вход — пустой выход', () => {
@@ -373,5 +378,54 @@ describe('расхождение «как надо» и «как есть» (Р-
   it('пока отметок мало, истории нет даже при ручном интервале', () => {
     const state = cycleState(item({ intervalDays: 90 }), [event('2026-08-01')], '2026-09-07')
     expect(state.byHistory).toBeNull()
+  })
+})
+
+describe('кусты внутри категории (Р-30)', () => {
+  const at = (id: string, name: string, group?: string, intervalDays: number | null = 10) =>
+    cycleState(
+      item({ id, name, cat: 'Дом', intervalDays, ...(group === undefined ? {} : { group }) }),
+      [],
+      '2026-09-07',
+    )
+
+  it('позиции с одной группой собираются вместе', () => {
+    const units = unitsOf([
+      at('a', 'Три стадии', 'Барьер Эксперт'),
+      at('b', 'Пылесос'),
+      at('c', 'Вторая стадия', 'Барьер Эксперт'),
+    ])
+    expect(units).toHaveLength(2)
+    expect(units.find((unit) => unit.group === 'Барьер Эксперт')?.states).toHaveLength(2)
+    expect(units.find((unit) => unit.group === null)?.states[0]?.item.name).toBe('Пылесос')
+  })
+
+  it('куст встаёт по своей самой срочной позиции, а не в конец', () => {
+    const overdue = cycleState(
+      item({ id: 'z', name: 'Картридж', cat: 'Дом', group: 'Барьер Эксперт', intervalDays: 5 }),
+      [event('2026-08-01', { itemId: 'z' })],
+      '2026-09-07',
+    )
+    const units = unitsOf([at('a', 'Спокойное'), overdue, at('b', 'Второй картридж', 'Барьер Эксперт')])
+    expect(units[0]?.group).toBe('Барьер Эксперт')
+  })
+
+  it('пустая и пробельная группа — это отсутствие группы', () => {
+    const units = unitsOf([at('a', 'Раз', ''), at('b', 'Два', '   ')])
+    expect(units.every((unit) => unit.group === null)).toBe(true)
+    expect(units).toHaveLength(2)
+  })
+
+  it('группа из одной позиции остаётся группой', () => {
+    const units = unitsOf([at('a', 'Одинокий картридж', 'Барьер Эксперт')])
+    expect(units[0]?.group).toBe('Барьер Эксперт')
+  })
+})
+
+describe('knownGroups', () => {
+  it('собирает заведённые кусты без повторов и пустых', () => {
+    expect(
+      knownGroups([{ group: 'Зарядки' }, { group: 'Барьер' }, { group: 'Зарядки' }, {}, { group: ' ' }]),
+    ).toEqual(['Барьер', 'Зарядки'])
   })
 })

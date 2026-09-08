@@ -259,13 +259,54 @@ export function cycleStates(
   return sortByUrgency(live.map((item) => cycleState(item, events, now)))
 }
 
-export type CycleGroup = { cat: string; states: CycleState[] }
+/**
+ * Единица показа внутри категории: либо одна позиция сама по себе,
+ * либо куст из нескольких — «Барьер Эксперт» с двумя видами картриджей.
+ */
+export type CycleUnit = { group: string | null; states: CycleState[] }
+
+export type CycleGroup = { cat: string; units: CycleUnit[] }
+
+/**
+ * Собирает позиции категории в кусты по полю `group`.
+ *
+ * Кусты и одиночки стоят в одном ряду и сортируются по самой срочной
+ * позиции внутри. Иначе просроченный картридж уехал бы вниз только
+ * потому, что его позиция объединена с соседней.
+ *
+ * Группа из одной позиции остаётся группой: заголовок не пропадает
+ * при удалении второй позиции, и куст не разваливается на глазах.
+ */
+export function unitsOf(states: CycleState[]): CycleUnit[] {
+  const units: CycleUnit[] = []
+  const byGroup = new Map<string, CycleUnit>()
+
+  for (const state of sortByUrgency(states)) {
+    const group = state.item.group?.trim()
+    if (!group) {
+      units.push({ group: null, states: [state] })
+      continue
+    }
+    const existing = byGroup.get(group)
+    if (existing) {
+      existing.states.push(state)
+      continue
+    }
+    // Порядок кустов задаётся первой встреченной позицией, а список уже
+    // отсортирован по срочности — значит куст встаёт по самой срочной.
+    const unit: CycleUnit = { group, states: [state] }
+    byGroup.set(group, unit)
+    units.push(unit)
+  }
+
+  return units
+}
 
 /**
  * Разбивка по категориям для нижней части экрана «Сейчас».
  *
- * Порядок групп задаётся снаружи: сам расчёт не знает и не должен знать,
- * что категории называются по-русски и что «Гигиена» идёт раньше «Дачи».
+ * Порядок категорий задаётся снаружи: сам расчёт не знает и не должен
+ * знать, что они называются по-русски и что «Гигиена» идёт раньше «Дачи».
  * Категории вне списка уходят в конец по алфавиту.
  */
 export function groupByCategory(
@@ -285,6 +326,16 @@ export function groupByCategory(
   }
 
   return [...groups.entries()]
-    .map(([cat, list]) => ({ cat, states: sortByUrgency(list) }))
+    .map(([cat, list]) => ({ cat, units: unitsOf(list) }))
     .sort((a, b) => rank(a.cat) - rank(b.cat) || a.cat.localeCompare(b.cat, 'ru'))
+}
+
+/** Все кусты, какие уже заведены. Для подсказок в форме. */
+export function knownGroups(items: { group?: string }[]): string[] {
+  const names = new Set<string>()
+  for (const item of items) {
+    const group = item.group?.trim()
+    if (group) names.add(group)
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, 'ru'))
 }

@@ -3,8 +3,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { daysBetween, days, formatDate, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
 import type { CycleState } from './cycles.ts'
-import { MIN_INTERVALS } from './cycles.ts'
-import { CategoryField } from './CategoryField.tsx'
+import { knownGroups, MIN_INTERVALS } from './cycles.ts'
+import { CategoryField, GroupField } from './CategoryField.tsx'
 import { barPercent, detailText, divergence, intervalText, statusText } from './labels.ts'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
@@ -109,8 +109,10 @@ export function ItemScreen() {
           name: state.item.name,
           cat: state.item.cat,
           intervalDays: state.item.intervalDays,
+          ...(state.item.group === undefined ? {} : { group: state.item.group }),
           ...(state.item.note === undefined ? {} : { note: state.item.note }),
         }}
+        groups={knownGroups(cycles.items)}
         archived={state.item.archived === true}
         onSave={(patch) => cycles.updateItem(id, patch)}
         onRemove={() => cycles.removeItem(id)}
@@ -231,12 +233,14 @@ function ItemForm({
   draft,
   archived,
   name,
+  groups,
   onSave,
   onRemove,
 }: {
   draft: ItemDraft
   archived: boolean
   name: string
+  groups: string[]
   onSave: (patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
   onRemove: () => Promise<void>
 }) {
@@ -244,6 +248,7 @@ function ItemForm({
   const [form, setForm] = useState({
     name: draft.name,
     cat: draft.cat,
+    group: draft.group ?? '',
     interval: draft.intervalDays === null ? '' : String(draft.intervalDays),
   })
 
@@ -256,7 +261,9 @@ function ItemForm({
     const intervalDays =
       form.interval.trim() && Number.isFinite(parsed) && parsed > 0 ? parsed : null
 
-    void onSave({ name: trimmed, cat: form.cat.trim(), intervalDays })
+    // Пустая группа записывается пустой строкой, а не пропускается:
+    // иначе куст нельзя было бы расформировать, только переименовать.
+    void onSave({ name: trimmed, cat: form.cat.trim(), group: form.group.trim(), intervalDays })
   }
 
   function remove() {
@@ -274,6 +281,12 @@ function ItemForm({
         </label>
 
         <CategoryField value={form.cat} onChange={(cat) => setForm({ ...form, cat })} />
+
+        <GroupField
+          value={form.group}
+          options={groups}
+          onChange={(group) => setForm({ ...form, group })}
+        />
 
         <label className="field">
           <span>Интервал, дней</span>
