@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { db } from '../core/db.ts'
-import { daysAgo, days, formatDate, toDateStr, today } from '../core/dates.ts'
+import { today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
 import type { SyncedStore } from '../core/model.ts'
+import { backupNote } from '../ui/backup.ts'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
+import { useSyncStatus } from '../ui/useSync.ts'
 
 const LABELS: Record<SyncedStore, string> = {
   items: 'Позиции циклов',
@@ -215,37 +217,20 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
 
 const LAST_EXPORT = 'lastExportAt'
 
-/** Через сколько дней без выгрузки напоминание становится тревожным. */
-const STALE_DAYS = 14
-
 /**
- * Когда в последний раз забирали копию.
+ * Где лежит копия данных и стоит ли об этом беспокоиться.
  *
- * Пока синхронизации нет, файл — единственное место, где данные лежат
- * вне этого браузера. Очистка данных сайта стирает базу целиком, и без
- * этой строки о ней вспоминают уже после.
+ * Само правило — в `ui/backup.ts`: оно неочевидное и зависит от того,
+ * проходила ли синхронизация хоть раз, а такое должно проверяться
+ * тестами, а не глазами.
  */
 function LastExport({ at }: { at: string | null | undefined }) {
+  const sync = useSyncStatus()
+
+  // undefined — настройки ещё читаются. Мигать тревогой на полсекунды
+  // при каждом открытии экрана незачем.
   if (at === undefined) return null
 
-  if (at === null) {
-    return (
-      <p className="error">
-        Копию ещё ни разу не забирали. Данные есть только в этом браузере — очистка данных сайта
-        сотрёт их целиком.
-      </p>
-    )
-  }
-
-  const day = toDateStr(new Date(at))
-  const ago = daysAgo(day)
-  const when =
-    ago === 0 ? 'сегодня' : ago === 1 ? 'вчера' : `${days(ago)} назад, ${formatDate(day)}`
-
-  return (
-    <p className={ago >= STALE_DAYS ? 'error' : 'muted'}>
-      Последняя выгрузка: {when}.
-      {ago >= STALE_DAYS && ' С тех пор всё новое живёт только здесь.'}
-    </p>
-  )
+  const note = backupNote(at, sync, today())
+  return <p className={note.tone}>{note.text}</p>
 }
