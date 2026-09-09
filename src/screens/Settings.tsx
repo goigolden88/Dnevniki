@@ -3,7 +3,6 @@ import { db } from '../core/db.ts'
 import { daysAgo, days, formatDate, toDateStr, today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
 import type { SyncedStore } from '../core/model.ts'
-import { seedKind, seedToSnapshot, type SeedFiles } from '../seed/seed.ts'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
 
 const LABELS: Record<SyncedStore, string> = {
@@ -92,8 +91,6 @@ export function Settings() {
 
       <DataTransfer onChanged={load} />
 
-      <SeedImport onChanged={load} />
-
       <section className="block">
         <h2>О приложении</h2>
         <dl className="facts">
@@ -104,94 +101,6 @@ export function Settings() {
         </dl>
       </section>
     </>
-  )
-}
-
-/**
- * Разовый перенос дневников из Obsidian.
- *
- * Отдельно от ручного переноса: там свой же слепок, здесь чужой формат,
- * который читается один раз в жизни приложения. Когда данные переедут
- * и проверятся, блок и папку `src/seed/` можно удалять.
- */
-function SeedImport({ onChanged }: { onChanged: () => Promise<void> }) {
-  const input = useRef<HTMLInputElement>(null)
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState('')
-  const [error, setError] = useState('')
-
-  async function open(list: FileList) {
-    setBusy(true)
-    setNote('')
-    setError('')
-    try {
-      // Файлы различаются по содержимому, а не по имени: имя мог поменять
-      // мессенджер по дороге, состав ключей — нет.
-      const files: SeedFiles = {}
-      for (const file of Array.from(list)) {
-        const parsed: unknown = JSON.parse(await file.text())
-        files[seedKind(parsed)] = parsed as never
-      }
-
-      const { snapshot, report } = seedToSnapshot(files)
-      const applied = await db.importAll(snapshot)
-      await onChanged()
-
-      const parts = [
-        `позиций ${report.items}`,
-        `отметок ${report.cycleEvents}`,
-        `эпизодов ${report.episodes}`,
-        `измерений ${report.measures}`,
-        `тренировок ${report.sessions}`,
-        `тегов ${report.tags}`,
-        `контента ${report.content}`,
-      ]
-      setNote(
-        applied === 0
-          ? 'Всё это уже загружено раньше, ничего не изменилось'
-          : `Разобрано: ${parts.join(', ')}. Записано: ${applied}`,
-      )
-    } catch (failure) {
-      setError(failure instanceof Error ? failure.message : 'Неизвестная ошибка')
-    } finally {
-      setBusy(false)
-      if (input.current) input.current.value = ''
-    }
-  }
-
-  return (
-    <section className="block">
-      <h2>Перенос из Obsidian</h2>
-
-      <button
-        type="button"
-        className="btn btn--wide"
-        onClick={() => input.current?.click()}
-        disabled={busy}
-      >
-        Выбрать файлы seed-*.json
-      </button>
-
-      <input
-        ref={input}
-        type="file"
-        accept="application/json,.json"
-        multiple
-        hidden
-        onChange={(event) => {
-          const list = event.target.files
-          if (list && list.length > 0) void open(list)
-        }}
-      />
-
-      {note && <p className="muted">{note}</p>}
-      {error && <p className="error">{error}</p>}
-
-      <p className="muted">
-        Можно выбрать все три файла сразу. Повторная загрузка того же файла ничего не дублирует
-        и не затирает правки, сделанные в приложении.
-      </p>
-    </section>
   )
 }
 
