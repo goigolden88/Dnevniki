@@ -175,6 +175,10 @@ export function addDays(d: DateStr, n: number): DateStr {
  * Исключение на 11–14 обязательно, иначе выйдет «11 день».
  */
 export function plural(n: number, forms: [string, string, string]): string {
+  // Дробное число всегда берёт вторую форму: «3,5 дня», «0,5 дня»,
+  // «1,5 дня» — правило отдельное от целых и на остатки не смотрит.
+  if (!Number.isInteger(n)) return forms[1]
+
   const abs = Math.abs(n) % 100
   if (abs >= 11 && abs <= 14) return forms[2]
   switch (abs % 10) {
@@ -189,7 +193,9 @@ export function plural(n: number, forms: [string, string, string]): string {
   }
 }
 
-/** `1` → `1 день`, `2` → `2 дня`, `5` → `5 дней` */
+/** `1` → `1 день`, `2` → `2 дня`, `5` → `5 дней`, `3.5` → `3,5 дня` */
 export function days(n: number): string {
-  return `${n} ${plural(n, ['день', 'дня', 'дней'])}`
+  // Десятичная запятая, а не точка: по-русски пишут «3,5 дня».
+  const number = Number.isInteger(n) ? String(n) : String(n).replace('.', ',')
+  return `${number} ${plural(n, ['день', 'дня', 'дней'])}`
 }

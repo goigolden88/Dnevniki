@@ -306,3 +306,36 @@ export function activityTotals(sessions: Session[], period: Period = {}): Activi
     (a, b) => b.sessions - a.sessions || a.activity.localeCompare(b.activity),
   )
 }
+
+// ─── Теги симптомов ────────────────────────────────────────────────────────
+
+/**
+ * Симптомы в порядке «недавно использованные первыми».
+ *
+ * Это замена шаблонам быстрого ввода (Р-39): у болезней симптомы повторяются,
+ * и то, чем болел в прошлый раз, почти всегда есть в списке. Порядок по
+ * алфавиту заставлял бы искать «горло» между «головной болью» и «жаром»
+ * при каждом вводе.
+ *
+ * Ни разу не использованные идут следом по алфавиту — они не мусор,
+ * их просто ещё не с чем сравнивать.
+ */
+export function recentSymptoms(episodes: Episode[], tagIds: string[]): string[] {
+  const lastUsed = new Map<string, string>()
+
+  for (const episode of liveEpisodes(episodes)) {
+    for (const tagId of episode.symptoms) {
+      const known = lastUsed.get(tagId)
+      if (known === undefined || episode.start > known) lastUsed.set(tagId, episode.start)
+    }
+  }
+
+  return [...tagIds].sort((a, b) => {
+    const usedA = lastUsed.get(a)
+    const usedB = lastUsed.get(b)
+    if (usedA !== undefined && usedB !== undefined) return usedB.localeCompare(usedA)
+    if (usedA !== undefined) return -1
+    if (usedB !== undefined) return 1
+    return 0
+  })
+}

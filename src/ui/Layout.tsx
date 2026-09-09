@@ -3,6 +3,7 @@ import { useSyncStatus } from './useSync.ts'
 
 const TABS = [
   { to: '/', label: 'Сейчас', end: true },
+  { to: '/health', label: 'Здоровье', end: false },
   { to: '/feed', label: 'Лента', end: false },
   { to: '/settings', label: 'Настройки', end: false },
 ]
