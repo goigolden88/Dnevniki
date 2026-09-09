@@ -12,6 +12,7 @@ import {
   checkAccess,
   expiryDay,
   forgetToken,
+  getStatus,
   readConfig,
   saveConfig,
   syncNow,
@@ -89,7 +90,10 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
     try {
       const result = await syncNow()
       await onChanged()
-      if (result === null) setNote('Синхронизация выключена')
+      // Пустой ответ означает две разные вещи: синхронизация не настроена
+      // либо проход упал. Разбирает их состояние — текст ошибки уже там,
+      // и дублировать его здесь незачем.
+      if (result === null) setNote(getStatus().state === 'error' ? '' : 'Синхронизация выключена')
       else if (result.pulled === 0 && result.pushed === 0) setNote('Всё и так совпадает')
       else {
         const parts = []

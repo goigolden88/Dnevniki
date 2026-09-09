@@ -212,8 +212,17 @@ describe('срок жизни токена', () => {
 
 describe('чтение репозитория', () => {
   it('пустой репозиторий — не ошибка, а первый запуск', async () => {
-    const { api } = client({ '/git/ref/heads/main': { status: 404, body: {} } })
-    expect(await api.head()).toBeNull()
+    // 404 — нет такой ветки.
+    const missing = client({ '/git/ref/heads/main': { status: 404, body: {} } })
+    expect(await missing.api.head()).toBeNull()
+
+    // 409 — нет ни одного коммита вообще. Ровно это отвечает GitHub на
+    // репозиторий, который только что создали и ничего в него не положили,
+    // то есть на самый обычный первый запуск.
+    const fresh = client({
+      '/git/ref/heads/main': { status: 409, body: { message: 'Git Repository is empty.' } },
+    })
+    expect(await fresh.api.head()).toBeNull()
   })
 
   it('голова ветки', async () => {

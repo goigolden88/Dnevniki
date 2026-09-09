@@ -240,6 +240,12 @@ export function createClient({ repo, token, fetch = globalThis.fetch }: ClientOp
     /**
      * Голова ветки. null — ветки нет: репозиторий только что создан и пуст.
      * Это нормальный первый запуск, а не ошибка.
+     *
+     * Пустой репозиторий GitHub отвечает не одинаково: 404, когда нет самой
+     * ветки, и 409 «Git Repository is empty», когда нет ни одного коммита
+     * вообще. Второй случай — ровно то, что видит человек, который только что
+     * создал репозиторий и ничего в него не положил, то есть самый обычный
+     * первый запуск. Здесь оба означают одно.
      */
     async head(): Promise<string | null> {
       try {
@@ -248,7 +254,8 @@ export function createClient({ repo, token, fetch = globalThis.fetch }: ClientOp
         )
         return raw.object.sha
       } catch (error) {
-        if (error instanceof GitHubError && error.status === 404) return null
+        if (!(error instanceof GitHubError)) throw error
+        if (error.status === 404 || error.status === 409) return null
         throw error
       }
     },
