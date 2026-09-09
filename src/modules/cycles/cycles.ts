@@ -339,3 +339,142 @@ export function knownGroups(items: { group?: string }[]): string[] {
   }
   return [...names].sort((a, b) => a.localeCompare(b, 'ru'))
 }
+
+// ─── Траты ─────────────────────────────────────────────────────────────────
+
+/**
+ * Сколько потрачено и из скольких отметок это сложено.
+ *
+ * Три числа, а не одно, и это главное в Р-36 с уточнением: сумма без числа
+ * отметок читается как «столько потрачено всего», хотя цена стоит у четырёх
+ * отметок из тридцати трёх. С обоими числами то же значение становится
+ * правдой — «6 118 ₽ за 4 отметки из 33» — и заодно видно, сколько ещё
+ * не заполнено.
+ *
+ * Стоимости владения в месяц здесь нет намеренно: она делит сумму на
+ * интервал, который по Р-27 выводится только с трёх промежутков и есть
+ * у одной позиции из девятнадцати.
+ */
+export type Spent = {
+  /** Сумма проставленных цен. */
+  sum: number
+  /** Отметок, у которых цена есть. */
+  priced: number
+  /** Отметок всего. Показывает, насколько сумма неполная. */
+  marks: number
+}
+
+const NOTHING: Spent = { sum: 0, priced: 0, marks: 0 }
+
+/**
+ * Цена отметки, если она годная.
+ *
+ * Отрицательная и нечисловая отбрасываются молча: они могут приехать из
+ * файла или из чужой версии приложения, и одна кривая цена не должна
+ * ломать сумму по всей категории. Ноль — годная цена: замена по гарантии
+ * стоила нисколько, и это тоже факт.
+ */
+function priceOf(event: CycleEvent): number | null {
+  const price = event.price
+  if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return null
+  return price
+}
+
+/** Траты по списку отметок. Удалённые не считаются. */
+export function spent(events: CycleEvent[]): Spent {
+  let sum = 0
+  let priced = 0
+  let marks = 0
+
+  for (const event of events) {
+    if (event.deleted) continue
+    marks += 1
+    const price = priceOf(event)
+    if (price === null) continue
+    sum += price
+    priced += 1
+  }
+
+  // Копейки складываются с погрешностью двоичной дроби: 0.1 + 0.2 даёт
+  // 0.30000000000000004. На экране это вылезло бы хвостом из нулей.
+  return { sum: Math.round(sum * 100) / 100, priced, marks }
+}
+
+function plus(a: Spent, b: Spent): Spent {
+  return {
+    sum: Math.round((a.sum + b.sum) * 100) / 100,
+    priced: a.priced + b.priced,
+    marks: a.marks + b.marks,
+  }
+}
+
+export type SpentItem = { item: CycleItem; spent: Spent }
+export type SpentUnit = { group: string | null; items: SpentItem[]; spent: Spent }
+export type SpentCat = { cat: string; units: SpentUnit[]; spent: Spent }
+
+/**
+ * Три уровня сложения: категория → куст → позиция (Р-36).
+ *
+ * Куст здесь главный уровень: «Барьер Эксперт» — это две позиции, и вопрос
+ * «сколько стоит этот фильтр» осмыслен на кусте, а не на отдельной стадии.
+ *
+ * В списки попадает только то, где цена проставлена хоть раз, — иначе
+ * экран трат заполнен позициями с нулём. Но в суммы отметки без цены
+ * входят числом `marks`: именно оно показывает, чего не хватает.
+ *
+ * Архивные позиции считаются: деньги на них потрачены, и убирать их из
+ * суммы значило бы уменьшать её при уборке экрана.
+ */
+export function spendTree(
+  items: CycleItem[],
+  events: CycleEvent[],
+  order: readonly string[] = [],
+): SpentCat[] {
+  const byItem = new Map<string, CycleEvent[]>()
+  for (const event of events) {
+    if (event.deleted) continue
+    const list = byItem.get(event.itemId)
+    if (list) list.push(event)
+    else byItem.set(event.itemId, [event])
+  }
+
+  const cats = new Map<string, Map<string, SpentUnit>>()
+
+  for (const item of items) {
+    if (item.deleted) continue
+    const own = spent(byItem.get(item.id) ?? [])
+    if (own.marks === 0) continue
+
+    const cat = cats.get(item.cat) ?? new Map<string, SpentUnit>()
+    cats.set(item.cat, cat)
+
+    // Одиночные позиции не сливаются в общий куст: ключ у каждой свой.
+    const group = item.group?.trim() || null
+    const key = group ?? ` ${item.id}`
+    const unit = cat.get(key) ?? { group, items: [], spent: NOTHING }
+    if (own.priced > 0) unit.items.push({ item, spent: own })
+    unit.spent = plus(unit.spent, own)
+    cat.set(key, unit)
+  }
+
+  const rank = (cat: string) => {
+    const index = order.indexOf(cat)
+    return index === -1 ? order.length : index
+  }
+
+  return [...cats.entries()]
+    .map(([cat, units]) => ({
+      cat,
+      units: [...units.values()]
+        .filter((unit) => unit.spent.priced > 0)
+        .sort((a, b) => b.spent.sum - a.spent.sum),
+      spent: [...units.values()].map((unit) => unit.spent).reduce(plus, NOTHING),
+    }))
+    .filter((cat) => cat.spent.priced > 0)
+    .sort((a, b) => rank(a.cat) - rank(b.cat) || a.cat.localeCompare(b.cat, 'ru'))
+}
+
+/** Итог по всему экрану трат. */
+export function totalSpent(cats: SpentCat[]): Spent {
+  return cats.reduce((all, cat) => plus(all, cat.spent), NOTHING)
+}

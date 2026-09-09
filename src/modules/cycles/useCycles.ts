@@ -35,6 +35,8 @@ export type Cycles = {
   states: CycleState[]
   /** Все живые позиции, включая архивные. */
   items: CycleItem[]
+  /** Все живые отметки. Нужны сложению трат, которое считает по всем позициям. */
+  events: CycleEvent[]
   /** Сегодняшняя дата, на которую посчитан экран. */
   day: DateStr
   /** Последняя ошибка. Пусто, когда всё в порядке. */
@@ -46,8 +48,10 @@ export type Cycles = {
   /** Отметить сегодня, а если уже отмечена — снять отметку. */
   mark: (item: CycleItem) => Promise<void>
   /** Отметка задним числом. Повтор в тот же день ничего не меняет. */
-  addMark: (itemId: string, date: DateStr) => Promise<void>
+  addMark: (itemId: string, date: DateStr, price?: number | null) => Promise<void>
   removeMark: (id: string) => Promise<void>
+  /** Цена отметки. `null` убирает её совсем. */
+  setMarkPrice: (id: string, price: number | null) => Promise<void>
   addItem: (draft: ItemDraft) => Promise<CycleItem | null>
   updateItem: (id: string, patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
   removeItem: (id: string) => Promise<void>
@@ -153,14 +157,22 @@ export function useCycles(): Cycles {
   }, [])
 
   const addMark = useCallback(
-    async (itemId: string, date: DateStr) => {
+    async (itemId: string, date: DateStr, price?: number | null) => {
       const previous = events
       const already = previous.some(
         (event) => event.itemId === itemId && event.date === date && !event.deleted,
       )
       if (already) return
 
-      const event: CycleEvent = { id: ulid(), updatedAt: nowIso(), itemId, date }
+      // Цена необязательна, и пустое поле не должно заводить `price: null`
+      // в записи: в модели поле или есть, или его нет.
+      const event: CycleEvent = {
+        id: ulid(),
+        updatedAt: nowIso(),
+        itemId,
+        date,
+        ...(price === undefined || price === null ? {} : { price }),
+      }
       const saved = await apply(
         () => setEvents([...previous, event]),
         () => setEvents(previous),
@@ -180,6 +192,30 @@ export function useCycles(): Cycles {
         () => setEvents(previous),
         () => db.remove('cycleEvents', id),
       )
+    },
+    [events, apply],
+  )
+
+  /**
+   * Цена проставляется отдельно от самой отметки: на экране «Сейчас» отметка
+   * ставится одним тапом, и формы там нет вовсе. Без этого пути цена не
+   * попадала бы почти никуда — а без цен нечего складывать (Р-36).
+   */
+  const setMarkPrice = useCallback(
+    async (id: string, price: number | null) => {
+      const previous = events
+      const current = previous.find((event) => event.id === id)
+      if (!current) return
+
+      const { price: _, ...without } = current
+      const updated: CycleEvent = { ...without, ...(price === null ? {} : { price }) }
+
+      const saved = await apply(
+        () => setEvents(previous.map((event) => (event.id === id ? updated : event))),
+        () => setEvents(previous),
+        () => db.put('cycleEvents', updated),
+      )
+      if (saved) setEvents((all) => all.map((each) => (each.id === saved.id ? saved : each)))
     },
     [events, apply],
   )
@@ -245,11 +281,13 @@ export function useCycles(): Cycles {
   )
 
   const live = useMemo(() => items.filter((item) => !item.deleted), [items])
+  const liveEvents = useMemo(() => events.filter((event) => !event.deleted), [events])
 
   return {
     status,
     states,
     items: live,
+    events: liveEvents,
     day,
     error,
     stateOf,
@@ -257,6 +295,7 @@ export function useCycles(): Cycles {
     mark,
     addMark,
     removeMark,
+    setMarkPrice,
     addItem,
     updateItem,
     removeItem,

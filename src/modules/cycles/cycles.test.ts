@@ -13,7 +13,10 @@ import {
   medianInterval,
   MEDIAN_WINDOW,
   sortByUrgency,
+  spendTree,
+  spent,
   spread,
+  totalSpent,
   unitsOf,
 } from './cycles.ts'
 import type { CycleEvent, CycleItem } from '../../core/model.ts'
@@ -427,5 +430,170 @@ describe('knownGroups', () => {
     expect(
       knownGroups([{ group: 'Зарядки' }, { group: 'Барьер' }, { group: 'Зарядки' }, {}, { group: ' ' }]),
     ).toEqual(['Барьер', 'Зарядки'])
+  })
+})
+
+/**
+ * Траты. Сумма всегда идёт вместе с числом отметок, из которых сложена, —
+ * это и есть уточнение к Р-36, ради которого расчёт устроен так.
+ */
+describe('траты', () => {
+  function costItem(id: string, over: Partial<CycleItem> = {}): CycleItem {
+    return {
+      id,
+      updatedAt: '2026-09-07T00:00:00.000Z',
+      name: id,
+      cat: 'Гигиена',
+      intervalDays: null,
+      ...over,
+    }
+  }
+
+  function costEvent(itemId: string, date: string, price?: number): CycleEvent {
+    return {
+      id: `${itemId}-${date}`,
+      updatedAt: '2026-09-07T00:00:00.000Z',
+      itemId,
+      date,
+      ...(price === undefined ? {} : { price }),
+    }
+  }
+
+  describe('spent', () => {
+    it('складывает цены и считает, из скольких отметок сумма сложена', () => {
+      const value = spent([costEvent('i1', '2026-01-01', 700), costEvent('i1', '2026-03-01', 800)])
+      expect(value).toEqual({ sum: 1500, priced: 2, marks: 2 })
+    })
+
+    it('отметки без цены попадают в marks, но не в сумму', () => {
+      // Ради этого числа всё и затевалось: «6 118 ₽ за 4 отметки из 33» —
+      // правда, а те же 6 118 ₽ без «из 33» — вранье о полноте.
+      const value = spent([costEvent('i1', '2026-01-01', 700), costEvent('i1', '2026-03-01')])
+      expect(value).toEqual({ sum: 700, priced: 1, marks: 2 })
+    })
+
+    it('ноль — годная цена: замена по гарантии стоила нисколько', () => {
+      expect(spent([costEvent('i1', '2026-01-01', 0)])).toEqual({ sum: 0, priced: 1, marks: 1 })
+    })
+
+    it('отрицательная и нечисловая отбрасываются, но отметку не теряют', () => {
+      const broken = { ...costEvent('i1', '2026-01-01'), price: -100 }
+      const alien = { ...costEvent('i1', '2026-02-01'), price: 'дорого' as unknown as number }
+      expect(spent([broken, alien, costEvent('i1', '2026-03-01', 500)])).toEqual({
+        sum: 500,
+        priced: 1,
+        marks: 3,
+      })
+    })
+
+    it('удалённые не считаются вовсе', () => {
+      const gone = { ...costEvent('i1', '2026-01-01', 700), deleted: true }
+      expect(spent([gone, costEvent('i1', '2026-02-01', 300)])).toEqual({
+        sum: 300,
+        priced: 1,
+        marks: 1,
+      })
+    })
+
+    it('копейки складываются без хвоста двоичной дроби', () => {
+      const value = spent([costEvent('i1', '2026-01-01', 0.1), costEvent('i1', '2026-02-01', 0.2)])
+      expect(value.sum).toBe(0.3)
+    })
+
+    it('пустой список — нули', () => {
+      expect(spent([])).toEqual({ sum: 0, priced: 0, marks: 0 })
+    })
+  })
+
+  describe('spendTree', () => {
+    const items = [
+      costItem('b1', { name: 'Три стадии', cat: 'Дом', group: 'Барьер Эксперт' }),
+      costItem('b2', { name: 'Вторая стадия', cat: 'Дом', group: 'Барьер Эксперт' }),
+      costItem('h1', { name: 'Стрижка', cat: 'Гигиена' }),
+      costItem('p1', { name: 'Педикюр', cat: 'Гигиена' }),
+    ]
+    const events = [
+      costEvent('b1', '2026-02-01', 2500),
+      costEvent('b2', '2026-03-01', 1089),
+      costEvent('h1', '2026-04-01', 700),
+      costEvent('h1', '2026-05-01'),
+      costEvent('p1', '2026-06-01'),
+    ]
+    const order = ['Гигиена', 'Дом']
+
+    it('складывает по кусту — вопрос «сколько стоит фильтр» осмыслен там', () => {
+      const dom = spendTree(items, events, order).find((cat) => cat.cat === 'Дом')
+
+      expect(dom?.spent).toEqual({ sum: 3589, priced: 2, marks: 2 })
+      expect(dom?.units).toHaveLength(1)
+      expect(dom?.units[0]?.group).toBe('Барьер Эксперт')
+      expect(dom?.units[0]?.items.map((each) => each.item.id)).toEqual(['b1', 'b2'])
+    })
+
+    it('одиночные позиции не сливаются в общий куст', () => {
+      const hygiene = spendTree(items, events, order).find((cat) => cat.cat === 'Гигиена')
+
+      expect(hygiene?.units.every((unit) => unit.group === null)).toBe(true)
+      expect(hygiene?.units).toHaveLength(1)
+    })
+
+    it('позиция без единой цены в список не попадает, но в знаменатель входит', () => {
+      const hygiene = spendTree(items, events, order).find((cat) => cat.cat === 'Гигиена')
+
+      // Педикюр отмечен, но цена не проставлена ни разу: показывать нечего,
+      // а знаменатель он увеличивает — 700 ₽ за 1 отметку из 3.
+      expect(hygiene?.spent).toEqual({ sum: 700, priced: 1, marks: 3 })
+      expect(hygiene?.units.flatMap((unit) => unit.items).map((each) => each.item.id)).toEqual([
+        'h1',
+      ])
+    })
+
+    it('категория без цен не показывается вовсе', () => {
+      expect(spendTree([costItem('x1', { cat: 'Авто' })], [costEvent('x1', '2026-01-01')])).toEqual(
+        [],
+      )
+    })
+
+    it('порядок категорий задаётся снаружи', () => {
+      expect(spendTree(items, events, order).map((cat) => cat.cat)).toEqual(['Гигиена', 'Дом'])
+    })
+
+    it('внутри категории сначала то, на что потрачено больше', () => {
+      const tree = spendTree(
+        [...items, costItem('h2', { name: 'Бритьё', cat: 'Гигиена' })],
+        [...events, costEvent('h2', '2026-07-01', 5000)],
+        order,
+      )
+      const hygiene = tree.find((cat) => cat.cat === 'Гигиена')
+
+      expect(hygiene?.units.flatMap((unit) => unit.items).map((each) => each.item.id)).toEqual([
+        'h2',
+        'h1',
+      ])
+    })
+
+    it('архивная позиция считается: деньги на неё потрачены', () => {
+      const tree = spendTree(
+        [costItem('a1', { cat: 'Техника', archived: true })],
+        [costEvent('a1', '2026-01-01', 1829)],
+      )
+      expect(tree[0]?.spent.sum).toBe(1829)
+    })
+
+    it('удалённая позиция не считается', () => {
+      const tree = spendTree(
+        [costItem('d1', { cat: 'Техника', deleted: true })],
+        [costEvent('d1', '2026-01-01', 1829)],
+      )
+      expect(tree).toEqual([])
+    })
+
+    it('итог сходится с суммой категорий', () => {
+      expect(totalSpent(spendTree(items, events, order))).toEqual({
+        sum: 4289,
+        priced: 3,
+        marks: 5,
+      })
+    })
   })
 })

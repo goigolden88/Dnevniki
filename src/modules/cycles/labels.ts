@@ -5,8 +5,8 @@
  * Расчёт не знает, что его читают глазами, и русских строк не содержит.
  */
 
-import { MIN_INTERVALS, type CycleState, type CycleStatus } from './cycles.ts'
-import { days, formatDate } from '../../core/dates.ts'
+import { MIN_INTERVALS, type CycleState, type CycleStatus, type Spent } from './cycles.ts'
+import { days, formatDate, plural } from '../../core/dates.ts'
 
 /** Категории позиций из 01-Проект. Свободная строка, но выбор — из этих. */
 export const CATEGORIES = ['Гигиена', 'Дом', 'Техника', 'Авто', 'Дача'] as const
@@ -107,4 +107,75 @@ export function intervalText(state: CycleState): string {
 export function barPercent(state: CycleState): number {
   if (state.ratio === null) return 0
   return Math.min(Math.max(state.ratio, 0), 1) * 100
+}
+
+// ─── Деньги ────────────────────────────────────────────────────────────────
+
+/** Неразрывный пробел: сумма не должна переноситься между разрядами. */
+const NBSP = '\u00A0'
+
+/**
+ * Разбор цены из поля ввода.
+ *
+ * Терпимый нарочно: с телефона прилетает и «1 829», и «1829,50», и «700 ₽» —
+ * человек вводит цену так, как видел её в чеке, а не так, как удобно коду.
+ *
+ * `null` означает «цены нет», и пустая строка сюда попадает штатно: поле
+ * необязательное, и пустое оно не ошибка, а обычное состояние. Мусор тоже
+ * даёт null, а не ноль: молча записанный ноль соврал бы в сумме.
+ * Отрицательная отвергается — возврат денег не отметка цикла.
+ */
+export function parsePrice(text: string): number | null {
+  const clean = text
+    .replace(/\s/g, '')
+    .replace(/(₽|руб\.?|р\.?)$/i, '')
+    .replace(',', '.')
+  if (!clean) return null
+
+  const value = Number(clean)
+  if (!Number.isFinite(value) || value < 0) return null
+  // Копейки округляются сразу: дальше эти числа складываются, и хвост
+  // двоичной дроби вылез бы в сумме по категории.
+  return Math.round(value * 100) / 100
+}
+
+/**
+ * Сумма для экрана: разряды разделены, копейки только когда они есть.
+ *
+ * Intl не берётся намеренно: он даёт узкий пробел и своё расположение знака
+ * валюты, а здесь нужна одна предсказуемая строка, которую проверяет тест.
+ */
+export function formatMoney(value: number): string {
+  const rounded = Math.round(value * 100) / 100
+  const whole = Math.floor(rounded)
+  const kopecks = Math.round((rounded - whole) * 100)
+
+  const digits = String(whole)
+  let grouped = ''
+  for (let i = 0; i < digits.length; i++) {
+    const fromEnd = digits.length - i
+    grouped += digits[i]
+    if (fromEnd > 1 && fromEnd % 3 === 1) grouped += NBSP
+  }
+
+  const tail = kopecks === 0 ? '' : `,${String(kopecks).padStart(2, '0')}`
+  return `${grouped}${tail}${NBSP}₽`
+}
+
+/**
+ * Сумма вместе с числом отметок, из которых она сложена.
+ *
+ * Числа два, и оба обязательны. «6 118 ₽ за 4 отметки» отвечает на вопрос
+ * «дорого ли это»: три тысячи за шесть стрижек и три тысячи за одну — разные
+ * новости. «из 33» отвечает на второй вопрос, насколько сумме можно верить:
+ * цена стоит у четырёх отметок, остальные в неё не вошли.
+ *
+ * Пусто, когда цен нет вовсе: «0 ₽ за 0 отметок» ничего не сообщает.
+ */
+export function spentText(value: Spent): string {
+  if (value.priced === 0) return ''
+
+  const marks = `${value.priced} ${plural(value.priced, ['отметку', 'отметки', 'отметок'])}`
+  const full = value.marks > value.priced ? ` из ${value.marks}` : ''
+  return `${formatMoney(value.sum)} за ${marks}${full}`
 }

@@ -1,7 +1,14 @@
-import { useState, type FormEvent } from 'react'
+import { Fragment, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { groupByCategory, knownGroups, type CycleState, type CycleUnit } from './cycles.ts'
-import type { CycleItem } from '../../core/model.ts'
+import {
+  groupByCategory,
+  knownGroups,
+  spendTree,
+  totalSpent,
+  type CycleState,
+  type CycleUnit,
+} from './cycles.ts'
+import type { CycleEvent, CycleItem } from '../../core/model.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
 import {
   barPercent,
@@ -9,6 +16,7 @@ import {
   detailText,
   intervalText,
   MARKS_FOR_INTERVAL,
+  spentText,
   statusText,
 } from './labels.ts'
 import { useCycles, type ItemDraft } from './useCycles.ts'
@@ -66,6 +74,8 @@ export function CycleList() {
           руками.
         </p>
       )}
+
+      <Spending items={cycles.items} events={cycles.events} />
 
       <AddItem onAdd={cycles.addItem} groups={knownGroups(cycles.items)} />
 
@@ -154,6 +164,67 @@ function CycleCard({
         </button>
       </div>
     </li>
+  )
+}
+
+/**
+ * Траты: категория → куст → позиция (Р-36).
+ *
+ * Свёрнут по умолчанию — это не то, ради чего экран открывают каждый день.
+ * Суммы никогда не показываются в одиночку: рядом всегда число отметок,
+ * из которых сумма сложена, и общее их число. Без этого «6 118 ₽»
+ * читается как «столько потрачено», хотя цена стоит у четырёх отметок
+ * из тридцати трёх.
+ */
+function Spending({ items, events }: { items: CycleItem[]; events: CycleEvent[] }) {
+  const [open, setOpen] = useState(false)
+  const tree = useMemo(() => spendTree(items, events, CATEGORIES), [items, events])
+
+  // Ни одной цены — блок молчит целиком. Пустая таблица с нулями
+  // не сообщает ничего, кроме того, что поле цены ещё не заполняли.
+  if (tree.length === 0) return null
+
+  const total = totalSpent(tree)
+
+  return (
+    <section className="block">
+      <button type="button" className="link-btn" onClick={() => setOpen(!open)}>
+        {open ? 'Скрыть траты' : `Траты · ${spentText(total)}`}
+      </button>
+
+      {open && (
+        <table className="stats spending">
+          <tbody>
+            {tree.map((cat) => (
+              <Fragment key={cat.cat}>
+                <tr className="spending__cat">
+                  <td>{cat.cat}</td>
+                  <td className="num">{spentText(cat.spent)}</td>
+                </tr>
+                {cat.units.map((unit) => (
+                  <Fragment key={unit.group ?? unit.items[0]?.item.id}>
+                    {unit.group !== null && (
+                      <tr className="spending__group">
+                        <td>{unit.group}</td>
+                        <td className="num muted">{spentText(unit.spent)}</td>
+                      </tr>
+                    )}
+                    {unit.items.map((each) => (
+                      <tr key={each.item.id} className="spending__item">
+                        <td>
+                          <Link to={`/cycle/${each.item.id}`}>{each.item.name}</Link>
+                        </td>
+                        <td className="num muted">{spentText(each.spent)}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
   )
 }
 

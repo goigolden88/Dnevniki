@@ -465,3 +465,51 @@ p {
 .dot--error {
   background: var(--error);
 }
+
+/* Цена: в строке истории и в форме отметки. Уже соседей — сумма
+   короткая, а дата и кнопка рядом важнее. */
+.price-input {
+  width: 6.5em;
+  flex: none;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  font-size: 16px;
+  text-align: right;
+}
+
+/* `.row input` растягивает поля на всю строку — сумме это не нужно,
+   и правило точнее, иначе ширина выше не сработает. */
+.row .price-input {
+  flex: none;
+  width: 6.5em;
+}
+
+/* Три уровня трат: категория → куст → позиция. Отличаются отступом
+   и насыщенностью, а не линиями: линий в таблице и так хватает. */
+.spending td {
+  border-bottom: 0;
+  padding: 5px 0;
+}
+
+.spending__cat td:first-child {
+  font-weight: 600;
+  padding-top: 14px;
+}
+
+.spending__group td:first-child {
+  padding-left: 14px;
+}
+
+.spending__item td:first-child {
+  padding-left: 28px;
+}
+
+.spending__item a {
+  color: var(--accent);
+}

@@ -3,9 +3,18 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { daysBetween, days, formatDate, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
 import type { CycleState } from './cycles.ts'
-import { knownGroups, MIN_INTERVALS } from './cycles.ts'
+import { knownGroups, MIN_INTERVALS, spent } from './cycles.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
-import { barPercent, detailText, divergence, intervalText, statusText } from './labels.ts'
+import {
+  barPercent,
+  detailText,
+  divergence,
+  formatMoney,
+  intervalText,
+  parsePrice,
+  spentText,
+  statusText,
+} from './labels.ts'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
 /** Позиция целиком: состояние, история, разброс, правка. */
@@ -100,7 +109,7 @@ export function ItemScreen() {
         </section>
       )}
 
-      <History marks={marks} onRemove={cycles.removeMark} />
+      <History marks={marks} onRemove={cycles.removeMark} onSetPrice={cycles.setMarkPrice} />
 
       <AddMark itemId={id} onAdd={cycles.addMark} />
 
@@ -157,13 +166,19 @@ function Divergence({
 /**
  * История отметок, новые сверху. Рядом с каждой — промежуток до предыдущей:
  * ради этих чисел экран и открывают, в плоском списке дат они не видны.
+ *
+ * Здесь же правится цена. Отметка ставится одним тапом на экране «Сейчас»,
+ * где формы нет вовсе, и другого места вписать 700 ₽ за стрижку у неё не
+ * будет — а без цен нечего складывать (Р-36).
  */
 function History({
   marks,
   onRemove,
+  onSetPrice,
 }: {
   marks: CycleEvent[]
   onRemove: (id: string) => Promise<void>
+  onSetPrice: (id: string, price: number | null) => Promise<void>
 }) {
   if (marks.length === 0) {
     return (
@@ -173,6 +188,8 @@ function History({
       </section>
     )
   }
+
+  const total = spentText(spent(marks))
 
   return (
     <section className="block">
@@ -186,6 +203,9 @@ function History({
               <tr key={mark.id}>
                 <td>{formatDate(mark.date)}</td>
                 <td className="num muted">{gap === null ? '' : `+${days(gap)}`}</td>
+                <td className="num">
+                  <PriceCell mark={mark} onSet={onSetPrice} />
+                </td>
                 <td className="num">
                   <button
                     type="button"
@@ -201,7 +221,68 @@ function History({
           })}
         </tbody>
       </table>
+      {total && <p className="muted">Потрачено: {total}</p>}
     </section>
+  )
+}
+
+/**
+ * Цена одной отметки: показывается текстом, правится на месте.
+ *
+ * Пустое поле убирает цену — другого способа стереть ошибочно введённую
+ * сумму нет. Нечитаемый ввод не стирает ничего: отмена молчаливее, чем
+ * запись нуля вместо «1 500 руб с копейками».
+ */
+function PriceCell({
+  mark,
+  onSet,
+}: {
+  mark: CycleEvent
+  onSet: (id: string, price: number | null) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [text, setText] = useState('')
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className={mark.price === undefined ? 'link-btn muted' : 'link-btn'}
+        onClick={() => {
+          setText(mark.price === undefined ? '' : String(mark.price))
+          setEditing(true)
+        }}
+        aria-label={`Цена отметки ${formatDate(mark.date)}`}
+      >
+        {mark.price === undefined ? 'цена' : formatMoney(mark.price)}
+      </button>
+    )
+  }
+
+  function commit() {
+    setEditing(false)
+    const parsed = parsePrice(text)
+    // Непустая строка, из которой не вышло числа, — это опечатка,
+    // и стирать по ней существующую цену нельзя.
+    if (parsed === null && text.trim() !== '') return
+    if (parsed === (mark.price ?? null)) return
+    void onSet(mark.id, parsed)
+  }
+
+  return (
+    <input
+      className="price-input"
+      value={text}
+      autoFocus
+      inputMode="decimal"
+      placeholder="₽"
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') setEditing(false)
+      }}
+    />
   )
 }
 
@@ -211,9 +292,15 @@ function AddMark({
   onAdd,
 }: {
   itemId: string
-  onAdd: (itemId: string, date: string) => Promise<void>
+  onAdd: (itemId: string, date: string, price?: number | null) => Promise<void>
 }) {
   const [date, setDate] = useState(today())
+  const [price, setPrice] = useState('')
+
+  function add() {
+    void onAdd(itemId, date, parsePrice(price))
+    setPrice('')
+  }
 
   return (
     <section className="block">
@@ -221,7 +308,15 @@ function AddMark({
       <div className="row">
         {/* type="date" отдаёт ровно YYYY-MM-DD — тот же формат, что в модели. */}
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button type="button" className="btn" onClick={() => void onAdd(itemId, date)}>
+        {/* Цена необязательна: у стрижки она есть, у мытья окон её нет. */}
+        <input
+          className="price-input"
+          value={price}
+          inputMode="decimal"
+          placeholder="цена, ₽"
+          onChange={(e) => setPrice(e.target.value)}
+        />
+        <button type="button" className="btn" onClick={add}>
           Добавить
         </button>
       </div>
