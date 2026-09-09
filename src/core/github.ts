@@ -124,6 +124,14 @@ function decodeBase64(value: string): string {
   return new TextDecoder().decode(bytes)
 }
 
+/** Текст → base64. Нужен Contents API: он принимает содержимое только так. */
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  for (const byte of bytes) binary += String.fromCharCode(byte)
+  return btoa(binary)
+}
+
 // ─── Клиент ────────────────────────────────────────────────────────────────
 
 export type Client = ReturnType<typeof createClient>
@@ -203,9 +211,12 @@ export function createClient({ repo, token, fetch = globalThis.fetch }: ClientOp
       )
     }
     if (status === 409 || status === 422) {
+      // «Git Repository is empty» тоже приходит как 409, но это не гонка,
+      // а репозиторий без единого коммита. Повторять такое бессмысленно.
+      const empty = detail.toLowerCase().includes('empty')
       return new GitHubError(
-        detail || 'Ветка изменилась под нами. Перечитаю и сольюсь заново',
-        { status, conflict: true },
+        empty ? 'В репозитории данных нет ни одного коммита' : detail || 'Ветка изменилась под нами. Перечитаю и сольюсь заново',
+        { status, conflict: !empty },
       )
     }
     return new GitHubError(
@@ -281,6 +292,33 @@ export function createClient({ repo, token, fetch = globalThis.fetch }: ClientOp
         throw new GitHubError(`Неизвестная кодировка файла: ${raw.encoding}`)
       }
       return decodeBase64(raw.content)
+    },
+
+    /**
+     * Первый файл в репозитории, где нет ни одного коммита.
+     *
+     * Git Data API на пустом репозитории не работает вовсе: и чтение ветки,
+     * и создание дерева отвечают 409 «Git Repository is empty». Ему нужен
+     * хотя бы один существующий коммит. Обходной путь — тот, который называет
+     * сама документация GitHub: положить первый файл через Contents API,
+     * он же создаст и коммит, и ветку.
+     *
+     * Дальше репозиторий обычный, и всё идёт общим путём. Цена — лишний
+     * коммит один раз за жизнь репозитория.
+     */
+    async createFirst(file: FileToWrite, message: string): Promise<string> {
+      const raw = await call<{ commit: { sha: string } }>(
+        `/contents/${file.path}`,
+        {
+          method: 'PUT',
+          body: JSON.stringify({
+            message,
+            content: toBase64(file.content),
+            branch: repo.branch,
+          }),
+        },
+      )
+      return raw.commit.sha
     },
 
     /**

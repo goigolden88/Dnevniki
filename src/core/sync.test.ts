@@ -61,6 +61,19 @@ function fakeRepo(initial: Record<string, string> = {}) {
       throw new Error(`Нет блоба ${sha}`)
     },
 
+    /**
+     * Contents API: единственный путь в репозиторий без коммитов. Здесь он
+     * кладёт файл сразу и двигает голову — как и настоящий.
+     */
+    createFirst: (file, message) => {
+      calls.push('createFirst')
+      messages.push(message)
+      files[file.path] = file.content
+      counter += 1
+      head = `commit${counter}`
+      return Promise.resolve(head)
+    },
+
     commit: ({ files: toWrite, message }) => {
       calls.push('commit')
       staged = { files: toWrite, message }
@@ -227,10 +240,34 @@ describe('первый запуск', () => {
 
     expect(result.pushed).toBeGreaterThan(0)
     expect(result.pulled).toBe(0)
-    expect(repo.head()).toBe('commit1')
+    // Два коммита, и только здесь: первый заводит репозиторий, второй кладёт
+    // данные. Дальше «одна синхронизация — один коммит» держится.
+    expect(repo.head()).toBe('commit2')
     expect(Object.keys(repo.files())).toContain('items.json')
     expect(JSON.parse(repo.files()['items.json'] ?? '[]')[0].id).toBe('i1')
     expect(JSON.parse(repo.files()['meta.json'] ?? '{}').schemaVersion).toBe(SCHEMA_VERSION)
+  })
+
+  it('пустой репозиторий сначала заводится через Contents API', async () => {
+    // Git Data API на репозитории без единого коммита отвечает 409 на всё,
+    // включая создание дерева. Первый файл кладётся другим путём.
+    const repo = fakeRepo()
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    await runSync(repo.api, local.ports)
+
+    expect(repo.calls.indexOf('createFirst')).toBeLessThan(repo.calls.indexOf('commit'))
+    expect(repo.messages()[0]).toBe('Дневники: заведение репозитория данных')
+    expect(JSON.parse(repo.files()['meta.json'] ?? '{}').schemaVersion).toBe(SCHEMA_VERSION)
+    expect(JSON.parse(repo.files()['items.json'] ?? '[]')[0].id).toBe('i1')
+  })
+
+  it('заведение не повторяется на непустом репозитории', async () => {
+    const repo = fakeRepo(repoWith({ items: [item('i1', '2026-09-01T10:00:00.000Z')] }))
+    const local = fakeDb({ items: [item('i2', '2026-09-02T10:00:00.000Z')] })
+
+    await runSync(repo.api, local.ports)
+    expect(repo.calls).not.toContain('createFirst')
   })
 
   it('снимает пометки об отправке', async () => {

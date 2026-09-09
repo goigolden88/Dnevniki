@@ -26,7 +26,7 @@ import { isDateStr, nowIso } from './dates.ts'
 import type { DateStr } from './dates.ts'
 import { GitHubError, blobSha, createClient, parseRepo } from './github.ts'
 import type { Client, RepoInfo } from './github.ts'
-import { META_PATH, buildFiles, parseFile, parseMeta, storeOf } from './layout.ts'
+import { META_PATH, buildFiles, metaFile, parseFile, parseMeta, storeOf } from './layout.ts'
 import type { RepoFile } from './layout.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from './model.ts'
 import type { StoreRecord, SyncedStore } from './model.ts'
@@ -242,8 +242,10 @@ async function onePass(
   ports: Ports,
   dirtyAtStart: readonly { store: SyncedStore; id: string; at: string }[],
 ): Promise<SyncResult> {
-  const head = await api.head()
-  const entries = head === null ? [] : await api.tree(head)
+  // Пустой репозиторий Git Data API не обслуживает: ему нужен хотя бы один
+  // коммит. Кладём первый файл другим путём — дальше всё обычно.
+  const head = (await api.head()) ?? (await bootstrap(api))
+  const entries = await api.tree(head)
 
   const tree: ShaByPath = {}
   for (const entry of entries) tree[entry.path] = entry.sha
@@ -285,12 +287,32 @@ async function onePass(
     files: upload.files,
     message: message(upload.files),
   })
-  await api.moveBranch(commit, { create: head === null })
+  await api.moveBranch(commit, { create: false })
 
   await ports.remember({ ...tree, ...upload.shas }, commit)
   await ports.clearDirty(dirtyAtStart)
 
   return { pulled, pushed: upload.files.length, commit }
+}
+
+/**
+ * Заводит репозиторий, в котором ещё ничего нет.
+ *
+ * Кладётся `meta.json` — версия схемы. Она всё равно нужна, и содержательного
+ * файла на эту роль лучше нет: README человек пишет сам, а пустышка осталась
+ * бы мусором навсегда.
+ */
+async function bootstrap(api: Client): Promise<string> {
+  try {
+    return await api.createFirst(metaFile(), 'Дневники: заведение репозитория данных')
+  } catch (error) {
+    const text = error instanceof Error ? error.message : 'Неизвестная ошибка'
+    throw new Error(
+      `Не вышло положить первый файл в пустой репозиторий: ${text}. ` +
+        'Обходной путь — создать в нём любой файл через сайт GitHub, ' +
+        'например README, и синхронизировать снова.',
+    )
+  }
 }
 
 /**
