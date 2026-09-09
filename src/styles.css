@@ -548,3 +548,41 @@ p {
   background: var(--accent);
   color: #fff;
 }
+
+/* График веса. Размеры — в системе координат viewBox, ширину задаёт
+   экран: замерять контейнер и пересчитывать точки при повороте
+   телефона не нужно. */
+.chart {
+  width: 100%;
+  height: auto;
+  margin: 8px 0 4px;
+  overflow: visible;
+}
+
+.chart__axis {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.chart__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart__dot {
+  fill: var(--accent);
+}
+
+.chart__dot--last {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.chart__label {
+  fill: var(--muted);
+  font-size: 9px;
+}

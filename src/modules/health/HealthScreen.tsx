@@ -4,6 +4,8 @@ import { today } from '../../core/dates.ts'
 import type { Episode } from '../../core/model.ts'
 import type { EpisodeState } from './health.ts'
 import { episodeText, sourceText, symptomNames } from './labels.ts'
+import { Measures } from './Measures.tsx'
+import { Sessions } from './Sessions.tsx'
 import { SymptomPicker } from './Symptoms.tsx'
 import { useHealth, type EpisodeDraft, type Health } from './useHealth.ts'
 
@@ -47,6 +49,10 @@ export function HealthScreen() {
       )}
 
       <NewEpisode health={health} />
+
+      <Measures health={health} />
+
+      <Sessions health={health} />
 
       <section className="block">
         <h2>История</h2>
