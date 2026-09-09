@@ -4,7 +4,7 @@ import type { Client, FileToWrite } from './github.ts'
 import { buildFiles, canonical } from './layout.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from './model.ts'
 import type { StoreRecord, SyncedStore } from './model.ts'
-import { planDownload, planUpload, runSync } from './sync.ts'
+import { expiryDay, planDownload, planUpload, runSync } from './sync.ts'
 import type { Ports, ShaByPath } from './sync.ts'
 
 // ─── Подставной GitHub ─────────────────────────────────────────────────────
@@ -416,5 +416,20 @@ describe('сообщение коммита', () => {
     const message = repo.messages().at(-1) ?? ''
     expect(message).toMatch(/^Дневники: обновлено файлов \d+/)
     expect(message).toContain('items.json')
+  })
+})
+
+describe('срок жизни токена', () => {
+  it('читает и формат GitHub, и вписанную руками дату', () => {
+    expect(expiryDay('2027-09-09 12:00:00 +0300')).toBe('2027-09-09')
+    expect(expiryDay('2027-09-09')).toBe('2027-09-09')
+    expect(expiryDay('2027-09-09T12:00:00.000Z')).toBe('2027-09-09')
+  })
+
+  it('неизвестный срок не выдумывается', () => {
+    expect(expiryDay(null)).toBeNull()
+    expect(expiryDay('')).toBeNull()
+    expect(expiryDay('никогда')).toBeNull()
+    expect(expiryDay('2027-13-40')).toBeNull()
   })
 })
