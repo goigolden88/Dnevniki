@@ -6,7 +6,7 @@
  * заполнив, получает прежнюю работу — данные в браузере и никакой сети.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { daysBetween, formatDate, isDateStr, today } from '../core/dates.ts'
 import {
   checkAccess,
@@ -38,9 +38,31 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
     void readConfig().then(setConfig)
   }, [])
 
-  const patch = useCallback(async (change: Partial<SyncConfig>) => {
-    await saveConfig(change)
-    setConfig(await readConfig())
+  /**
+   * Очередь записей настроек.
+   *
+   * Настройка сохраняется по ходу набора, а кнопку жмут сразу после вставки
+   * токена — иногда тем же движением пальца. Без очереди обработчик кнопки
+   * успевает прочитать настройки раньше, чем запись доехала до базы, и
+   * синхронизация видит «токена нет». Проверено на телефоне: ровно так
+   * первый запуск и провалился.
+   */
+  const writes = useRef<Promise<void>>(Promise.resolve())
+
+  const patch = useCallback((change: Partial<SyncConfig>): Promise<void> => {
+    writes.current = writes.current
+      .then(() => saveConfig(change))
+      .then(() => readConfig())
+      .then((saved) => {
+        setConfig(saved)
+      })
+    return writes.current
+  }, [])
+
+  /** Настройки, какими они лежат в базе после всех начатых записей. */
+  const settled = useCallback(async () => {
+    await writes.current
+    return readConfig()
   }, [])
 
   if (!config) {
@@ -53,12 +75,12 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
   }
 
   async function check() {
-    if (!config) return
     setBusy(true)
     setNote('')
     setError('')
     try {
-      const access = await checkAccess(config)
+      const fresh = await settled()
+      const access = await checkAccess(fresh)
       if (access.tokenExpiry) await patch({ tokenExpires: access.tokenExpiry })
 
       const parts = [
@@ -66,7 +88,7 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
         access.private ? 'приватный' : 'ПУБЛИЧНЫЙ — данные увидят все',
         access.canWrite ? 'запись разрешена' : 'запись ЗАПРЕЩЕНА',
       ]
-      if (access.defaultBranch !== config.branch) {
+      if (access.defaultBranch !== fresh.branch) {
         parts.push(`ветка по умолчанию — ${access.defaultBranch}`)
       }
       setNote(`${parts.join(', ')}.`)
@@ -88,13 +110,17 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
     setNote('')
     setError('')
     try {
+      const fresh = await settled()
       const result = await syncNow()
       await onChanged()
-      // Пустой ответ означает две разные вещи: синхронизация не настроена
-      // либо проход упал. Разбирает их состояние — текст ошибки уже там,
-      // и дублировать его здесь незачем.
-      if (result === null) setNote(getStatus().state === 'error' ? '' : 'Синхронизация выключена')
-      else if (result.pulled === 0 && result.pushed === 0) setNote('Всё и так совпадает')
+      // Пустой ответ означает три разные вещи, и путать их нельзя: проход
+      // упал, синхронизация выключена, настройки не заполнены. Текст ошибки
+      // уже показан строкой состояния, дублировать его здесь незачем.
+      if (result === null) {
+        if (getStatus().state === 'error') setNote('')
+        else if (!fresh.enabled) setNote('Синхронизация выключена')
+        else setNote('Не заполнены репозиторий или токен')
+      } else if (result.pulled === 0 && result.pushed === 0) setNote('Всё и так совпадает')
       else {
         const parts = []
         if (result.pulled > 0) parts.push(`получено записей ${result.pulled}`)
@@ -133,7 +159,7 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
               spellCheck={false}
               placeholder="владелец/репозиторий"
               defaultValue={config.repo}
-              onBlur={(event) => void patch({ repo: event.target.value })}
+              onChange={(event) => void patch({ repo: event.target.value })}
             />
           </label>
 
@@ -145,7 +171,7 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
               spellCheck={false}
               placeholder="main"
               defaultValue={config.branch}
-              onBlur={(event) => void patch({ branch: event.target.value })}
+              onChange={(event) => void patch({ branch: event.target.value })}
             />
           </label>
 
@@ -256,13 +282,16 @@ function TokenField({
         spellCheck={false}
         placeholder="github_pat_…"
         value={value}
-        onChange={(event) => setValue(event.target.value)}
+        onChange={(event) => {
+          setValue(event.target.value)
+          // Сохраняем сразу, а не по потере фокуса: кнопку жмут тем же
+          // движением, каким вставляют токен, и фокус уйти не успевает.
+          if (event.target.value) void onSave(event.target.value)
+        }}
         onBlur={() => {
           if (!value) return
-          void onSave(value).then(() => {
-            setValue('')
-            setEditing(false)
-          })
+          setValue('')
+          setEditing(false)
         }}
       />
     </label>
