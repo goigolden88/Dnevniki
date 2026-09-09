@@ -1,0 +1,420 @@
+import { describe, expect, it } from 'vitest'
+import { GitHubError, blobSha } from './github.ts'
+import type { Client, FileToWrite } from './github.ts'
+import { buildFiles, canonical } from './layout.ts'
+import { SCHEMA_VERSION, SYNCED_STORES } from './model.ts'
+import type { StoreRecord, SyncedStore } from './model.ts'
+import { planDownload, planUpload, runSync } from './sync.ts'
+import type { Ports, ShaByPath } from './sync.ts'
+
+// ─── Подставной GitHub ─────────────────────────────────────────────────────
+
+type Record_ = { id: string; updatedAt: string; [key: string]: unknown }
+
+/**
+ * Репозиторий в памяти: файлы, голова ветки, счётчик запросов.
+ *
+ * Настоящий GitHub здесь не нужен — проверяется порядок действий и работа
+ * с конфликтами, а разбор ответов уже покрыт в github.test.ts.
+ */
+function fakeRepo(initial: Record<string, string> = {}) {
+  let files: Record<string, string> = { ...initial }
+  let head: string | null = Object.keys(initial).length > 0 ? 'commit0' : null
+  let counter = 0
+  let staged: { files: readonly FileToWrite[]; message: string } | null = null
+  const messages: string[] = []
+
+  const calls: string[] = []
+  /** Что должен сделать чужой push перед тем, как мы двинем ветку. */
+  let raceOnce: (() => void) | null = null
+
+  const api: Client = {
+    tokenExpiry: () => null,
+
+    info: () =>
+      Promise.resolve({
+        fullName: 'a/b',
+        private: true,
+        canWrite: true,
+        defaultBranch: 'main',
+      }),
+
+    head: () => {
+      calls.push('head')
+      return Promise.resolve(head)
+    },
+
+    tree: async () => {
+      calls.push('tree')
+      const entries = []
+      for (const [path, content] of Object.entries(files)) {
+        entries.push({ path, sha: await blobSha(content), type: 'blob' as const })
+      }
+      return entries
+    },
+
+    blob: async (sha) => {
+      calls.push('blob')
+      for (const content of Object.values(files)) {
+        if ((await blobSha(content)) === sha) return content
+      }
+      throw new Error(`Нет блоба ${sha}`)
+    },
+
+    commit: ({ files: toWrite, message }) => {
+      calls.push('commit')
+      staged = { files: toWrite, message }
+      messages.push(message)
+      counter += 1
+      return Promise.resolve(`commit${counter}`)
+    },
+
+    moveBranch: (sha) => {
+      calls.push('moveBranch')
+      if (raceOnce) {
+        // Второе устройство успело раньше: его коммит уже в ветке.
+        raceOnce()
+        raceOnce = null
+        staged = null
+        return Promise.reject(new GitHubError('is at abc but expected def', { conflict: true }))
+      }
+      if (staged) {
+        for (const file of staged.files) files[file.path] = file.content
+        staged = null
+      }
+      head = sha
+      return Promise.resolve()
+    },
+  }
+
+  return {
+    api,
+    calls,
+    files: () => files,
+    head: () => head,
+    /** Кто-то отправил раньше нас: правит файлы и двигает голову. */
+    raceNextPush(change: Record<string, string>) {
+      raceOnce = () => {
+        files = { ...files, ...change }
+        head = 'other'
+      }
+    },
+    messages: () => messages,
+  }
+}
+
+// ─── Подставная база ───────────────────────────────────────────────────────
+
+function fakeDb(seed: Partial<{ [S in SyncedStore]: Record_[] }> = {}) {
+  const data = {} as { [S in SyncedStore]: Record_[] }
+  for (const store of SYNCED_STORES) Object.assign(data, { [store]: [...(seed[store] ?? [])] })
+
+  let remembered: ShaByPath = {}
+  let commit: string | null = null
+  const dirty: { store: SyncedStore; id: string; at: string }[] = []
+  const cleared: { store: SyncedStore; id: string }[] = []
+
+  for (const store of SYNCED_STORES) {
+    for (const record of data[store]) dirty.push({ store, id: record.id, at: record.updatedAt })
+  }
+
+  const ports: Ports = {
+    readAll: () => Promise.resolve(data as never),
+
+    /** Правило Р-07: по `id` побеждает поздний `updatedAt`. */
+    merge: (store, incoming) => {
+      let applied = 0
+      for (const record of incoming) {
+        const current = data[store].find((each) => each.id === record.id)
+        if (current && current.updatedAt >= record.updatedAt) continue
+        if (current) data[store][data[store].indexOf(current)] = record as Record_
+        else data[store].push(record as Record_)
+        applied += 1
+      }
+      return Promise.resolve(applied)
+    },
+
+    listDirty: () => Promise.resolve([...dirty]),
+    clearDirty: (refs) => {
+      cleared.push(...refs.map((ref) => ({ store: ref.store, id: ref.id })))
+      return Promise.resolve()
+    },
+
+    remembered: () => Promise.resolve(remembered),
+    remember: (shas, at) => {
+      remembered = shas
+      commit = at
+      return Promise.resolve()
+    },
+  }
+
+  return {
+    ports,
+    data,
+    cleared,
+    tree: () => remembered,
+    commit: () => commit,
+  }
+}
+
+function item(id: string, updatedAt: string, over: Partial<Record_> = {}): Record_ {
+  return { id, updatedAt, name: `Позиция ${id}`, cat: 'Дом', intervalDays: null, ...over }
+}
+
+function mark(id: string, date: string, updatedAt: string): Record_ {
+  return { id, updatedAt, itemId: 'i1', date }
+}
+
+/** Репозиторий, каким его оставила бы синхронизация с такими данными. */
+function repoWith(seed: Partial<{ [S in SyncedStore]: Record_[] }>): Record<string, string> {
+  const data = {} as { [S in SyncedStore]: StoreRecord[S][] }
+  for (const store of SYNCED_STORES) {
+    Object.assign(data, { [store]: (seed[store] ?? []) as never })
+  }
+  const files: Record<string, string> = {}
+  for (const file of buildFiles(data)) files[file.path] = file.content
+  return files
+}
+
+// ─── Планирование ──────────────────────────────────────────────────────────
+
+describe('planDownload', () => {
+  it('скачивает только разошедшиеся файлы', () => {
+    const plan = planDownload(
+      { 'items.json': 'a', 'tags.json': 'b' },
+      { 'items.json': 'a', 'tags.json': 'старый' },
+    )
+    expect(plan.download).toEqual(['tags.json'])
+  })
+
+  it('незнакомый файл не скачивает и не считает своим', () => {
+    const plan = planDownload({ 'README.md': 'x', 'items.json': 'a' }, {})
+    expect(plan.download).toEqual(['items.json'])
+    expect(plan.merged).toEqual(['items.json'])
+  })
+
+  it('meta.json скачивается, но своим хранилищем не считается', () => {
+    const plan = planDownload({ 'meta.json': 'm' }, {})
+    expect(plan.download).toEqual(['meta.json'])
+    expect(plan.merged).toEqual([])
+  })
+})
+
+describe('planUpload', () => {
+  it('отправляет только разошедшееся', async () => {
+    const same = canonical([])
+    const plan = await planUpload(
+      [
+        { path: 'items.json', content: same },
+        { path: 'tags.json', content: '[{"id":"a"}]\n' },
+      ],
+      { 'items.json': await blobSha(same), 'tags.json': 'другое' },
+    )
+    expect(plan.files.map((file) => file.path)).toEqual(['tags.json'])
+    // Отпечатки считаются для всех, включая неотправленные: их запоминаем.
+    expect(Object.keys(plan.shas)).toEqual(['items.json', 'tags.json'])
+  })
+})
+
+// ─── Проход целиком ────────────────────────────────────────────────────────
+
+describe('первый запуск', () => {
+  it('в пустом репозитории создаёт ветку и кладёт всё', async () => {
+    const repo = fakeRepo()
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    const result = await runSync(repo.api, local.ports)
+
+    expect(result.pushed).toBeGreaterThan(0)
+    expect(result.pulled).toBe(0)
+    expect(repo.head()).toBe('commit1')
+    expect(Object.keys(repo.files())).toContain('items.json')
+    expect(JSON.parse(repo.files()['items.json'] ?? '[]')[0].id).toBe('i1')
+    expect(JSON.parse(repo.files()['meta.json'] ?? '{}').schemaVersion).toBe(SCHEMA_VERSION)
+  })
+
+  it('снимает пометки об отправке', async () => {
+    const repo = fakeRepo()
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+    await runSync(repo.api, local.ports)
+    expect(local.cleared).toEqual([{ store: 'items', id: 'i1' }])
+  })
+})
+
+describe('тихий проход', () => {
+  it('когда ничего не менялось — ни коммита, ни скачиваний', async () => {
+    const seed = { items: [item('i1', '2026-09-01T10:00:00.000Z')] }
+    const repo = fakeRepo(repoWith(seed))
+    const local = fakeDb(seed)
+
+    // Первый проход запоминает отпечатки, второй должен пройти вхолостую.
+    await runSync(repo.api, local.ports)
+    repo.calls.length = 0
+    const result = await runSync(repo.api, local.ports)
+
+    expect(result.pushed).toBe(0)
+    expect(result.pulled).toBe(0)
+    expect(repo.calls).toEqual(['head', 'tree'])
+  })
+})
+
+describe('чужие записи', () => {
+  it('прилетают в базу', async () => {
+    const repo = fakeRepo(repoWith({ items: [item('i2', '2026-09-02T10:00:00.000Z')] }))
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    const result = await runSync(repo.api, local.ports)
+
+    expect(result.pulled).toBe(1)
+    expect(local.data.items.map((record) => record.id).sort()).toEqual(['i1', 'i2'])
+    // И тут же уезжают обратно вместе с нашей — в файле теперь обе.
+    expect(JSON.parse(repo.files()['items.json'] ?? '[]')).toHaveLength(2)
+  })
+
+  it('поздняя правка побеждает раннюю, чья бы ни была', async () => {
+    const repo = fakeRepo(
+      repoWith({ items: [item('i1', '2026-09-05T10:00:00.000Z', { name: 'С сервера' })] }),
+    )
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z', { name: 'Местная' })] })
+
+    await runSync(repo.api, local.ports)
+    expect(local.data.items[0]?.name).toBe('С сервера')
+  })
+
+  it('местная правка новее — уезжает на сервер', async () => {
+    const repo = fakeRepo(
+      repoWith({ items: [item('i1', '2026-09-01T10:00:00.000Z', { name: 'С сервера' })] }),
+    )
+    const local = fakeDb({ items: [item('i1', '2026-09-05T10:00:00.000Z', { name: 'Местная' })] })
+
+    await runSync(repo.api, local.ports)
+    expect(local.data.items[0]?.name).toBe('Местная')
+    expect(JSON.parse(repo.files()['items.json'] ?? '[]')[0].name).toBe('Местная')
+  })
+
+  it('надгробия уезжают, иначе второе устройство воскресит удалённое', async () => {
+    const repo = fakeRepo()
+    const local = fakeDb({
+      items: [item('i1', '2026-09-01T10:00:00.000Z', { deleted: true })],
+    })
+    await runSync(repo.api, local.ports)
+    expect(JSON.parse(repo.files()['items.json'] ?? '[]')[0].deleted).toBe(true)
+  })
+})
+
+describe('гонка двух устройств', () => {
+  it('ветка ушла вперёд — перечитываем и сливаемся заново', async () => {
+    const repo = fakeRepo(repoWith({ items: [item('i1', '2026-09-01T10:00:00.000Z')] }))
+    const local = fakeDb({ items: [item('i2', '2026-09-02T10:00:00.000Z')] })
+
+    // Пока мы собирали коммит, второе устройство отправило свою позицию.
+    repo.raceNextPush(
+      repoWith({
+        items: [item('i1', '2026-09-01T10:00:00.000Z'), item('i3', '2026-09-03T10:00:00.000Z')],
+      }),
+    )
+
+    const result = await runSync(repo.api, local.ports)
+
+    // Ни одна из трёх записей не потерялась.
+    expect(JSON.parse(repo.files()['items.json'] ?? '[]').map((r: Record_) => r.id).sort())
+      .toEqual(['i1', 'i2', 'i3'])
+    expect(local.data.items.map((r) => r.id).sort()).toEqual(['i1', 'i2', 'i3'])
+    expect(result.pushed).toBeGreaterThan(0)
+  })
+
+  it('проиграв дважды, откладывает, а не давит силой', async () => {
+    const repo = fakeRepo(repoWith({ items: [item('i1', '2026-09-01T10:00:00.000Z')] }))
+    const local = fakeDb({ items: [item('i2', '2026-09-02T10:00:00.000Z')] })
+
+    repo.raceNextPush({})
+    const first = repo.api.moveBranch
+    // Проигрывает каждый раз: подставляем гонку заново после первой.
+    repo.api.moveBranch = (sha, options) => {
+      repo.raceNextPush({})
+      return first(sha, options)
+    }
+
+    await expect(runSync(repo.api, local.ports)).rejects.toThrow(GitHubError)
+  })
+})
+
+describe('порядок «сначала чужое, потом своё»', () => {
+  it('битый файл на сервере обрывает проход до отправки', async () => {
+    const repo = fakeRepo({ ...repoWith({}), 'items.json': 'не json' })
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    await expect(runSync(repo.api, local.ports)).rejects.toThrow('не JSON')
+    expect(repo.calls).not.toContain('commit')
+    expect(repo.files()['items.json']).toBe('не json')
+  })
+
+  it('репозиторий более новой схемы не трогается вовсе', async () => {
+    const repo = fakeRepo({
+      ...repoWith({}),
+      'meta.json': `${JSON.stringify({ schemaVersion: SCHEMA_VERSION + 1 }, null, 2)}\n`,
+    })
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    await expect(runSync(repo.api, local.ports)).rejects.toThrow('Обнови приложение')
+    expect(repo.calls).not.toContain('commit')
+  })
+
+  it('пометки не снимаются, если проход не дошёл до конца', async () => {
+    const repo = fakeRepo({ ...repoWith({}), 'items.json': 'не json' })
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    await runSync(repo.api, local.ports).catch(() => undefined)
+    expect(local.cleared).toEqual([])
+  })
+})
+
+describe('переезд записи между годами', () => {
+  it('старый файл перезаписывается пустым, копии не остаётся', async () => {
+    const seed = { cycleEvents: [mark('e1', '2025-12-31', '2026-01-01T10:00:00.000Z')] }
+    const repo = fakeRepo(repoWith(seed))
+    const local = fakeDb(seed)
+    await runSync(repo.api, local.ports)
+
+    // Дату поправили: отметка была не 31 декабря, а 1 января.
+    local.data.cycleEvents[0] = mark('e1', '2026-01-01', '2026-01-02T10:00:00.000Z')
+    await runSync(repo.api, local.ports)
+
+    expect(JSON.parse(repo.files()['cycles/2025.json'] ?? 'null')).toEqual([])
+    expect(JSON.parse(repo.files()['cycles/2026.json'] ?? '[]')).toHaveLength(1)
+  })
+})
+
+describe('чужое в репозитории', () => {
+  it('README и прочее руками положенное не трогается', async () => {
+    const repo = fakeRepo({ ...repoWith({}), 'README.md': '# Данные Дневников\n' })
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+
+    await runSync(repo.api, local.ports)
+    expect(repo.files()['README.md']).toBe('# Данные Дневников\n')
+  })
+})
+
+describe('сообщение коммита', () => {
+  it('называет файл, когда он один, и считает, когда их много', async () => {
+    const seed = { items: [item('i1', '2026-09-01T10:00:00.000Z')] }
+    const repo = fakeRepo(repoWith(seed))
+    const local = fakeDb(seed)
+    await runSync(repo.api, local.ports)
+
+    // Поменялась одна позиция — в коммите один файл, и он назван.
+    local.data.items[0] = item('i1', '2026-09-02T10:00:00.000Z', { name: 'Другое' })
+    await runSync(repo.api, local.ports)
+    expect(repo.messages().at(-1)).toBe('Дневники: items.json')
+  })
+
+  it('первый коммит перечисляет файлы в теле', async () => {
+    const repo = fakeRepo()
+    const local = fakeDb({ items: [item('i1', '2026-09-01T10:00:00.000Z')] })
+    await runSync(repo.api, local.ports)
+
+    const message = repo.messages().at(-1) ?? ''
+    expect(message).toMatch(/^Дневники: обновлено файлов \d+/)
+    expect(message).toContain('items.json')
+  })
+})
