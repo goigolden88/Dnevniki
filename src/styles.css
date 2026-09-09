@@ -586,3 +586,60 @@ p {
   fill: var(--muted);
   font-size: 9px;
 }
+
+/* Сезонность: столбик на месяц. Подписи к каждому столбику были бы
+   длиннее самих столбиков, поэтому только названия месяцев снизу. */
+.months {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 70px;
+  margin: 12px 0;
+}
+
+.months__cell {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 3px;
+}
+
+.months__bar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+
+.months__name {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+/* Сводка для врача. На бумаге не нужны ни вкладки, ни кнопки:
+   печатается ровно содержимое экрана. */
+@media print {
+  .tabs,
+  .no-print {
+    display: none !important;
+  }
+
+  .layout,
+  .content {
+    padding: 0;
+    display: block;
+  }
+
+  .block {
+    margin-bottom: 14px;
+    break-inside: avoid;
+  }
+
+  .summary td {
+    padding: 6px 0;
+    vertical-align: top;
+  }
+}

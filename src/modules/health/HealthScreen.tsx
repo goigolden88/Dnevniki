@@ -6,6 +6,7 @@ import type { EpisodeState } from './health.ts'
 import { episodeText, sourceText, symptomNames } from './labels.ts'
 import { Measures } from './Measures.tsx'
 import { Sessions } from './Sessions.tsx'
+import { Stats } from './Stats.tsx'
 import { SymptomPicker } from './Symptoms.tsx'
 import { useHealth, type EpisodeDraft, type Health } from './useHealth.ts'
 
@@ -50,6 +51,8 @@ export function HealthScreen() {
 
       <NewEpisode health={health} />
 
+      <Stats health={health} />
+
       <Measures health={health} />
 
       <Sessions health={health} />
@@ -66,6 +69,12 @@ export function HealthScreen() {
           </ul>
         )}
       </section>
+
+      {health.episodes.length > 0 && (
+        <Link className="btn btn--wide" to="/health/summary">
+          Сводка для врача
+        </Link>
+      )}
     </>
   )
 }
