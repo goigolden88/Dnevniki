@@ -22,7 +22,8 @@
  */
 
 import { db } from './db.ts'
-import { nowIso } from './dates.ts'
+import { isDateStr, nowIso } from './dates.ts'
+import type { DateStr } from './dates.ts'
 import { GitHubError, blobSha, createClient, parseRepo } from './github.ts'
 import type { Client, RepoInfo } from './github.ts'
 import { META_PATH, buildFiles, parseFile, parseMeta, storeOf } from './layout.ts'
@@ -95,6 +96,21 @@ export async function saveConfig(patch: Partial<SyncConfig>): Promise<void> {
 export async function forgetToken(): Promise<void> {
   await db.settings.remove(KEYS.token)
   await db.settings.remove(KEYS.tokenExpires)
+}
+
+/**
+ * День, когда истекает токен.
+ *
+ * GitHub присылает `2027-09-09 12:00:00 +0300`, руками вписывается
+ * `2027-09-09` — общее у них первые десять символов. Часовой пояс отброшен
+ * намеренно: предупреждение выводится за месяц, и час здесь ничего не решает.
+ *
+ * null — срок неизвестен. Это не «бессрочный»: показывать надо разное.
+ */
+export function expiryDay(value: string | null): DateStr | null {
+  if (!value) return null
+  const day = value.slice(0, 10)
+  return isDateStr(day) ? day : null
 }
 
 function configured(config: SyncConfig): boolean {
@@ -430,4 +446,67 @@ export async function syncNow(): Promise<SyncResult | null> {
   })()
 
   return running
+}
+
+// ─── Когда запускать ───────────────────────────────────────────────────────
+
+/** Сколько ждать тишины после последней правки, прежде чем отправлять. */
+const QUIET_MS = 5000
+
+/**
+ * Реже этого автоматический проход не запускается. Вкладка уходит в фон и
+ * возвращается по десять раз за минуту, и каждый возврат — не повод лезть в сеть.
+ * Правка пользователя этим порогом не ограничена: она идёт по тишине выше.
+ */
+const MIN_GAP_MS = 60_000
+
+let timer: ReturnType<typeof setTimeout> | null = null
+let lastAuto = 0
+
+function later(delay: number): void {
+  if (timer) clearTimeout(timer)
+  timer = setTimeout(() => {
+    timer = null
+    lastAuto = Date.now()
+    void syncNow()
+  }, delay)
+}
+
+/**
+ * Подписывает синхронизацию на всё, после чего она может понадобиться:
+ * правка в базе, возврат сети, возврат вкладки из фона, запуск приложения.
+ *
+ * Вызывается один раз на старте. Возвращает функцию отписки — она нужна
+ * тестам и горячей перезагрузке, в жизни подписка живёт столько же, сколько
+ * приложение.
+ */
+export function startAutoSync(): () => void {
+  const unsubscribe = db.onChange((event) => {
+    // Пришедшее с сервера отправлять обратно незачем — оно там и есть.
+    if (event.origin === 'remote') return
+    later(QUIET_MS)
+  })
+
+  function wake(): void {
+    if (Date.now() - lastAuto < MIN_GAP_MS) return
+    later(0)
+  }
+
+  function onVisible(): void {
+    if (document.visibilityState === 'visible') wake()
+  }
+
+  window.addEventListener('online', wake)
+  document.addEventListener('visibilitychange', onVisible)
+
+  // Старт приложения: на другом устройстве могло накопиться за ночь.
+  later(0)
+
+  return () => {
+    unsubscribe()
+    window.removeEventListener('online', wake)
+    document.removeEventListener('visibilitychange', onVisible)
+    if (timer) clearTimeout(timer)
+    timer = null
+  }
 }

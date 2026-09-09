@@ -64,6 +64,42 @@ export type Snapshot = {
   data: { [S in SyncedStore]: StoreRecord[S][] }
 }
 
+/** Что и откуда записалось. Больше про изменение никто ничего не обещает. */
+export type ChangeEvent = {
+  store: SyncedStore
+  origin: Origin
+  /** Сколько записей затронуто. Ноль сюда не приходит. */
+  count: number
+}
+
+/**
+ * Оповещение об изменениях.
+ *
+ * `db` просто объявляет, что записал; кто на это подпишется — его дело.
+ * Так синхронизация узнаёт, что пора отправлять, а экраны — что данные
+ * приехали с другого устройства, и при этом `db` по-прежнему не знает
+ * ни про `sync`, ни про модули.
+ */
+const changeListeners = new Set<(event: ChangeEvent) => void>()
+
+function onChange(listener: (event: ChangeEvent) => void): () => void {
+  changeListeners.add(listener)
+  return () => {
+    changeListeners.delete(listener)
+  }
+}
+
+function announce(event: ChangeEvent): void {
+  for (const listener of changeListeners) {
+    // Упавший слушатель не должен ронять запись: она уже прошла.
+    try {
+      listener(event)
+    } catch {
+      // Некому сообщить: сюда попадает только ошибка самого подписчика.
+    }
+  }
+}
+
 // ─── Соединение ────────────────────────────────────────────────────────────
 
 let connection: Promise<IDBDatabase> | null = null
@@ -216,6 +252,7 @@ async function write<S extends SyncedStore>(
   }
 
   await finished(tx)
+  announce({ store, origin, count: saved.length })
   return saved
 }
 
@@ -497,6 +534,7 @@ export const db = {
   merge,
   listDirty,
   clearDirty,
+  onChange,
   exportAll,
   importAll,
   parseSnapshot,

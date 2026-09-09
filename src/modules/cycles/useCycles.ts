@@ -87,8 +87,19 @@ export function useCycles(): Cycles {
     }
 
     void load()
+
+    // Синхронизация вливает чужие записи прямо в базу, мимо этого состояния.
+    // Без перечитывания отметка со второго устройства появилась бы только
+    // после перезапуска приложения — то есть «не появилась бы».
+    const unsubscribe = db.onChange((event) => {
+      if (event.origin !== 'remote') return
+      if (event.store !== 'items' && event.store !== 'cycleEvents') return
+      void load()
+    })
+
     return () => {
       cancelled = true
+      unsubscribe()
     }
   }, [])
 

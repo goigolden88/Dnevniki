@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { startAutoSync } from './core/sync.ts'
 import { Layout } from './ui/Layout.tsx'
 import { Today } from './screens/Today.tsx'
 import { ItemScreen } from './modules/cycles/ItemScreen.tsx'
@@ -11,6 +13,11 @@ import { Settings } from './screens/Settings.tsx'
  * до сервера не доходит.
  */
 export function App() {
+  // Подписка на всё, после чего синхронизация может понадобиться: правка
+  // в базе, возврат сети, возврат вкладки, запуск приложения. Живёт столько
+  // же, сколько приложение; отписка нужна только перезагрузке в разработке.
+  useEffect(() => startAutoSync(), [])
+
   return (
     <HashRouter>
       <Routes>

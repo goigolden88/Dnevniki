@@ -433,3 +433,35 @@ p {
   font-weight: 600;
   color: var(--muted);
 }
+
+/* ─── Синхронизация ──────────────────────────────────────────────────────── */
+.check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--accent);
+}
+
+/* Точка на вкладке «Настройки»: очередь не ушла либо что-то сломалось.
+   Стоит в потоке рядом с надписью: вкладка — flex-строка, и позиционировать
+   точку абсолютно не от чего. */
+.dot {
+  align-self: center;
+  margin: 0 0 6px 5px;
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.dot--error {
+  background: var(--error);
+}

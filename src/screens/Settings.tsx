@@ -4,6 +4,7 @@ import { daysAgo, days, formatDate, toDateStr, today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
 import type { SyncedStore } from '../core/model.ts'
 import { seedKind, seedToSnapshot, type SeedFiles } from '../seed/seed.ts'
+import { SyncSettings } from '../ui/SyncSettings.tsx'
 
 const LABELS: Record<SyncedStore, string> = {
   items: 'Позиции циклов',
@@ -87,17 +88,11 @@ export function Settings() {
         )}
       </section>
 
+      <SyncSettings onChanged={load} />
+
       <DataTransfer onChanged={load} />
 
       <SeedImport onChanged={load} />
-
-      <section className="block">
-        <h2>Синхронизация</h2>
-        <p className="stub">
-          Репозиторий и токен появятся на Этапе 2. Пока данные живут только в этом браузере
-          и никуда не уходят.
-        </p>
-      </section>
 
       <section className="block">
         <h2>О приложении</h2>
