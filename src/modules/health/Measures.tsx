@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { formatDate, today } from '../../core/dates.ts'
+import { formatDate, formatDateLoose, today } from '../../core/dates.ts'
 import { metricsOf, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
@@ -66,7 +66,7 @@ export function Measures({ health }: { health: Health }) {
           <tbody>
             {recent.map((measure) => (
               <tr key={measure.id}>
-                <td>{formatDate(measure.date)}</td>
+                <td>{formatDateLoose(measure.date)}</td>
                 <td className="num">
                   {measureText(measure.metric, measure.value, measure.value2)}
                 </td>
@@ -75,7 +75,7 @@ export function Measures({ health }: { health: Health }) {
                     type="button"
                     className="link-btn"
                     onClick={() => void health.removeMeasure(measure.id)}
-                    aria-label={`Удалить измерение ${formatDate(measure.date)}`}
+                    aria-label={`Удалить измерение ${formatDateLoose(measure.date)}`}
                   >
                     ×
                   </button>
@@ -99,7 +99,8 @@ function MeasureForm({ metric, health }: { metric: string; health: Health }) {
   const [value, setValue] = useState('')
   const [second, setSecond] = useState('')
 
-  const paired = METRICS.find((each) => each.key === metric)?.second !== null
+  // Своя метрика пары не имеет: у неё в списке нет записи вовсе.
+  const paired = typeof METRICS.find((each) => each.key === metric)?.second === 'string'
 
   function submit(event: FormEvent) {
     event.preventDefault()

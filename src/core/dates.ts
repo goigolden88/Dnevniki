@@ -141,6 +141,19 @@ export function formatDate(d: DateStr): string {
   return `${pad2(date.getDate())}.${pad2(date.getMonth() + 1)}.${date.getFullYear()}`
 }
 
+/**
+ * То же, но нечитаемую строку отдаёт как есть, а не кидает.
+ *
+ * Для списков, куда попадают записи прямо из базы. Битая дата может
+ * приехать с другого устройства или из файла, поправленного руками, —
+ * и по тому же правилу, по которому такая запись не теряется при
+ * синхронизации (Р-34), она не должна ронять весь экран. Одна строка
+ * покажется странно, остальные останутся на месте.
+ */
+export function formatDateLoose(d: string): string {
+  return isDateStr(d) ? formatDate(d) : d
+}
+
 /** `2026-09-07` → `7 сентября 2026` */
 export function formatDateLong(d: DateStr): string {
   const date = toDate(d)

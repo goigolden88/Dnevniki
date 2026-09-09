@@ -6,6 +6,7 @@ import {
   daysBetween,
   formatDate,
   formatDateLong,
+  formatDateLoose,
   isDateStr,
   parseDate,
   plural,
@@ -175,5 +176,20 @@ describe('склонение дробных', () => {
   it('дробные дни пишутся через запятую', () => {
     expect(days(3.5)).toBe('3,5 дня')
     expect(days(1)).toBe('1 день')
+  })
+})
+
+describe('formatDateLoose', () => {
+  it('обычную дату форматирует как formatDate', () => {
+    expect(formatDateLoose('2026-09-07')).toBe('07.09.2026')
+  })
+
+  it('кривую строку отдаёт как есть, а не роняет экран', () => {
+    // Битая дата может приехать с другого устройства или из файла,
+    // поправленного руками. Строка покажется странно — это лучше,
+    // чем белый экран вместо всего списка.
+    expect(formatDateLoose('когда-то')).toBe('когда-то')
+    expect(formatDateLoose('2026-13-45')).toBe('2026-13-45')
+    expect(formatDateLoose('')).toBe('')
   })
 })

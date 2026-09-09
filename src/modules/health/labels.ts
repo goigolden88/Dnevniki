@@ -6,7 +6,7 @@
  * не содержит.
  */
 
-import { days, formatDate, plural } from '../../core/dates.ts'
+import { days, formatDate, formatDateLoose, plural } from '../../core/dates.ts'
 import type { Episode, Tag } from '../../core/model.ts'
 import type { EpisodeState, HealthStats } from './health.ts'
 
@@ -56,7 +56,7 @@ export function episodeText(state: EpisodeState): string {
     return `идёт ${which}, с ${formatDate(episode.start)}`
   }
 
-  const finish = episode.end === null ? '' : ` — ${formatDate(episode.end)}`
+  const finish = episode.end === null ? '' : ` — ${formatDateLoose(episode.end)}`
   return `${days(durationDays)} · ${formatDate(episode.start)}${finish}`
 }
 

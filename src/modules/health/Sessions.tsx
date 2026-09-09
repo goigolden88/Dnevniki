@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { formatDate, plural, today } from '../../core/dates.ts'
+import { formatDateLoose, plural, today } from '../../core/dates.ts'
 import { activityTotals } from './health.ts'
 import type { Health } from './useHealth.ts'
 
@@ -47,7 +47,7 @@ export function Sessions({ health }: { health: Health }) {
             <tbody>
               {recent.map((session) => (
                 <tr key={session.id}>
-                  <td>{formatDate(session.date)}</td>
+                  <td>{formatDateLoose(session.date)}</td>
                   <td>{names.get(session.activity) ?? '?'}</td>
                   <td className="num muted">
                     {totalText(session.durationMin ?? 0, session.distanceKm ?? 0)}
@@ -57,7 +57,7 @@ export function Sessions({ health }: { health: Health }) {
                       type="button"
                       className="link-btn"
                       onClick={() => void health.removeSession(session.id)}
-                      aria-label={`Удалить тренировку ${formatDate(session.date)}`}
+                      aria-label={`Удалить тренировку ${formatDateLoose(session.date)}`}
                     >
                       ×
                     </button>

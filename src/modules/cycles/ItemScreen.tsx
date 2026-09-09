@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { daysBetween, days, formatDate, today } from '../../core/dates.ts'
+import { daysBetween, days, formatDateLoose, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
 import type { CycleState } from './cycles.ts'
 import { knownGroups, MIN_INTERVALS, spent } from './cycles.ts'
@@ -201,7 +201,7 @@ function History({
             const gap = older ? daysBetween(older.date, mark.date) : null
             return (
               <tr key={mark.id}>
-                <td>{formatDate(mark.date)}</td>
+                <td>{formatDateLoose(mark.date)}</td>
                 <td className="num muted">{gap === null ? '' : `+${days(gap)}`}</td>
                 <td className="num">
                   <PriceCell mark={mark} onSet={onSetPrice} />
@@ -211,7 +211,7 @@ function History({
                     type="button"
                     className="link-btn"
                     onClick={() => void onRemove(mark.id)}
-                    aria-label={`Удалить отметку ${formatDate(mark.date)}`}
+                    aria-label={`Удалить отметку ${formatDateLoose(mark.date)}`}
                   >
                     ×
                   </button>
@@ -252,7 +252,7 @@ function PriceCell({
           setText(mark.price === undefined ? '' : String(mark.price))
           setEditing(true)
         }}
-        aria-label={`Цена отметки ${formatDate(mark.date)}`}
+        aria-label={`Цена отметки ${formatDateLoose(mark.date)}`}
       >
         {mark.price === undefined ? 'цена' : formatMoney(mark.price)}
       </button>
