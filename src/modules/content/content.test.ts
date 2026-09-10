@@ -3,6 +3,7 @@ import {
   contentStats,
   filterEntries,
   groupByMonth,
+  hasUndated,
   monthsOf,
   parseScore,
   scoreBucket,
@@ -172,6 +173,38 @@ describe('filterEntries', () => {
     ]
     const found = filterEntries(mixed, { type: 'anime', year: '2026', month: 1, query: 'фри' })
     expect(found.map((each) => each.id)).toEqual(['то'])
+  })
+})
+
+describe('отбор записей без даты — Р-34', () => {
+  const mixed = [
+    entry({ id: 'норм', start: '2026-01' }),
+    entry({ id: 'пусто', start: null }),
+    entry({ id: 'мусор', start: '31.02.2026' }),
+  ]
+
+  it('находит и пустую дату, и нечитаемую', () => {
+    expect(filterEntries(mixed, { undated: true }).map((each) => each.id)).toEqual([
+      'пусто',
+      'мусор',
+    ])
+  })
+
+  it('складывается со статусом и типом', () => {
+    const found = filterEntries(
+      [...mixed, entry({ id: 'чужой статус', start: null, status: 'dropped' })],
+      { undated: true, status: 'done' },
+    )
+    expect(found.map((each) => each.id)).toEqual(['пусто', 'мусор'])
+  })
+
+  it('hasUndated говорит, есть ли такие вообще', () => {
+    expect(hasUndated(mixed)).toBe(true)
+    expect(hasUndated([entry({ start: '2026-01' })])).toBe(false)
+  })
+
+  it('надгробие с битой датой чипа не заводит', () => {
+    expect(hasUndated([entry({ start: null, deleted: true })])).toBe(false)
   })
 })
 

@@ -416,10 +416,10 @@ async function scenario() {
   check('фильтр по месяцу оставляет только свой месяц', inMarch === 1, `карточек ${inMarch}`)
   check('и это правда март', has(march, 'Мартовский фильм') && !has(march, 'Сентябрь 2026'))
 
-  await act(`byText('button', 'Весь год')?.click()`)
+  await act(`byText('button', 'Все месяцы')?.click()`)
   await sleep(500)
   const wholeYear = await run(`document.querySelectorAll('.cycles li').length`)
-  check('«весь год» возвращает обе записи', wholeYear === 2, `карточек ${wholeYear}`)
+  check('«все месяцы» возвращают обе записи', wholeYear === 2, `карточек ${wholeYear}`)
 
   await act(`byText('button', 'брошено')?.click()`)
   await sleep(500)

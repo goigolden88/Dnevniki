@@ -86,6 +86,15 @@ export type EntryFilter = {
   year?: string | null
   /** Месяц 1..12. null — все месяцы. */
   month?: number | null
+  /**
+   * Только записи без разбираемой даты начала.
+   *
+   * Заведено ради Р-34: запись с испорченной датой не теряется при
+   * синхронизации, и терять её на экране тоже нельзя. Отбор по году
+   * такую запись отбрасывает — а увидеть её надо именно затем, чтобы
+   * дату поправить.
+   */
+  undated?: boolean
 }
 
 /**
@@ -108,6 +117,8 @@ export function filterEntries(
   return entries.filter((entry) => {
     if (filter.status && entry.status !== filter.status) return false
     if (filter.type && entry.type !== filter.type) return false
+
+    if (filter.undated && startOf(entry) !== null) return false
 
     if (filter.year || filter.month) {
       const start = startOf(entry)
@@ -190,6 +201,17 @@ export function monthsOf(entries: readonly ContentEntry[], year: string | null =
   }
 
   return [...months].sort((a, b) => a - b)
+}
+
+/**
+ * Есть ли среди записей такие, у которых даты начала нет или она не читается.
+ *
+ * Экран по этому решает, показывать ли отдельный чип «без даты». Заводить
+ * его всегда незачем: в норме таких записей нет, и пустой чип только
+ * занимал бы место.
+ */
+export function hasUndated(entries: readonly ContentEntry[]): boolean {
+  return live(entries).some((entry) => startOf(entry) === null)
 }
 
 // ─── Оценки ────────────────────────────────────────────────────────────────

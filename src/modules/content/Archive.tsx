@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   filterEntries,
   groupByMonth,
+  hasUndated,
   monthsOf,
   sortEntries,
   yearsOf,
@@ -14,8 +15,18 @@ import { EntryCard } from './EntryCard.tsx'
 import type { Content } from './useContent.ts'
 import type { ContentEntry } from '../../core/model.ts'
 
-/** Что показывается, когда год не выбран. */
+/** Все годы разом. */
 const ALL_YEARS = 'всё время'
+
+/**
+ * Записи, у которых даты начала нет или она не читается (Р-34).
+ *
+ * Отдельным выбором рядом с годами, а не спрятанное внутри них: отбор
+ * по году такую запись отбрасывает, и без этого чипа она стала бы
+ * невидимой ровно тогда, когда её надо найти и поправить. Появляется,
+ * только если такие записи есть.
+ */
+const UNDATED = 'без даты'
 
 /**
  * Статусы отдельными переключателями.
@@ -34,21 +45,27 @@ const TABS: EntryStatus[] = ['done', 'dropped', 'planned']
  * лентой целиком, а не по одному месяцу за тап.
  */
 export function Archive({ entries, content }: { entries: ContentEntry[]; content: Content }) {
+  const years = yearsOf(entries)
+
   const [status, setStatus] = useState<EntryStatus>('done')
   const [type, setType] = useState<EntryType | null>(null)
-  const [year, setYear] = useState<string>(ALL_YEARS)
+  // Свежий год по умолчанию — то же, что в «Итогах». Иначе при появлении
+  // второго года экран открывался бы сразу обоими, и чем дальше, тем
+  // длиннее. Пока год один, ряд годов не показывается вовсе.
+  const [year, setYear] = useState<string>(years[0] ?? ALL_YEARS)
   const [month, setMonth] = useState<number | null>(null)
   const [query, setQuery] = useState('')
 
-  const years = yearsOf(entries)
-  // У намерений даты нет по определению (Р-21), и выбор периода над ними —
-  // переключатель, который ничего не переключает.
-  const dated = status !== 'planned'
+  // У намерений даты нет по определению (Р-21), как и у записей с испорченной
+  // датой. Выбор периода над ними — переключатель, который нечего переключать.
+  const dated = status !== 'planned' && year !== UNDATED
 
   // Месяцы считаются по статусу и году, но не по типу: иначе ряд чипов
   // перестраивался бы под пальцем при каждом переключении типа.
-  const inPeriod = entries.filter((entry) => entry.status === status)
-  const months = monthsOf(inPeriod, year === ALL_YEARS ? null : year)
+  const inStatusEntries = entries.filter((entry) => entry.status === status)
+  const months = monthsOf(inStatusEntries, year === ALL_YEARS ? null : year)
+
+  const periods = [...years, ...(hasUndated(inStatusEntries) ? [UNDATED] : []), ALL_YEARS]
 
   const shown = sortEntries(
     filterEntries(entries, {
@@ -57,10 +74,11 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
       query,
       year: dated && year !== ALL_YEARS ? year : null,
       month: dated ? month : null,
+      undated: status !== 'planned' && year === UNDATED,
     }),
   )
   const groups = groupByMonth(shown)
-  const inStatus = entries.filter((entry) => entry.status === status).length
+  const inStatus = inStatusEntries.length
 
   return (
     <section className="block">
@@ -107,9 +125,9 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
         ))}
       </div>
 
-      {dated && years.length > 1 && (
+      {status !== 'planned' && periods.length > 2 && (
         <div className="chips">
-          {[...years, ALL_YEARS].map((each) => (
+          {periods.map((each) => (
             <button
               key={each}
               type="button"
@@ -137,7 +155,7 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
             aria-pressed={month === null}
             onClick={() => setMonth(null)}
           >
-            Весь год
+            Все месяцы
           </button>
           {months.map((each) => (
             <button
