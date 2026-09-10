@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import {
   contentStats,
   filterEntries,
-  finished,
+  groupByMonth,
   parseScore,
-  planned,
   scoreBucket,
+  sortEntries,
   scoreOf,
   startOf,
   watching,
@@ -42,18 +42,18 @@ describe('startOf', () => {
   })
 })
 
-describe('порядок записей', () => {
+describe('sortEntries', () => {
   it('новые сверху, разная точность даты порядок не ломает', () => {
-    const list = finished([
+    const list = sortEntries([
+      entry({ id: 'c', start: '2026-01' }),
       entry({ id: 'a', start: '2026-02' }),
       entry({ id: 'b', start: '2026-01-05' }),
-      entry({ id: 'c', start: '2026-01' }),
     ])
     expect(list.map((each) => each.id)).toEqual(['a', 'b', 'c'])
   })
 
   it('запись без даты уходит вниз, а не считается самой старой', () => {
-    const list = finished([
+    const list = sortEntries([
       entry({ id: 'нет даты', start: null }),
       entry({ id: 'есть', start: '2020-01' }),
     ])
@@ -61,41 +61,41 @@ describe('порядок записей', () => {
   })
 
   it('при одной дате — по названию', () => {
-    const list = finished([
+    const list = sortEntries([
       entry({ id: 'я', title: 'Ясон' }),
       entry({ id: 'а', title: 'Аниме' }),
     ])
     expect(list.map((each) => each.id)).toEqual(['а', 'я'])
   })
-})
 
-describe('выборки по статусу', () => {
-  const all = [
-    entry({ id: 'смотрю', status: 'active', score: null }),
-    entry({ id: 'хочу', status: 'planned', start: null, score: null, title: 'Берсерк' }),
-    entry({ id: 'бросил', status: 'dropped' }),
-    entry({ id: 'посмотрел', status: 'done' }),
-    entry({ id: 'удалён', status: 'done', deleted: true }),
-  ]
-
-  it('«смотрю сейчас» — только active', () => {
-    expect(watching(all).map((each) => each.id)).toEqual(['смотрю'])
-  })
-
-  it('«к просмотру» — только planned, по алфавиту', () => {
-    const list = planned([
-      ...all,
-      entry({ id: 'второй', status: 'planned', start: null, title: 'Аватар' }),
+  it('«к просмотру» выходит по алфавиту само собой: даты у намерений нет', () => {
+    const list = sortEntries([
+      entry({ id: 'б', status: 'planned', start: null, title: 'Берсерк' }),
+      entry({ id: 'а', status: 'planned', start: null, title: 'Аватар' }),
     ])
     expect(list.map((each) => each.title)).toEqual(['Аватар', 'Берсерк'])
   })
 
-  it('архив — просмотренное и брошенное вместе', () => {
-    expect(finished(all).map((each) => each.id).sort()).toEqual(['бросил', 'посмотрел'])
+  it('исходный список не трогается', () => {
+    const all = [entry({ id: 'б', start: '2026-01' }), entry({ id: 'а', start: '2026-02' })]
+    sortEntries(all)
+    expect(all.map((each) => each.id)).toEqual(['б', 'а'])
+  })
+})
+
+describe('watching', () => {
+  const all = [
+    entry({ id: 'смотрю', status: 'active', score: null }),
+    entry({ id: 'хочу', status: 'planned', start: null, score: null }),
+    entry({ id: 'бросил', status: 'dropped' }),
+    entry({ id: 'посмотрел', status: 'done' }),
+  ]
+
+  it('только active', () => {
+    expect(watching(all).map((each) => each.id)).toEqual(['смотрю'])
   })
 
-  it('надгробия не попадают никуда', () => {
-    expect(finished(all).some((each) => each.deleted)).toBe(false)
+  it('надгробия не попадают', () => {
     expect(watching([entry({ status: 'active', deleted: true })])).toHaveLength(0)
   })
 })
@@ -126,6 +126,92 @@ describe('filterEntries', () => {
 
   it('пробелы вокруг запроса не мешают', () => {
     expect(filterEntries(all, { query: '  дюна  ' })).toHaveLength(1)
+  })
+
+  it('надгробия отсекаются до фильтра, а не в нём', () => {
+    // `filterEntries` работает с тем, что ему дали: живые записи отбирает
+    // `useContent`, и второй проверки здесь не нужно.
+    expect(filterEntries([entry({ deleted: true })], {})).toHaveLength(1)
+  })
+
+  it('отбирает по статусу', () => {
+    const mixed = [
+      entry({ id: 'п', status: 'done' }),
+      entry({ id: 'б', status: 'dropped' }),
+      entry({ id: 'х', status: 'planned', start: null }),
+    ]
+    expect(filterEntries(mixed, { status: 'dropped' }).map((each) => each.id)).toEqual(['б'])
+    expect(filterEntries(mixed, { status: 'planned' }).map((each) => each.id)).toEqual(['х'])
+  })
+
+  it('отбирает по году и по месяцу, любой точности даты', () => {
+    const dated = [
+      entry({ id: 'янв', start: '2026-01' }),
+      entry({ id: 'апр', start: '2026-04-15' }),
+      entry({ id: 'прошлый', start: '2025-04' }),
+    ]
+    expect(filterEntries(dated, { year: '2026' }).map((each) => each.id)).toEqual(['янв', 'апр'])
+    expect(filterEntries(dated, { month: 4 }).map((each) => each.id)).toEqual(['апр', 'прошлый'])
+    expect(filterEntries(dated, { year: '2026', month: 4 }).map((each) => each.id)).toEqual(['апр'])
+  })
+
+  it('запись без даты не попадает ни в один месяц и ни в один год', () => {
+    const mixed = [entry({ id: 'есть', start: '2026-01' }), entry({ id: 'нет', start: null })]
+    expect(filterEntries(mixed, { year: '2026' }).map((each) => each.id)).toEqual(['есть'])
+    expect(filterEntries(mixed, { month: 1 }).map((each) => each.id)).toEqual(['есть'])
+    // Без фильтра периода — на месте.
+    expect(filterEntries(mixed, {})).toHaveLength(2)
+  })
+
+  it('фильтры складываются', () => {
+    const mixed = [
+      entry({ id: 'то', type: 'anime', start: '2026-01', title: 'Фрирен' }),
+      entry({ id: 'не тот тип', type: 'game', start: '2026-01', title: 'Фрирен' }),
+      entry({ id: 'не тот месяц', type: 'anime', start: '2026-05', title: 'Фрирен' }),
+    ]
+    const found = filterEntries(mixed, { type: 'anime', year: '2026', month: 1, query: 'фри' })
+    expect(found.map((each) => each.id)).toEqual(['то'])
+  })
+})
+
+describe('groupByMonth', () => {
+  it('режет список на месяцы, новыми сверху', () => {
+    const groups = groupByMonth([
+      entry({ id: '1', start: '2026-03' }),
+      entry({ id: '2', start: '2026-01-05' }),
+      entry({ id: '3', start: '2026-01' }),
+    ])
+    expect(groups.map((each) => each.month)).toEqual(['2026-03', '2026-01'])
+    expect(groups[1]?.entries.map((each) => each.id)).toEqual(['2', '3'])
+  })
+
+  it('день и месяц одного месяца попадают в одну группу — Р-25', () => {
+    const groups = groupByMonth([
+      entry({ id: 'день', start: '2026-01-05' }),
+      entry({ id: 'месяц', start: '2026-01' }),
+    ])
+    expect(groups).toHaveLength(1)
+    expect(groups[0]?.entries).toHaveLength(2)
+  })
+
+  it('порядок внутри группы не трогается: список приходит отсортированным', () => {
+    const groups = groupByMonth([
+      entry({ id: 'я', start: '2026-01', title: 'Ясон' }),
+      entry({ id: 'а', start: '2026-01', title: 'Аниме' }),
+    ])
+    expect(groups[0]?.entries.map((each) => each.id)).toEqual(['я', 'а'])
+  })
+
+  it('записи без даты — последней группой, а не первой', () => {
+    const groups = groupByMonth([
+      entry({ id: 'нет', start: null }),
+      entry({ id: 'есть', start: '2020-01' }),
+    ])
+    expect(groups.map((each) => each.month)).toEqual(['2020-01', null])
+  })
+
+  it('пустой список даёт пустую разбивку', () => {
+    expect(groupByMonth([])).toEqual([])
   })
 })
 
@@ -243,6 +329,23 @@ describe('contentStats', () => {
     expect(stats.byScore[5]).toBe(1) // 6,5 — это шестёрка
     expect(stats.byScore[6]).toBe(1) // семёрка
     expect(stats.byScore.reduce((all, each) => all + each, 0)).toBe(stats.scored)
+  })
+
+  it('разбивка по месяцам — двенадцать чисел с января', () => {
+    const stats = contentStats(year2026, '2026')
+    expect(stats.byMonth).toHaveLength(12)
+    expect(stats.byMonth[0]).toBe(1) // январь
+    expect(stats.byMonth[3]).toBe(1) // апрель
+    expect(stats.byMonth[10]).toBe(0) // ноябрь — он из 2025 года
+    expect(stats.byMonth.reduce((all, each) => all + each, 0)).toBe(stats.started)
+  })
+
+  it('за всё время месяцы складываются по годам', () => {
+    const stats = contentStats(
+      [entry({ id: '1', start: '2026-04' }), entry({ id: '2', start: '2025-04' })],
+      null,
+    )
+    expect(stats.byMonth[3]).toBe(2)
   })
 
   it('типы по убыванию частоты', () => {

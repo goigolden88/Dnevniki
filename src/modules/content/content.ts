@@ -57,50 +57,107 @@ export function byStartDesc(a: ContentEntry, b: ContentEntry): number {
   return a.title.localeCompare(b.title, 'ru')
 }
 
+/**
+ * Копия списка, отсортированная новыми сверху.
+ *
+ * Из базы записи приходят в порядке хранилища — то есть ни в каком.
+ * Сортировать обязан тот, кто показывает; молча полагаться на порядок
+ * `getAll` нельзя.
+ *
+ * Записи без даты сравниваются по названию, так что список «к просмотру»
+ * выходит по алфавиту сам собой: даты у намерений нет по определению,
+ * и порядок их заведения ничего не говорит о том, что смотреть первым.
+ */
+export function sortEntries(entries: readonly ContentEntry[]): ContentEntry[] {
+  return [...entries].sort(byStartDesc)
+}
+
 /** Что смотрю прямо сейчас — для главного экрана и верха вкладки. */
 export function watching(entries: readonly ContentEntry[]): ContentEntry[] {
-  return live(entries)
-    .filter((entry) => entry.status === 'active')
-    .sort(byStartDesc)
+  return sortEntries(live(entries).filter((entry) => entry.status === 'active'))
+}
+
+export type EntryFilter = {
+  /** Статус. null — любой. */
+  status?: EntryStatus | null
+  type?: EntryType | null
+  query?: string
+  /** Год `YYYY`. null — все годы. */
+  year?: string | null
+  /** Месяц 1..12. null — все месяцы. */
+  month?: number | null
 }
 
 /**
- * Список «к просмотру» (Р-21).
- *
- * По алфавиту, а не по дате: даты у этих записей нет по определению,
- * и порядок заведения ничего не говорит о том, что смотреть первым.
- */
-export function planned(entries: readonly ContentEntry[]): ContentEntry[] {
-  return live(entries)
-    .filter((entry) => entry.status === 'planned')
-    .sort((a, b) => a.title.localeCompare(b.title, 'ru'))
-}
-
-/** Всё, что уже посмотрено или брошено, — архив. Новыми сверху. */
-export function finished(entries: readonly ContentEntry[]): ContentEntry[] {
-  return live(entries)
-    .filter((entry) => entry.status === 'done' || entry.status === 'dropped')
-    .sort(byStartDesc)
-}
-
-/**
- * Отбор по типу и подстроке в названии.
+ * Отбор по статусу, типу, периоду и подстроке в названии.
  *
  * Поиск идёт и по оригинальному названию: «Frieren» и «Фрирен» — одна
  * запись, и вводят то из них, которое вспомнилось.
+ *
+ * Отбор по году и месяцу отбрасывает записи без разбираемой даты: у списка
+ * «к просмотру» её нет по определению, и в «апрель 2026» такая запись
+ * не попадает ни при каком прочтении. Экран поэтому не показывает выбор
+ * периода, когда смотрят намерения.
  */
 export function filterEntries(
   entries: readonly ContentEntry[],
-  filter: { type?: EntryType | null; query?: string } = {},
+  filter: EntryFilter = {},
 ): ContentEntry[] {
   const needle = (filter.query ?? '').trim().toLowerCase()
 
   return entries.filter((entry) => {
+    if (filter.status && entry.status !== filter.status) return false
     if (filter.type && entry.type !== filter.type) return false
+
+    if (filter.year || filter.month) {
+      const start = startOf(entry)
+      if (start === null) return false
+      if (filter.year && start.slice(0, 4) !== filter.year) return false
+      if (filter.month && Number(start.slice(5, 7)) !== filter.month) return false
+    }
+
     if (!needle) return true
     const titles = `${entry.title} ${entry.titleOrig ?? ''}`.toLowerCase()
     return titles.includes(needle)
   })
+}
+
+export type MonthGroup = {
+  /** `YYYY-MM`. null — у записей группы даты нет. */
+  month: string | null
+  entries: ContentEntry[]
+}
+
+/**
+ * Разбивка списка на месяцы — так, как дневник выглядел в Obsidian:
+ * заголовок месяца, под ним всё, что за месяц набралось.
+ *
+ * Заголовки, а не фильтр: фильтр показывает один месяц ценой тапа,
+ * а заголовки показывают все и сразу, и год пролистывается как лента.
+ * Выбор года над списком остаётся — он режет объём, а не прячет.
+ *
+ * Порядок внутри группы не трогается: список приходит отсортированным,
+ * и второй сортировки ему не нужно. Записи без даты — последней группой.
+ */
+export function groupByMonth(entries: readonly ContentEntry[]): MonthGroup[] {
+  const groups = new Map<string, ContentEntry[]>()
+
+  for (const entry of entries) {
+    const start = startOf(entry)
+    const key = start === null ? '' : start.slice(0, 7)
+    const bucket = groups.get(key)
+    if (bucket) bucket.push(entry)
+    else groups.set(key, [entry])
+  }
+
+  return [...groups.entries()]
+    .sort(([a], [b]) => {
+      if (a === b) return 0
+      if (a === '') return 1
+      if (b === '') return -1
+      return b.localeCompare(a)
+    })
+    .map(([month, list]) => ({ month: month === '' ? null : month, entries: list }))
 }
 
 /** Годы, за которые есть записи, новыми сверху. Для переключателя периода. */
@@ -191,6 +248,14 @@ export type ContentStats = {
   byScore: number[]
   /** Типы, чаще сверху. Типы без записей в список не попадают. */
   byType: TypeCount[]
+  /**
+   * Сколько начато в каждом месяце. Двенадцать чисел с января.
+   *
+   * За «всё время» месяцы складываются по всем годам: вопрос тогда не
+   * «когда именно», а «в какие месяцы смотрю больше» — тот же смысл,
+   * что у сезонности болезней.
+   */
+  byMonth: number[]
   /** Лучшее за период, до трёх записей. Пусто, когда оценок нет. */
   top: ContentEntry[]
 }
@@ -224,6 +289,7 @@ export function contentStats(
   const taken = live(entries).filter((entry) => inYear(entry, year))
 
   const byScore = Array.from({ length: SCORE_MAX - SCORE_MIN + 1 }, () => 0)
+  const byMonth = Array.from({ length: 12 }, () => 0)
   const types = new Map<EntryType, number>()
   const scores: number[] = []
   const scored: ContentEntry[] = []
@@ -237,6 +303,11 @@ export function contentStats(
     else if (entry.status === 'active') active += 1
 
     types.set(entry.type, (types.get(entry.type) ?? 0) + 1)
+
+    // Дата у записи в этом месте заведомо разбирается — `inYear` пропустил
+    // только такие, — но индекс всё равно проверяется.
+    const month = Number((startOf(entry) ?? '').slice(5, 7))
+    if (month >= 1 && month <= 12) byMonth[month - 1] = (byMonth[month - 1] ?? 0) + 1
 
     const score = scoreOf(entry)
     if (score !== null) {
@@ -260,6 +331,7 @@ export function contentStats(
     averageScore: scores.length === 0 ? null : Math.round((sum / scores.length) * 10) / 10,
     scored: scores.length,
     byScore,
+    byMonth,
     byType: [...types.entries()]
       .map(([type, count]) => ({ type, count }))
       .sort((a, b) => b.count - a.count || a.type.localeCompare(b.type)),

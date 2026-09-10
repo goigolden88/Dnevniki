@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   averageText,
+  entriesText,
   entryText,
   formatScore,
-  plannedText,
+  monthHeading,
+  peakMonthText,
   startedText,
   statusLabel,
   typeCountText,
@@ -155,10 +157,47 @@ describe('averageText', () => {
   })
 })
 
-describe('plannedText', () => {
+describe('entriesText', () => {
   it('склоняет записи по числу', () => {
-    expect(plannedText(1)).toBe('1 запись')
-    expect(plannedText(2)).toBe('2 записи')
-    expect(plannedText(12)).toBe('12 записей')
+    expect(entriesText(1)).toBe('1 запись')
+    expect(entriesText(2)).toBe('2 записи')
+    expect(entriesText(12)).toBe('12 записей')
+  })
+})
+
+describe('monthHeading', () => {
+  it('месяц с прописной — это заголовок, а не часть фразы', () => {
+    expect(monthHeading('2026-01')).toBe('Январь 2026')
+    expect(monthHeading('2026-09')).toBe('Сентябрь 2026')
+  })
+
+  it('записи без даты собираются под своим заголовком, а не прячутся', () => {
+    expect(monthHeading(null)).toBe('Без даты')
+  })
+})
+
+describe('peakMonthText', () => {
+  const at = (months: string[]) =>
+    contentStats(
+      months.map((start, index) => entry({ id: String(index), start })),
+      '2026',
+    )
+
+  it('называет месяц, в котором начато больше всего', () => {
+    expect(peakMonthText(at(['2026-04', '2026-04', '2026-01']))).toBe(
+      'Плотнее всего апрель — 2 записи',
+    )
+  })
+
+  it('молчит при ничьей: «самый плотный» из двух одинаковых — неправда', () => {
+    expect(peakMonthText(at(['2026-01', '2026-01', '2026-04', '2026-04']))).toBe('')
+  })
+
+  it('молчит, когда в каждом месяце по одной: сравнивать нечего', () => {
+    expect(peakMonthText(at(['2026-01', '2026-04']))).toBe('')
+  })
+
+  it('молчит на пустом периоде', () => {
+    expect(peakMonthText(at([]))).toBe('')
   })
 })

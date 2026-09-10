@@ -384,6 +384,20 @@ async function scenario() {
     has(watched, 'по 1 записи'),
     line(watched, 'Средняя оценка'),
   )
+  check(
+    'запись легла под заголовок своего месяца',
+    has(watched, 'Сентябрь 2026'),
+    line(watched, 'Сентябрь'),
+  )
+
+  await act(`byText('button', 'брошено')?.click()`)
+  await sleep(500)
+  const dropped = await screen()
+  check('переключатель статуса работает', has(dropped, 'Пока ничего с меткой'))
+  // Проверяется список, а не весь экран: название той же записи законно
+  // стоит выше, в блоке «Лучшее» у итогов.
+  const cards = await run(`document.querySelectorAll('.cycles li').length`)
+  check('просмотренное в брошенные не затесалось', cards === 0, `карточек ${cards}`)
 
   // Настройки открываются шестерёнкой, а не вкладкой (Р-43).
   await go('/')

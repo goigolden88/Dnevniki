@@ -68,11 +68,6 @@ export function symptomNames(ids: string[], tags: Tag[]): string[] {
   return ids.map((id) => byId.get(id) ?? '?')
 }
 
-export const MONTHS_SHORT = [
-  'янв', 'фев', 'мар', 'апр', 'май', 'июн',
-  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
-]
-
 /**
  * Одна строка про год: сколько раз болел и сколько это заняло.
  *

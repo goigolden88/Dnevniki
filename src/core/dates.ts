@@ -30,6 +30,16 @@ const MONTHS_GENITIVE = [
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
 ]
 
+/**
+ * Сокращения для подписей под столбиками. Лежат здесь, а не в модуле:
+ * ими пользуются и сезонность болезней, и разбивка контента по месяцам,
+ * а модули друг про друга не знают.
+ */
+export const MONTHS_SHORT = [
+  'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+]
+
 // Именительный падеж — для месяца, который стоит сам по себе:
 // «январь 2026», а не «7 января 2026».
 const MONTHS_NOMINATIVE = [
@@ -161,10 +171,15 @@ export function formatDateLoose(d: string): string {
   return isDateStr(d) ? formatDate(d) : d
 }
 
+/** Название месяца по номеру 1..12: `4` → `апрель`. Вне диапазона — пусто. */
+export function monthName(month: number): string {
+  return MONTHS_NOMINATIVE[month - 1] ?? ''
+}
+
 /** `2026-01` → `январь 2026`. Не месяц — отдаёт строку как есть. */
 export function formatMonth(m: MonthStr): string {
   if (!isMonthStr(m)) return m
-  return `${MONTHS_NOMINATIVE[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
+  return `${monthName(Number(m.slice(5, 7)))} ${m.slice(0, 4)}`
 }
 
 /**

@@ -6,7 +6,7 @@
  * и русских строк не содержит.
  */
 
-import { formatDateOrMonth, plural } from '../../core/dates.ts'
+import { formatDateOrMonth, formatMonth, monthName, plural } from '../../core/dates.ts'
 import type { ContentEntry } from '../../core/model.ts'
 import { scoreOf, startOf, type ContentStats, type EntryType, type TypeCount } from './content.ts'
 
@@ -123,7 +123,39 @@ export function averageText(stats: ContentStats): string {
   return `Средняя оценка ${formatScore(stats.averageScore)} — по ${stats.scored} ${by}${full}`
 }
 
-/** «к просмотру: 12 записей» — заголовок блока намерений. */
-export function plannedText(count: number): string {
+/** «12 записей» — счётчик, пригодный везде. */
+export function entriesText(count: number): string {
   return `${count} ${plural(count, ['запись', 'записи', 'записей'])}`
+}
+
+/**
+ * Заголовок группы в списке: «Январь 2026».
+ *
+ * С прописной буквы — это заголовок, а не часть фразы. Записи без даты
+ * собираются под своим заголовком, а не прячутся: чаще всего это список
+ * «к просмотру», но туда же попадёт и запись с испорченной датой (Р-34),
+ * и увидеть её надо.
+ */
+export function monthHeading(month: string | null): string {
+  if (month === null) return 'Без даты'
+  const text = formatMonth(month)
+  return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/**
+ * Месяц, в котором начато больше всего.
+ *
+ * Молчит при ничьей и при единственной записи в месяце: «самый плотный
+ * месяц — январь, одна запись» не наблюдение, а пересказ данных. То же
+ * правило, по которому молчат среднее без числа записей (Р-38) и срок
+ * по одному интервалу (Р-27) — число, посчитанное не из чего, лучше
+ * не показывать вовсе.
+ */
+export function peakMonthText(stats: ContentStats): string {
+  const peak = Math.max(...stats.byMonth)
+  if (peak < 2) return ''
+  if (stats.byMonth.filter((count) => count === peak).length > 1) return ''
+
+  const month = monthName(stats.byMonth.indexOf(peak) + 1)
+  return `Плотнее всего ${month} — ${entriesText(peak)}`
 }

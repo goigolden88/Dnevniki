@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { days } from '../../core/dates.ts'
+import { days, MONTHS_SHORT } from '../../core/dates.ts'
 import { healthStats } from './health.ts'
-import { gapText, healthyText, MONTHS_SHORT, statsText } from './labels.ts'
+import { gapText, healthyText, statsText } from './labels.ts'
 import type { Health } from './useHealth.ts'
 
 /** Что показывается, когда год не выбран. */

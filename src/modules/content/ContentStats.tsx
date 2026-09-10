@@ -1,6 +1,14 @@
 import { useState } from 'react'
+import { MONTHS_SHORT } from '../../core/dates.ts'
 import { contentStats, scoreOf, SCORE_MIN, yearsOf } from './content.ts'
-import { averageText, formatScore, startedText, typeCountText, typeLabel } from './labels.ts'
+import {
+  averageText,
+  formatScore,
+  peakMonthText,
+  startedText,
+  typeCountText,
+  typeLabel,
+} from './labels.ts'
 import type { ContentEntry } from '../../core/model.ts'
 
 /** Что показывается, когда год не выбран. */
@@ -20,7 +28,8 @@ export function ContentStats({ entries }: { entries: ContentEntry[] }) {
   const [year, setYear] = useState<string>(years[0] ?? ALL)
 
   const stats = contentStats(entries, year === ALL ? null : year)
-  const peak = Math.max(...stats.byScore, 1)
+  const peakScore = Math.max(...stats.byScore, 1)
+  const peakMonth = Math.max(...stats.byMonth, 1)
 
   if (entries.length === 0) return null
 
@@ -61,13 +70,29 @@ export function ContentStats({ entries }: { entries: ContentEntry[] }) {
                 <div className="scores__cell" key={index} title={`${count}`}>
                   <div
                     className="scores__bar"
-                    style={{ height: `${(count / peak) * 100}%` }}
+                    style={{ height: `${(count / peakScore) * 100}%` }}
                   />
                   <span className="scores__name">{index + SCORE_MIN}</span>
                 </div>
               ))}
             </div>
           )}
+
+          {/* По месяцам: когда смотрел больше. За год это лента года,
+              за «всё время» — в какие месяцы смотрится вообще больше.
+              Тот же приём, что у сезонности болезней. */}
+          <div className="months" aria-hidden="true">
+            {stats.byMonth.map((count, index) => (
+              <div className="months__cell" key={MONTHS_SHORT[index]} title={`${count}`}>
+                <div
+                  className="months__bar"
+                  style={{ height: `${(count / peakMonth) * 100}%` }}
+                />
+                <span className="months__name">{MONTHS_SHORT[index]}</span>
+              </div>
+            ))}
+          </div>
+          {peakMonthText(stats) && <p className="muted">{peakMonthText(stats)}.</p>}
 
           {stats.byType.length > 0 && (
             <table className="stats">
