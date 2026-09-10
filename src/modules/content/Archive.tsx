@@ -7,6 +7,7 @@ import {
   keepAvailable,
   monthsOf,
   sortEntries,
+  startOf,
   yearsOf,
   type EntryStatus,
   type EntryType,
@@ -58,16 +59,32 @@ const TABS: EntryStatus[] = ['done', 'dropped', 'planned']
  * в Obsidian. Фильтр отвечает на «покажи апрель», заголовки — на «что было
  * за год». Вопросы разные (Р-45).
  */
-export function Archive({ entries, content }: { entries: ContentEntry[]; content: Content }) {
+export function Archive({
+  entries,
+  content,
+  focus = null,
+}: {
+  entries: ContentEntry[]
+  content: Content
+  /** Запись, к которой пришли из ленты (Р-56). Активная живёт выше, не здесь. */
+  focus?: ContentEntry | null
+}) {
   const years = yearsOf(entries)
   const thisYear = today().slice(0, 4)
   const thisMonth = Number(today().slice(5, 7))
+  const target = focus !== null && focus.status !== 'active' ? focus : null
 
-  const [status, setStatus] = useState<EntryStatus>('done')
+  const [status, setStatus] = useState<EntryStatus>(target ? target.status : 'done')
   const [type, setType] = useState<EntryType | null>(null)
   // Свежий год по умолчанию — то же, что в «Итогах». Иначе при появлении
   // второго года экран открывался бы сразу обоими, и чем дальше, тем длиннее.
-  const [period, setPeriod] = useState<Period>({ year: years[0] ?? ALL_YEARS, months: [] })
+  // Пришли к записи — год её, иначе она окажется за фильтром.
+  const [period, setPeriod] = useState<Period>(() => {
+    const fallback = { year: years[0] ?? ALL_YEARS, months: [] }
+    if (!target || target.status === 'planned') return fallback
+    const start = startOf(target)
+    return start === null ? { year: UNDATED, months: [] } : { year: start.slice(0, 4), months: [] }
+  })
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
 
@@ -286,7 +303,12 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
 
               <ul className="cycles">
                 {group.entries.map((entry) => (
-                  <EntryCard key={entry.id} entry={entry} content={content} />
+                  <EntryCard
+                    key={entry.id}
+                    entry={entry}
+                    content={content}
+                    focused={entry.id === target?.id}
+                  />
                 ))}
               </ul>
             </div>

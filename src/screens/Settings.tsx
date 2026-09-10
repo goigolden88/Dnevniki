@@ -11,6 +11,7 @@ import {
   type ReminderStatus,
   type RemindResult,
 } from '../notify.ts'
+import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { markdownExport } from '../registry.ts'
 import { backupNote } from '../ui/backup.ts'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
@@ -101,6 +102,8 @@ export function Settings() {
       <SyncSettings onChanged={load} />
 
       <Reminders />
+
+      <QuickSettings />
 
       <DataTransfer onChanged={load} />
 
@@ -263,7 +266,9 @@ const REMINDER_TEXT: Record<ReminderStatus, string> = {
     'Этот браузер не умеет напоминать, когда приложение закрыто. Напоминания работают ' +
     'в Chrome на Android у установленного приложения.',
   denied: 'Уведомления для этого сайта запрещены в настройках браузера. Разрешить их можно только там.',
-  off: 'Примерно раз в сутки приложение проверит сроки и напомнит о просроченном — даже закрытое.',
+  off:
+    'Примерно раз в сутки приложение напомнит о просроченном и о болезни, которую не закрыли, — ' +
+    'даже закрытое.',
   'not-installed':
     'Уведомления разрешены, но фоновую проверку браузер не дал. Так бывает, когда приложение ' +
     'открыто во вкладке, а не установлено иконкой.',
@@ -272,7 +277,8 @@ const REMINDER_TEXT: Record<ReminderStatus, string> = {
 
 const CHECK_TEXT: Record<RemindResult | 'denied' | 'unsupported', string> = {
   shown: 'Уведомление показано.',
-  nothing: 'Просроченного нет — пришло пустое уведомление, чтобы было видно, что они доходят.',
+  nothing:
+    'Напоминать не о чем — пришло пустое уведомление, чтобы было видно, что они доходят.',
   already: 'Сегодня уже напоминало.',
   denied: 'Уведомления запрещены — показать нечего.',
   unsupported: REMINDER_TEXT.unsupported,

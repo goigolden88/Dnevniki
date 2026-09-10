@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { episodeText } from './labels.ts'
 import { useHealth } from './useHealth.ts'
+import { Fold } from '../../ui/Fold.tsx'
 
 /**
  * Открытые эпизоды на главном экране.
@@ -15,8 +16,7 @@ export function OpenEpisodes() {
   if (health.status !== 'ready' || health.open.length === 0) return null
 
   return (
-    <section className="block">
-      <h2>Болею сейчас</h2>
+    <Fold id="today:episodes" title="Болею сейчас" summary={health.open.length}>
       <ul className="cycles">
         {health.open.map((state) => (
           <li className="cycle cycle--overdue" key={state.episode.id}>
@@ -38,6 +38,6 @@ export function OpenEpisodes() {
           </li>
         ))}
       </ul>
-    </section>
+    </Fold>
   )
 }

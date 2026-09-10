@@ -36,8 +36,9 @@ export function contentFeed(entries: readonly ContentEntry[]): FeedItem[] {
         date: entry.start ?? '',
         title: entry.title,
         detail: detailOf(entry),
-        // Отдельного экрана записи нет — карточка разворачивается на месте (Р-44).
-        link: '/content',
+        // Отдельного экрана записи нет — карточка разворачивается на месте
+        // (Р-44). Номер записи в адресе: вкладка откроет и развернёт её (Р-56).
+        link: `/content?open=${entry.id}`,
         ...(extra ? { extra } : {}),
       }
     })

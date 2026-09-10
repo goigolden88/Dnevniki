@@ -4,6 +4,7 @@ import {
   episodeText,
   gapText,
   healthyText,
+  illnessNotice,
   measureText,
   statsText,
   symptomNames,
@@ -169,5 +170,47 @@ describe('gapText называет число промежутков', () => {
       episode({ id: 'b', start: '2026-02-20', end: '2026-02-21' }),
     ]
     expect(gapText(healthStats(two, {}, NOW))).toContain('по 1 промежутку')
+  })
+})
+
+describe('давление без нижнего числа — Р-56', () => {
+  it('показывается с прочерком, а не голым числом', () => {
+    expect(measureText('bp', 120)).toBe('120/—')
+    expect(measureText('bp', 120, 80)).toBe('120/80')
+  })
+
+  it('у метрик с одним числом прочерка нет', () => {
+    expect(measureText('weight', 75)).toBe('75 кг')
+    expect(measureText('пульс', 60)).toBe('60')
+  })
+})
+
+describe('illnessNotice — Р-54', () => {
+  it('все эпизоды закрыты — напоминать не о чем', () => {
+    expect(illnessNotice([])).toBeNull()
+  })
+
+  it('одна болезнь — названа с длительностью, тап ведёт к ней', () => {
+    const open = episodeState(episode({ title: 'Поясница', start: '2026-09-04', end: null }), NOW)
+    expect(illnessNotice([open])).toEqual({
+      title: 'Всё ещё болеешь?',
+      body: 'Поясница — 6-й день. Если уже здоров, отметь выздоровление.',
+      target: '/episode/e1',
+    })
+  })
+
+  it('заведённая сегодня — «первый день», а не «1-й день»', () => {
+    const open = episodeState(episode({ start: NOW, end: null }), NOW)
+    expect(illnessNotice([open])?.body).toBe('ОРВИ — первый день. Если уже здоров, отметь выздоровление.')
+  })
+
+  it('несколько — списком, тап ведёт на «Здоровье»', () => {
+    const one = episodeState(episode({ id: 'a', title: 'ОРВИ', start: '2026-09-08', end: null }), NOW)
+    const two = episodeState(episode({ id: 'b', title: 'Поясница', start: 'кривая', end: null }), NOW)
+    expect(illnessNotice([one, two])).toEqual({
+      title: 'Всё ещё болеешь?',
+      body: 'ОРВИ — 2-й день\nПоясница — дата начала не читается\nЕсли уже здоров, отметь выздоровление.',
+      target: '/health',
+    })
   })
 })

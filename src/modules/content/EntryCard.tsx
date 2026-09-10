@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { entryText, statusLabel } from './labels.ts'
 import { EntryForm } from './EntryForm.tsx'
 import type { Content } from './useContent.ts'
@@ -25,10 +25,24 @@ function actionFor(
  * в перенесённых записях длинные, и держать их развёрнутыми во всём
  * списке значит сделать список нечитаемым.
  */
-export function EntryCard({ entry, content }: { entry: ContentEntry; content: Content }) {
-  const [open, setOpen] = useState(false)
+export function EntryCard({
+  entry,
+  content,
+  focused = false,
+}: {
+  entry: ContentEntry
+  content: Content
+  /** К этой записи пришли из ленты: развернуть и прокрутить к ней (Р-56). */
+  focused?: boolean
+}) {
+  const [open, setOpen] = useState(focused)
   const [editing, setEditing] = useState(false)
   const action = actionFor(entry, content)
+  const card = useRef<HTMLLIElement>(null)
+
+  useEffect(() => {
+    if (focused) card.current?.scrollIntoView({ block: 'center' })
+  }, [focused])
 
   if (editing) {
     return (
@@ -56,7 +70,16 @@ export function EntryCard({ entry, content }: { entry: ContentEntry; content: Co
   }
 
   return (
-    <li className={entry.status === 'active' ? 'cycle cycle--due' : 'cycle'}>
+    <li
+      ref={card}
+      className={[
+        'cycle',
+        entry.status === 'active' ? 'cycle--due' : '',
+        focused ? 'cycle--focus' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <div className="cycle__head">
         <button type="button" className="cycle__name plain-btn" onClick={() => setOpen(!open)}>
           {entry.title}

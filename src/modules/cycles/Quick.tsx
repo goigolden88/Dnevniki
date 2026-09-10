@@ -1,15 +1,20 @@
 import { useState } from 'react'
 import type { TemplateMark, TemplateState } from './cycles.ts'
 import { formatMoney, parsePrice, templateButtonText, templateLabel } from './labels.ts'
+import { useCycles } from './useCycles.ts'
+import { Fold } from '../../ui/Fold.tsx'
 
 /**
  * Быстрые кнопки (Р-49): одна кнопка отмечает сегодня одну или несколько
  * позиций вместе с ценой.
  *
- * Здесь две части. Ряд кнопок стоит над циклами на «Сейчас» — ради него всё
- * и затевалось. Заводятся и правятся кнопки на экране позиции: конструктор
- * с выбором вида и полей — отдельный экран ради действия раз в полгода.
+ * Три места. Ряд кнопок стоит над циклами на «Сейчас» — ради него всё
+ * и затевалось. Заводится кнопка с экрана позиции: конструктор с выбором
+ * вида и полей — отдельный экран ради действия раз в полгода. Все кнопки
+ * разом видны в «Настройках» (Р-56).
  */
+
+type Update = (id: string, patch: { label?: string; marks?: TemplateMark[] }) => Promise<void>
 
 /** Кнопки, у которых осталась хоть одна живая позиция. Остальным нечего отмечать. */
 function usable(quick: TemplateState[]): TemplateState[] {
@@ -34,8 +39,7 @@ export function QuickRow({
   if (shown.length === 0) return null
 
   return (
-    <section className="block">
-      <h2>Быстрые кнопки</h2>
+    <Fold id="today:quick" title="Быстрые кнопки" summary={shown.length}>
       <div className="quick">
         {shown.map((state) => (
           <button
@@ -52,13 +56,13 @@ export function QuickRow({
           </button>
         ))}
       </div>
-    </section>
+    </Fold>
   )
 }
 
 /**
  * Быстрая кнопка на экране позиции: завести, добавить позицию в уже
- * заведённую, поправить название, цену или состав.
+ * заведённую, поправить название, цены или состав.
  */
 export function QuickSection({
   itemId,
@@ -73,7 +77,7 @@ export function QuickSection({
   /** Последняя цена этой позиции — с ней она встаёт в чужую кнопку. */
   price: number | null
   onAdd: (itemId: string) => Promise<void>
-  onUpdate: (id: string, patch: { label?: string; marks?: TemplateMark[] }) => Promise<void>
+  onUpdate: Update
   onRemove: (id: string) => Promise<void>
 }) {
   const all = usable(quick)
@@ -93,13 +97,7 @@ export function QuickSection({
       )}
 
       {mine.map((state) => (
-        <TemplateCard
-          key={state.template.id}
-          state={state}
-          itemId={itemId}
-          onUpdate={onUpdate}
-          onRemove={onRemove}
-        />
+        <TemplateCard key={state.template.id} state={state} onUpdate={onUpdate} onRemove={onRemove} />
       ))}
 
       <div className="row row--wrap">
@@ -125,23 +123,51 @@ export function QuickSection({
   )
 }
 
+/**
+ * Все кнопки разом — в «Настройках» (Р-56).
+ *
+ * Здесь видны и кнопки, у которых не осталось ни одной позиции: на
+ * «Сейчас» и на экранах позиций их нет, и без этого места удалить их
+ * было бы негде.
+ */
+export function QuickSettings() {
+  const cycles = useCycles()
+  if (cycles.status !== 'ready') return null
+
+  return (
+    <section className="block">
+      <h2>Быстрые кнопки</h2>
+      <p className="muted">
+        Кнопка на «Сейчас» отмечает сразу все свои позиции, вместе с ценой. Новая заводится
+        с экрана позиции — «Сделать быстрой кнопкой»; там же позиция добавляется в уже
+        заведённую.
+      </p>
+      {cycles.quick.length === 0 && <p className="muted">Кнопок пока нет.</p>}
+      {cycles.quick.map((state) => (
+        <TemplateCard
+          key={state.template.id}
+          state={state}
+          onUpdate={cycles.updateTemplate}
+          onRemove={cycles.removeTemplate}
+        />
+      ))}
+    </section>
+  )
+}
+
+/** Одна кнопка целиком: название, позиции с ценами, удаление. */
 function TemplateCard({
   state,
-  itemId,
   onUpdate,
   onRemove,
 }: {
   state: TemplateState
-  itemId: string
-  onUpdate: (id: string, patch: { label?: string; marks?: TemplateMark[] }) => Promise<void>
+  onUpdate: Update
   onRemove: (id: string) => Promise<void>
 }) {
   const id = state.template.id
   const marks = marksOf(state)
-  const own = marks.find((mark) => mark.itemId === itemId)
-
   const [label, setLabel] = useState(state.template.label)
-  const [price, setPrice] = useState(own?.price === undefined ? '' : String(own.price))
 
   // Составное название показывается подсказкой в пустом поле: видно, как
   // кнопка называется сейчас, и понятно, что его можно заменить своим.
@@ -152,20 +178,17 @@ function TemplateCard({
     if (clean !== state.template.label.trim()) void onUpdate(id, { label: clean })
   }
 
-  function commitPrice() {
-    const parsed = parsePrice(price)
-    // Опечатка не стирает цену — то же правило, что у цены в истории.
-    if (parsed === null && price.trim() !== '') return
-    if (parsed === (own?.price ?? null)) return
+  function setPrice(itemId: string, price: number | null) {
     void onUpdate(id, {
       marks: marks.map((mark) =>
-        mark.itemId !== itemId ? mark : parsed === null ? { itemId } : { itemId, price: parsed },
+        mark.itemId !== itemId ? mark : price === null ? { itemId } : { itemId, price },
       ),
     })
   }
 
   function remove() {
-    if (!window.confirm(`Удалить кнопку «${templateLabel(state)}»? Отметки останутся.`)) return
+    const name = templateLabel(state) || 'без позиций'
+    if (!window.confirm(`Удалить кнопку «${name}»? Отметки останутся.`)) return
     void onRemove(id)
   }
 
@@ -175,47 +198,78 @@ function TemplateCard({
         <span>Название кнопки</span>
         <input
           value={label}
-          placeholder={composed}
+          placeholder={composed || 'без названия'}
           onChange={(event) => setLabel(event.target.value)}
           onBlur={commitLabel}
         />
       </label>
 
-      <p className="muted">
-        Отмечает:{' '}
-        {state.marks
-          .map((mark) => (mark.price === null ? mark.item.name : `${mark.item.name} · ${formatMoney(mark.price)}`))
-          .join(', ')}
-      </p>
-
-      <label className="field">
-        <span>Цена этой позиции в кнопке</span>
-        <input
-          className="price-input"
-          value={price}
-          inputMode="decimal"
-          placeholder="без цены"
-          onChange={(event) => setPrice(event.target.value)}
-          onBlur={commitPrice}
-        />
-      </label>
+      {state.marks.length === 0 ? (
+        <p className="muted">Позиций в кнопке не осталось — все удалены. Её можно удалить.</p>
+      ) : (
+        <ul className="plain">
+          {state.marks.map((mark) => (
+            <li key={mark.item.id} className="row row--wrap">
+              <span className="quick__item">{mark.item.name}</span>
+              {/* Ключ с ценой: после сохранения поле берёт новое значение,
+                  а не держит набранный текст. */}
+              <MarkPrice
+                key={`${mark.item.id}:${mark.price ?? ''}`}
+                price={mark.price}
+                onCommit={(price) => setPrice(mark.item.id, price)}
+              />
+              {state.marks.length > 1 && (
+                <button
+                  type="button"
+                  className="link-btn"
+                  aria-label={`Убрать «${mark.item.name}» из кнопки`}
+                  onClick={() =>
+                    void onUpdate(id, { marks: marks.filter((each) => each.itemId !== mark.item.id) })
+                  }
+                >
+                  убрать
+                </button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
 
       <div className="form__actions">
-        {marks.length > 1 && (
-          <button
-            type="button"
-            className="btn"
-            onClick={() =>
-              void onUpdate(id, { marks: marks.filter((mark) => mark.itemId !== itemId) })
-            }
-          >
-            Убрать отсюда
-          </button>
-        )}
         <button type="button" className="btn btn--danger" onClick={remove}>
           Удалить кнопку
         </button>
       </div>
     </div>
+  )
+}
+
+/** Цена позиции в кнопке. Опечатка не стирает цену — как у цены в истории. */
+function MarkPrice({
+  price,
+  onCommit,
+}: {
+  price: number | null
+  onCommit: (price: number | null) => void
+}) {
+  const [text, setText] = useState(price === null ? '' : String(price))
+
+  function commit() {
+    const parsed = parsePrice(text)
+    if (parsed === null && text.trim() !== '') return
+    if (parsed === price) return
+    onCommit(parsed)
+  }
+
+  return (
+    <input
+      className="price-input"
+      value={text}
+      inputMode="decimal"
+      placeholder="без цены"
+      aria-label={price === null ? 'Цена не задана' : `Цена ${formatMoney(price)}`}
+      onChange={(event) => setText(event.target.value)}
+      onBlur={commit}
+    />
   )
 }

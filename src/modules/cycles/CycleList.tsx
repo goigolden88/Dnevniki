@@ -20,6 +20,7 @@ import {
   statusText,
 } from './labels.ts'
 import { QuickRow } from './Quick.tsx'
+import { Fold } from '../../ui/Fold.tsx'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
 export function CycleList() {
@@ -48,6 +49,10 @@ export function CycleList() {
 
       <QuickRow quick={cycles.quick} onPress={cycles.pressTemplate} />
 
+      {/* Наверху, а не под всем списком (Р-55): до низа экрана с десятком
+          категорий иначе приходится листать ради каждой новой позиции. */}
+      <AddItem onAdd={cycles.addItem} groups={knownGroups(cycles.items)} />
+
       {cycles.states.length === 0 && (
         <p className="stub">
           Позиций пока нет. Заведи первую — стрижку, замену фильтра, что угодно повторяющееся.
@@ -55,19 +60,22 @@ export function CycleList() {
       )}
 
       {attention.length > 0 && (
-        <section className="block">
-          <h2>Требует внимания</h2>
+        <Fold id="today:attention" title="Требует внимания" summary={attention.length}>
           <CardList states={attention} onMark={cycles.mark} />
-        </section>
+        </Fold>
       )}
 
       {groups.map((group) => (
-        <section className="block" key={group.cat}>
-          <h2>{group.cat}</h2>
+        <Fold
+          key={group.cat}
+          id={`today:cat:${group.cat}`}
+          title={group.cat}
+          summary={group.units.reduce((count, unit) => count + unit.states.length, 0)}
+        >
           {group.units.map((unit) => (
             <Unit key={unit.group ?? unit.states[0]?.item.id} unit={unit} onMark={cycles.mark} />
           ))}
-        </section>
+        </Fold>
       ))}
 
       {waiting > 0 && (
@@ -79,8 +87,6 @@ export function CycleList() {
       )}
 
       <Spending items={cycles.items} events={cycles.events} />
-
-      <AddItem onAdd={cycles.addItem} groups={knownGroups(cycles.items)} />
 
       {archived.length > 0 && <Archived items={archived} />}
     </>
@@ -180,7 +186,6 @@ function CycleCard({
  * из тридцати трёх.
  */
 function Spending({ items, events }: { items: CycleItem[]; events: CycleEvent[] }) {
-  const [open, setOpen] = useState(false)
   const tree = useMemo(() => spendTree(items, events, CATEGORIES), [items, events])
 
   // Ни одной цены — блок молчит целиком. Пустая таблица с нулями
@@ -189,13 +194,11 @@ function Spending({ items, events }: { items: CycleItem[]; events: CycleEvent[] 
 
   const total = totalSpent(tree)
 
+  // Отдельным блоком с заголовком, как остальные, а не строкой-ссылкой
+  // среди карточек (Р-55). Итог стоит в заголовке и у свёрнутого.
   return (
-    <section className="block">
-      <button type="button" className="link-btn" onClick={() => setOpen(!open)}>
-        {open ? 'Скрыть траты' : `Траты · ${spentText(total)}`}
-      </button>
-
-      {open && (
+    <Fold id="today:spending" title="Траты" summary={spentText(total)} folded>
+      <div className="panel">
         <table className="stats spending">
           <tbody>
             {tree.map((cat) => (
@@ -226,8 +229,8 @@ function Spending({ items, events }: { items: CycleItem[]; events: CycleEvent[] 
             ))}
           </tbody>
         </table>
-      )}
-    </section>
+      </div>
+    </Fold>
   )
 }
 

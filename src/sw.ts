@@ -14,7 +14,7 @@
 import { clientsClaim } from 'workbox-core'
 import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching'
 import { NavigationRoute, registerRoute } from 'workbox-routing'
-import { remindOverdue, REMINDER_TAG } from './notify.ts'
+import { remind, REMINDER_TAG } from './notify.ts'
 
 /**
  * Ровно то, чем работник пользуется. Библиотека типов `webworker` целиком
@@ -31,7 +31,7 @@ type Scope = {
     matchAll(options: {
       type: 'window'
       includeUncontrolled: boolean
-    }): Promise<readonly { focus(): Promise<unknown> }[]>
+    }): Promise<readonly { focus(): Promise<unknown>; navigate(url: string): Promise<unknown> }[]>
     openWindow(url: string): Promise<unknown>
   }
   addEventListener(
@@ -63,19 +63,23 @@ if (!import.meta.env.DEV) {
 
 self.addEventListener('periodicsync', (event) => {
   if (event.tag !== REMINDER_TAG) return
-  event.waitUntil(remindOverdue(self.registration))
+  event.waitUntil(remind(self.registration))
 })
 
-// Тап по уведомлению открывает приложение — уже открытое, если оно есть,
-// а не вторую копию.
+// Тап по уведомлению открывает приложение там, куда уведомление зовёт:
+// о болезни — на экран эпизода, о просроченном — на «Сейчас». Уже
+// открытое приложение переводится туда же, а не открывается второй копией.
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  event.waitUntil(openApp())
+  const data = event.notification.data as { url?: unknown } | null
+  const url = typeof data?.url === 'string' ? data.url : self.registration.scope
+  event.waitUntil(openApp(url))
 })
 
-async function openApp(): Promise<unknown> {
+async function openApp(url: string): Promise<unknown> {
   const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
   const open = windows[0]
-  if (open) return open.focus()
-  return self.clients.openWindow(self.registration.scope)
+  if (!open) return self.clients.openWindow(url)
+  await open.focus()
+  return open.navigate(url)
 }

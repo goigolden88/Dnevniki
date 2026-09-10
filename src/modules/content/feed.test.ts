@@ -50,6 +50,10 @@ describe('contentFeed', () => {
   it('оригинальное название и комментарий ищутся', () => {
     expect(byId('a')?.extra).toBe('Sousou no Frieren лучшее за год')
   })
+
+  it('тап ведёт к самой записи, а не просто на вкладку — Р-56', () => {
+    expect(byId('a')?.link).toBe('/content?open=a')
+  })
 })
 
 describe('contentMarkdown', () => {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { watching } from './content.ts'
 import { Archive } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'
@@ -23,6 +24,10 @@ import { currentMonth, useContent, type Content } from './useContent.ts'
  */
 export function ContentScreen() {
   const content = useContent()
+  // Запись, к которой пришли из ленты или с «Сейчас» (Р-56): развернуть
+  // её и прокрутить к ней. Список сам подстраивается под её статус и год.
+  const [params] = useSearchParams()
+  const focusId = params.get('open')
 
   if (content.status === 'loading') return <p className="muted">Открываю базу…</p>
   if (content.status === 'failed') {
@@ -30,6 +35,7 @@ export function ContentScreen() {
   }
 
   const active = watching(content.entries)
+  const focus = focusId === null ? null : content.entryOf(focusId)
 
   return (
     <>
@@ -44,7 +50,12 @@ export function ContentScreen() {
           <h2>Смотрю сейчас</h2>
           <ul className="cycles">
             {active.map((entry) => (
-              <EntryCard key={entry.id} entry={entry} content={content} />
+              <EntryCard
+                key={entry.id}
+                entry={entry}
+                content={content}
+                focused={entry.id === focus?.id}
+              />
             ))}
           </ul>
         </section>
@@ -54,7 +65,8 @@ export function ContentScreen() {
 
       <ContentStats entries={content.entries} />
 
-      <Archive entries={content.entries} content={content} />
+      {/* Ключ по записи: переход к другой записи заново выставляет фильтры. */}
+      <Archive key={focus?.id ?? ''} entries={content.entries} content={content} focus={focus} />
     </>
   )
 }

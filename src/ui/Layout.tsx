@@ -1,4 +1,5 @@
 import { NavLink, Outlet } from 'react-router-dom'
+import { ScrollButtons } from './ScrollButtons.tsx'
 
 /**
  * Нижняя панель: только то, что открывают каждый день.
@@ -21,6 +22,8 @@ export function Layout() {
       <main className="content">
         <Outlet />
       </main>
+
+      <ScrollButtons />
 
       <nav className="tabs">
         {TABS.map((tab) => (

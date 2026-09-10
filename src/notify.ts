@@ -1,12 +1,12 @@
 /**
- * Напоминание о просроченном (Р-50).
+ * Напоминания (Р-50, Р-54): о просроченном в циклах и о незакрытой болезни.
  *
  * Одна функция на два вызова: service worker зовёт её, когда браузер будит
  * его фоновой синхронизацией, а «Настройки» — по кнопке «Проверить сейчас».
  * Считают они одинаково, и разойтись это не должно.
  *
  * Живёт на уровне приложения, рядом с `app.tsx`, а не в `core`: она знает
- * модуль циклов, а ядру это запрещено.
+ * модули циклов и здоровья, а ядру это запрещено.
  *
  * Без сервера веб-пуш невозможен — пуш по определению присылает сервер.
  * Отсюда и ограничения: только Chrome на Android, только установленное
@@ -17,8 +17,14 @@ import { db } from './core/db.ts'
 import { today } from './core/dates.ts'
 import { cycleStates } from './modules/cycles/cycles.ts'
 import { overdueNotice } from './modules/cycles/labels.ts'
+import { openEpisodes } from './modules/health/health.ts'
+import { illnessNotice } from './modules/health/labels.ts'
 
-/** Имя фоновой проверки. Им же она выключается. */
+/**
+ * Имя фоновой проверки. Им же она выключается. Осталось от времени, когда
+ * напоминание было одно: на установленных копиях проверка заведена под этим
+ * именем, и переименование выключило бы её молча.
+ */
 export const REMINDER_TAG = 'overdue'
 
 /**
@@ -33,14 +39,26 @@ const MIN_INTERVAL = 12 * 60 * 60 * 1000
 
 export type RemindResult = 'shown' | 'nothing' | 'already'
 
+type Notice = {
+  title: string
+  body: string
+  /** Уведомление одной темы заменяет прежнее, а не копится стопкой. */
+  tag: string
+  /** Куда ведёт тап — путь хеш-роутинга. */
+  target: string
+}
+
 /**
- * Показывает уведомление о просроченном — не чаще раза в день.
+ * Показывает напоминания — не чаще раза в день.
  *
- * `force` — проверка руками: показывает всегда, даже когда просроченного
- * нет, иначе не понять, дошло уведомление или сломалось. И день не
+ * Два уведомления, а не одно: у просроченного и у болезни разные действия,
+ * и тап по каждому ведёт к своему.
+ *
+ * `force` — проверка руками: показывает всегда, даже когда напоминать
+ * не о чем, иначе не понять, дошло уведомление или сломалось. И день не
  * отмечает: проверка не должна отменять настоящее напоминание.
  */
-export async function remindOverdue(
+export async function remind(
   registration: ServiceWorkerRegistration,
   options: { force?: boolean } = {},
 ): Promise<RemindResult> {
@@ -48,26 +66,43 @@ export async function remindOverdue(
   const force = options.force === true
   if (!force && (await db.settings.get<string>(LAST_DAY)) === day) return 'already'
 
-  const [items, events] = await Promise.all([db.getAll('items'), db.getAll('cycleEvents')])
-  const notice = overdueNotice(cycleStates(items, events, day))
+  const [items, events, episodes] = await Promise.all([
+    db.getAll('items'),
+    db.getAll('cycleEvents'),
+    db.getAll('episodes'),
+  ])
 
-  if (notice === null) {
-    if (force) await show(registration, 'Просроченного нет', 'Напоминать сегодня не о чем.')
+  const notices: Notice[] = []
+  const overdue = overdueNotice(cycleStates(items, events, day))
+  if (overdue) notices.push({ ...overdue, tag: 'overdue', target: '/' })
+  const illness = illnessNotice(openEpisodes(episodes, day))
+  if (illness) notices.push({ ...illness, tag: 'illness' })
+
+  if (notices.length === 0) {
+    if (force) {
+      await show(registration, {
+        title: 'Напоминать не о чем',
+        body: 'Просроченного нет, незакрытых болезней нет.',
+        tag: 'overdue',
+        target: '/',
+      })
+    }
     return 'nothing'
   }
 
-  await show(registration, notice.title, notice.body)
+  for (const notice of notices) await show(registration, notice)
   if (!force) await db.settings.set(LAST_DAY, day)
   return 'shown'
 }
 
-function show(registration: ServiceWorkerRegistration, title: string, body: string): Promise<void> {
-  return registration.showNotification(title, {
-    body,
-    // Одно уведомление на тему: новое заменяет старое, а не копится стопкой.
-    tag: REMINDER_TAG,
+function show(registration: ServiceWorkerRegistration, notice: Notice): Promise<void> {
+  return registration.showNotification(notice.title, {
+    body: notice.body,
+    tag: notice.tag,
     icon: `${import.meta.env.BASE_URL}pwa-192x192.png`,
     lang: 'ru',
+    // Адрес целиком: тап обрабатывает service worker, а у него нет роутера.
+    data: { url: `${registration.scope}#${notice.target}` },
   })
 }
 
@@ -126,5 +161,5 @@ export async function checkReminder(): Promise<RemindResult | 'denied' | 'unsupp
   if (!reg || !notifications()) return 'unsupported'
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') return 'denied'
-  return remindOverdue(reg, { force: true })
+  return remind(reg, { force: true })
 }

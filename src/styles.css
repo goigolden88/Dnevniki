@@ -841,6 +841,101 @@ p {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* ─── Сворачивание и прокрутка (Р-55) ────────────────────────────────────── */
+
+/* Заголовок блока — кнопка. Выглядит как прежний заголовок, а палец
+   попадает в строку высотой 44 пикселя. Стрелка нарисована стилем,
+   а не текстом: текст кнопки остаётся ровно названием блока. */
+.fold__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 4px;
+}
+
+.fold__btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.fold__btn::before {
+  content: '▾';
+  width: 1em;
+  text-align: center;
+}
+
+.fold__btn[aria-expanded='false']::before {
+  content: '▸';
+}
+
+.fold__summary {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+}
+
+/* Траты — отдельной панелью: это не список дел, а справка, и на фоне
+   карточек циклов она должна читаться как другое. */
+.panel {
+  padding: 6px 14px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.panel .stats {
+  margin-bottom: 0;
+}
+
+/* Кнопки «в начало» и «в конец» — справа над нижней панелью, где их
+   достаёт большой палец и где они не закрывают кнопки отметок. */
+.scroll-btns {
+  position: fixed;
+  right: 12px;
+  bottom: calc(var(--tabs-height) + env(safe-area-inset-bottom, 0px) + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.scroll-btn {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 18px;
+  opacity: 0.85;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.15);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Запись, к которой пришли из ленты: видно, какая из сотни — та. */
+.cycle--focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Строка позиции внутри быстрой кнопки: имя, цена, «убрать». */
+.quick__item {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Сводка для врача. На бумаге не нужны ни вкладки, ни кнопки:
    печатается ровно содержимое экрана. */
 @media print {

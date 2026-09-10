@@ -36,9 +36,16 @@ export function sessionText(minutes: number, km: number): string {
   return parts.join(' · ')
 }
 
-/** Значение измерения с единицей: «75 кг», «120/80». */
+/**
+ * Значение измерения с единицей: «75 кг», «120/80».
+ *
+ * У давления без нижнего числа — «120/—», а не «120» (Р-56): голое число
+ * читалось как потеря данных, хотя нижнее просто не вводили.
+ */
 export function measureText(metric: string, value: number, value2?: number): string {
   if (value2 !== undefined) return `${value}/${value2}`
+  const paired = typeof METRICS.find((each) => each.key === metric)?.second === 'string'
+  if (paired) return `${value}/—`
   const unit = metricUnit(metric)
   return unit ? `${value} ${unit}` : String(value)
 }
@@ -108,6 +115,41 @@ export function healthyText(stats: HealthStats): string {
   if (stats.healthyDays === null || stats.healthySince === null) return ''
   if (stats.healthyDays === 0) return 'Выздоровел сегодня'
   return `Не болел ${days(stats.healthyDays)} — с ${formatDate(stats.healthySince)}`
+}
+
+/**
+ * Напоминание о незакрытой болезни (Р-54). Null — все эпизоды закрыты.
+ *
+ * Эпизод, который забыли закрыть, тянется в статистике месяцами: средняя
+ * длительность болезни превращается в среднюю длительность забывчивости.
+ * Вопрос, а не утверждение, — «Всё ещё болеешь?»: приложение не знает,
+ * здоров ли человек, оно знает только, что конца никто не отметил.
+ *
+ * `target` — куда ведёт тап: к единственному эпизоду, где кнопка
+ * «Выздоровел сегодня», или на «Здоровье», если открытых несколько.
+ */
+export function illnessNotice(
+  open: readonly EpisodeState[],
+): { title: string; body: string; target: string } | null {
+  const first = open[0]
+  if (first === undefined) return null
+
+  const line = (state: EpisodeState) => {
+    const { durationDays } = state
+    const which =
+      durationDays === null
+        ? 'дата начала не читается'
+        : durationDays <= 1
+          ? 'первый день'
+          : `${durationDays}-й день`
+    return `${state.episode.title} — ${which}`
+  }
+
+  const ask = 'Если уже здоров, отметь выздоровление.'
+  if (open.length === 1) {
+    return { title: 'Всё ещё болеешь?', body: `${line(first)}. ${ask}`, target: `/episode/${first.episode.id}` }
+  }
+  return { title: 'Всё ещё болеешь?', body: [...open.map(line), ask].join('\n'), target: '/health' }
 }
 
 /**

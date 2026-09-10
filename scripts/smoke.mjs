@@ -305,14 +305,16 @@ async function scenario() {
     line(backdated, 'Потрачено'),
   )
 
+  // Траты — отдельный блок, свёрнутый по умолчанию; раскрывается заголовком (Р-55).
   await go('/')
-  await act(`startsWith('button', 'Траты')?.click()`)
+  await act(`byText('button', 'Траты')?.click()`)
   await sleep(400)
   const spending = await screen()
+  const table = await run(`document.querySelector('.panel .spending')?.innerText ?? ''`)
   check(
-    'траты считаются по категориям',
-    has(spending, 'Скрыть траты'),
-    line(spending, '₽ за'),
+    'траты раскрываются заголовком и считаются по категориям',
+    has(table, 'Гигиена') && has(table, '₽ за'),
+    line(spending, 'Траты'),
   )
 
   // ─ Быстрые кнопки (Р-49): заводится с позиции, цену берёт из последней
@@ -542,6 +544,29 @@ async function scenario() {
   check('чип вида отбирает свой модуль', contentRows === 2, `строк ${contentRows}`)
   check('«к просмотру» в ленте названо словами', has(await screen(), 'в ленту не входит'))
 
+  // Тап по записи контента ведёт к самой записи, а не просто на вкладку (Р-56).
+  // Через переменную: строка, начатая с «[», склеилась бы с концом
+  // помощников в одно выражение — и вышла бы синтаксическая ошибка.
+  await act(`const row = [...document.querySelectorAll('.feed__row')]
+      .find((each) => each.textContent.includes('Мартовский фильм'))
+    row?.click()`)
+  await sleep(900)
+  const focused = await run(`document.querySelector('.cycle--focus')?.innerText ?? ''`)
+  check(
+    'тап в ленте разворачивает саму запись — Р-56',
+    has(focused, 'Мартовский фильм') && has(focused, 'Правка'),
+    focused.replace(/\s+/g, ' ').slice(0, 70),
+  )
+
+  // Незакрытая болезнь — повод для второго напоминания (Р-54).
+  await go('/health')
+  await act(`byText('button', 'Завести эпизод')?.click()`)
+  await sleep(300)
+  await act(`set(document.querySelector('form input'), 'Затянувшийся кашель')`)
+  await sleep(200)
+  await act(`byText('button', 'Завести')?.click()`)
+  await sleep(800)
+
   // Настройки открываются шестерёнкой, а не вкладкой (Р-43).
   await go('/')
   await act(`document.querySelector('.gear')?.click()`)
@@ -551,6 +576,23 @@ async function scenario() {
   await act(`byText('button', 'Сохранить в markdown')?.click()`)
   await sleep(700)
   check('выгрузка в markdown собирается без ошибок', has(await screen(), 'Markdown сохранён'))
+
+  const listed = await run(`[...document.querySelectorAll('.quick__item')].map((el) => el.textContent).join(', ')`)
+  check('все быстрые кнопки видны в настройках — Р-56', listed.includes('Стрижка'), listed)
+
+  // Кнопки прокрутки (Р-55): настройки длинные, есть куда ехать.
+  const canDown = await run(`!!document.querySelector('[aria-label="В конец"]')`)
+  await act(`document.querySelector('[aria-label="В конец"]')?.click()`)
+  await sleep(1000)
+  const down = await run('Math.round(window.scrollY)')
+  await act(`document.querySelector('[aria-label="В начало"]')?.click()`)
+  await sleep(1000)
+  const up = await run('Math.round(window.scrollY)')
+  check(
+    'кнопки прокрутки везут в конец и в начало — Р-55',
+    canDown && down > 0 && up < 5,
+    `вниз до ${down}, обратно до ${up}`,
+  )
 
   // ─ Service worker свой (Р-50). Главный риск перехода — что работник
   // вовсе не встанет, и приложение потеряет офлайн и автообновление.
@@ -570,9 +612,9 @@ async function scenario() {
   )
   await act(`byText('button', 'Проверить сейчас')?.click()`)
   await sleep(1500)
-  const titles = await run(`navigator.serviceWorker.ready
+  const shown = await run(`navigator.serviceWorker.ready
     .then((r) => r.getNotifications())
-    .then((list) => list.map((each) => each.title).join(' | '))`)
+    .then((list) => list.map((each) => each.title + ': ' + each.body).join(' | '))`)
   // Раздел целиком — в отчёт: по нему видно, чем кончилась проверка,
   // если уведомления не нашлось.
   const reminders = await run(`[...document.querySelectorAll('section')]
@@ -580,8 +622,13 @@ async function scenario() {
     ?.innerText.replace(/\\s+/g, ' ') ?? 'раздела нет'`)
   check(
     'напоминание называет просроченную позицию',
-    typeof titles === 'string' && titles.includes('Просрочено: Фильтр'),
-    `уведомления: «${titles}»; раздел: ${reminders}`,
+    typeof shown === 'string' && shown.includes('Просрочено: Фильтр'),
+    `уведомления: «${shown}»; раздел: ${reminders}`,
+  )
+  check(
+    'напоминание о незакрытой болезни — Р-54',
+    typeof shown === 'string' && shown.includes('Всё ещё болеешь?: Затянувшийся кашель — первый день'),
+    `уведомления: «${shown}»`,
   )
 
   // ─ Кнопка на две позиции (Р-49): «включающее обслуживание» одним тапом.
@@ -601,6 +648,28 @@ async function scenario() {
     'один тап отметил обе позиции',
     (await pressed()) === 'true' && !has(done, 'Требует внимания'),
     line(done, 'Фильтр'),
+  )
+
+  // ─ Сворачивание (Р-55): тап по заголовку прячет блок, устройство помнит.
+  const cutCards = () =>
+    run(`[...document.querySelectorAll('.cycle__name')].filter((el) => el.textContent.trim() === 'Стрижка').length`)
+  await act(`byText('button', 'Гигиена')?.click()`)
+  await sleep(400)
+  const folded = await cutCards()
+  // Заголовок — флекс-строка, и innerText разносит название и число по
+  // разным строкам. Текст берётся из самого заголовка.
+  const foldedHead = await run(`[...document.querySelectorAll('.fold__head')]
+    .find((head) => head.querySelector('button')?.textContent === 'Гигиена')?.textContent ?? ''`)
+  await go('/feed')
+  await go('/')
+  const remembered = await cutCards()
+  await act(`byText('button', 'Гигиена')?.click()`)
+  await sleep(400)
+  const unfolded = await cutCards()
+  check(
+    'блок сворачивается заголовком, помнит это и показывает число — Р-55',
+    folded === 0 && remembered === 0 && unfolded === 1 && /·\s*\d/.test(foldedHead),
+    `«${foldedHead}»: свёрнут ${folded}, после перехода ${remembered}, развёрнут ${unfolded}`,
   )
 
   // ─ Без сети (Р-50). Ради этого работник и существует, а после перехода
