@@ -5,7 +5,13 @@
  * Расчёт не знает, что его читают глазами, и русских строк не содержит.
  */
 
-import { MIN_INTERVALS, type CycleState, type CycleStatus, type Spent } from './cycles.ts'
+import {
+  MIN_INTERVALS,
+  type CycleState,
+  type CycleStatus,
+  type Spent,
+  type TemplateState,
+} from './cycles.ts'
 import { days, formatDate, plural } from '../../core/dates.ts'
 
 /** Категории позиций из 01-Проект. Свободная строка, но выбор — из этих. */
@@ -178,4 +184,31 @@ export function spentText(value: Spent): string {
   const marks = `${value.priced} ${plural(value.priced, ['отметку', 'отметки', 'отметок'])}`
   const full = value.marks > value.priced ? ` из ${value.marks}` : ''
   return `${formatMoney(value.sum)} за ${marks}${full}`
+}
+
+// ─── Быстрые кнопки ────────────────────────────────────────────────────────
+
+/**
+ * Название быстрой кнопки: своё, если его дали, иначе названия позиций
+ * через плюс (Р-49).
+ *
+ * Своё название хранится, а составное — нет: иначе переименование позиции
+ * оставило бы кнопку со старым именем, и кнопка врала бы, что она отмечает.
+ */
+export function templateLabel(state: TemplateState): string {
+  const own = state.template.label.trim()
+  if (own) return own
+  return state.marks.map((mark) => mark.item.name).join(' + ')
+}
+
+/**
+ * Текст на самой кнопке. Цена дописывается, только когда позиция одна:
+ * «Стрижка · 700 ₽» — это то, что кнопка запишет. Складывать цены
+ * нескольких позиций в одно число здесь незачем — это не траты, а заготовка,
+ * и её состав виден на экране позиции.
+ */
+export function templateButtonText(state: TemplateState): string {
+  const label = templateLabel(state)
+  const only = state.marks.length === 1 ? state.marks[0] : undefined
+  return only && only.price !== null ? `${label} · ${formatMoney(only.price)}` : label
 }

@@ -311,6 +311,38 @@ async function scenario() {
     line(spending, '₽ за'),
   )
 
+  // ─ Быстрые кнопки (Р-49): заводится с позиции, цену берёт из последней
+  // отметки, повторный тап снимает, следующий ставит заново с ценой.
+  await act(`document.querySelector('.cycle__name')?.click()`)
+  await sleep(800)
+  await act(`byText('button', 'Сделать быстрой кнопкой')?.click()`)
+  await sleep(600)
+  await go('/')
+  const quickText = await run(`document.querySelector('.quick .mark')?.textContent ?? ''`)
+  check(
+    'быстрая кнопка завелась с позиции и взяла цену',
+    has(quickText, 'Стрижка') && has(quickText, '700 ₽'),
+    quickText,
+  )
+  const pressed = () => run(`document.querySelector('.quick .mark')?.getAttribute('aria-pressed')`)
+  check('позиция отмечена сегодня — кнопка нажата', (await pressed()) === 'true')
+
+  await act(`document.querySelector('.quick .mark')?.click()`)
+  await sleep(600)
+  check(
+    'повторный тап по кнопке снимает отметку',
+    (await pressed()) === 'false' && has(await screen(), 'Отметить'),
+  )
+
+  await act(`document.querySelector('.quick .mark')?.click()`)
+  await sleep(600)
+  const remarked = await screen()
+  check(
+    'тап по кнопке ставит отметку вместе с ценой',
+    has(remarked, 'Отмечено') && has(remarked, '1 900,50 ₽ за 2 отметки'),
+    line(remarked, 'Траты'),
+  )
+
   // ─ Здоровье
   await go('/health')
   check('экран здоровья открылся', has(await screen(), 'Здоровье'))

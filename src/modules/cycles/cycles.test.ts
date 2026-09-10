@@ -1,25 +1,31 @@
 import { describe, expect, it } from 'vitest'
 import {
   compareUrgency,
+  cyclePreset,
   cycleState,
   cycleStates,
+  cycleTemplates,
   DUE_RATIO,
   groupByCategory,
   knownGroups,
+  lastPrice,
   MIN_INTERVALS,
   intervals,
   markDates,
   median,
   medianInterval,
   MEDIAN_WINDOW,
+  nextOrder,
   sortByUrgency,
   spendTree,
   spent,
   spread,
+  templateMarks,
+  templateState,
   totalSpent,
   unitsOf,
 } from './cycles.ts'
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
+import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
 
 function item(over: Partial<CycleItem> = {}): CycleItem {
   return {
@@ -595,5 +601,126 @@ describe('траты', () => {
         marks: 5,
       })
     })
+  })
+})
+
+describe('быстрые кнопки — Р-49', () => {
+  function template(over: Partial<Template> = {}): Template {
+    return {
+      id: 't1',
+      updatedAt: '2026-09-07T00:00:00.000Z',
+      label: '',
+      kind: 'cycle',
+      preset: { marks: [{ itemId: 'i1' }] },
+      order: 0,
+      ...over,
+    }
+  }
+
+  describe('templateMarks', () => {
+    it('разбирает заготовку и отбрасывает кривое поштучно, а не целиком', () => {
+      const marks = templateMarks({
+        marks: [
+          { itemId: 'a', price: 700 },
+          { itemId: '' },
+          null,
+          'b',
+          { itemId: 'b', price: -5 },
+          { itemId: 'c', price: 'много' },
+          { itemId: 'd', price: 0 },
+        ],
+      })
+      expect(marks).toEqual([
+        { itemId: 'a', price: 700 },
+        { itemId: 'b' },
+        { itemId: 'c' },
+        { itemId: 'd', price: 0 },
+      ])
+    })
+
+    it('повтор позиции схлопывается, первая цена побеждает', () => {
+      const marks = templateMarks({ marks: [{ itemId: 'a', price: 1 }, { itemId: 'a', price: 2 }] })
+      expect(marks).toEqual([{ itemId: 'a', price: 1 }])
+    })
+
+    it('заготовка без списка отметок — пустая кнопка, а не исключение', () => {
+      expect(templateMarks({})).toEqual([])
+      expect(templateMarks({ marks: 'a' })).toEqual([])
+    })
+
+    it('сходится с cyclePreset туда и обратно', () => {
+      const marks = [{ itemId: 'a', price: 2500 }, { itemId: 'b' }]
+      expect(templateMarks(cyclePreset(marks))).toEqual(marks)
+    })
+  })
+
+  it('cycleTemplates: только живые шаблоны циклов и по порядку', () => {
+    const list = cycleTemplates([
+      template({ id: 't3', order: 2 }),
+      template({ id: 't1', order: 0 }),
+      template({ id: 't2', order: 1, deleted: true }),
+      template({ id: 't4', order: 0, kind: 'session' }),
+    ])
+    expect(list.map((each) => each.id)).toEqual(['t1', 't3'])
+  })
+
+  it('nextOrder: в конец ряда, в пустом ряду — ноль', () => {
+    expect(nextOrder([])).toBe(0)
+    expect(nextOrder([template({ order: 0 }), template({ order: 4 })])).toBe(5)
+  })
+
+  describe('templateState', () => {
+    const filter = item({ id: 'f1', name: 'Барьер 3 стадии' })
+    const second = item({ id: 'f2', name: 'Барьер 2 стадия' })
+    const both = template({
+      preset: cyclePreset([{ itemId: 'f1', price: 2500 }, { itemId: 'f2' }]),
+    })
+
+    it('отмечено сегодня — только когда отмечены все позиции кнопки', () => {
+      const one = [event('2026-09-10', { itemId: 'f1' })]
+      expect(templateState(both, [filter, second], one, '2026-09-10').doneToday).toBe(false)
+
+      const two = [...one, event('2026-09-10', { id: 'x', itemId: 'f2' })]
+      expect(templateState(both, [filter, second], two, '2026-09-10').doneToday).toBe(true)
+    })
+
+    it('вчерашняя и удалённая отметки сегодняшними не считаются', () => {
+      const events = [
+        event('2026-09-09', { itemId: 'f1' }),
+        event('2026-09-10', { id: 'x', itemId: 'f2', deleted: true }),
+      ]
+      expect(templateState(both, [filter, second], events, '2026-09-10').doneToday).toBe(false)
+    })
+
+    it('цена из заготовки доезжает до позиции, отсутствующая — null', () => {
+      const state = templateState(both, [filter, second], [], '2026-09-10')
+      expect(state.marks.map((mark) => [mark.item.id, mark.price])).toEqual([
+        ['f1', 2500],
+        ['f2', null],
+      ])
+    })
+
+    it('удалённая позиция выпадает из кнопки', () => {
+      const state = templateState(both, [filter, { ...second, deleted: true }], [], '2026-09-10')
+      expect(state.marks.map((mark) => mark.item.id)).toEqual(['f1'])
+    })
+
+    it('кнопка без живых позиций не считается отмеченной', () => {
+      const state = templateState(both, [], [], '2026-09-10')
+      expect(state.marks).toEqual([])
+      expect(state.doneToday).toBe(false)
+    })
+  })
+
+  it('lastPrice: по дате отметки, удалённые и без цены пропускаются', () => {
+    const events = [
+      event('2026-03-01', { price: 600 }),
+      event('2026-07-01', { price: 700 }),
+      event('2026-08-01'),
+      event('2026-09-01', { price: 900, deleted: true }),
+      event('2026-09-02', { price: 1000, itemId: 'other' }),
+    ]
+    expect(lastPrice(events, 'i1')).toBe(700)
+    expect(lastPrice([event('2026-01-01')], 'i1')).toBeNull()
   })
 })

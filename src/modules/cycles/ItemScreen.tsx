@@ -4,8 +4,9 @@ import { daysBetween, days, formatDateLoose, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { CycleState } from './cycles.ts'
-import { knownGroups, MIN_INTERVALS, spent } from './cycles.ts'
+import { knownGroups, lastPrice, MIN_INTERVALS, spent } from './cycles.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
+import { QuickSection } from './Quick.tsx'
 import {
   barPercent,
   detailText,
@@ -113,6 +114,15 @@ export function ItemScreen() {
       <History marks={marks} onRemove={cycles.removeMark} onSetPrice={cycles.setMarkPrice} />
 
       <AddMark itemId={id} onAdd={cycles.addMark} />
+
+      <QuickSection
+        itemId={id}
+        quick={cycles.quick}
+        price={lastPrice(marks, id)}
+        onAdd={cycles.addTemplate}
+        onUpdate={cycles.updateTemplate}
+        onRemove={cycles.removeTemplate}
+      />
 
       <ItemForm
         draft={{

@@ -12,11 +12,22 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { cycleState, cycleStates, type CycleState } from './cycles.ts'
+import {
+  cyclePreset,
+  cycleState,
+  cycleStates,
+  cycleTemplates,
+  lastPrice,
+  nextOrder,
+  templateState,
+  type CycleState,
+  type TemplateMark,
+  type TemplateState,
+} from './cycles.ts'
 import { db } from '../../core/db.ts'
 import { nowIso, today, type DateStr } from '../../core/dates.ts'
 import { ulid } from '../../core/id.ts'
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
+import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
 
 export type Status = 'loading' | 'ready' | 'failed'
 
@@ -55,6 +66,14 @@ export type Cycles = {
   addItem: (draft: ItemDraft) => Promise<CycleItem | null>
   updateItem: (id: string, patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
   removeItem: (id: string) => Promise<void>
+  /** Быстрые кнопки по порядку, с состоянием на сегодня (Р-49). */
+  quick: TemplateState[]
+  /** Тап по кнопке: отметить все её позиции, а если уже отмечены — снять. */
+  pressTemplate: (state: TemplateState) => Promise<void>
+  /** Новая кнопка с одной позицией и её последней ценой. */
+  addTemplate: (itemId: string) => Promise<void>
+  updateTemplate: (id: string, patch: { label?: string; marks?: TemplateMark[] }) => Promise<void>
+  removeTemplate: (id: string) => Promise<void>
 }
 
 function describe(error: unknown): string {
@@ -64,6 +83,7 @@ function describe(error: unknown): string {
 export function useCycles(): Cycles {
   const [items, setItems] = useState<CycleItem[]>([])
   const [events, setEvents] = useState<CycleEvent[]>([])
+  const [templates, setTemplates] = useState<Template[]>([])
   const [status, setStatus] = useState<Status>('loading')
   const [error, setError] = useState('')
   const [day, setDay] = useState<DateStr>(today())
@@ -74,13 +94,15 @@ export function useCycles(): Cycles {
     async function load() {
       try {
         await db.ready()
-        const [loadedItems, loadedEvents] = await Promise.all([
+        const [loadedItems, loadedEvents, loadedTemplates] = await Promise.all([
           db.getAll('items'),
           db.getAll('cycleEvents'),
+          db.getAll('templates'),
         ])
         if (cancelled) return
         setItems(loadedItems)
         setEvents(loadedEvents)
+        setTemplates(loadedTemplates)
         setStatus('ready')
       } catch (failure) {
         if (!cancelled) {
@@ -97,7 +119,9 @@ export function useCycles(): Cycles {
     // после перезапуска приложения — то есть «не появилась бы».
     const unsubscribe = db.onChange((event) => {
       if (event.origin !== 'remote') return
-      if (event.store !== 'items' && event.store !== 'cycleEvents') return
+      if (event.store !== 'items' && event.store !== 'cycleEvents' && event.store !== 'templates') {
+        return
+      }
       void load()
     })
 
@@ -280,6 +304,135 @@ export function useCycles(): Cycles {
     [items, apply],
   )
 
+  // ─── Быстрые кнопки (Р-49) ───────────────────────────────────────────────
+
+  const quick = useMemo(
+    () => cycleTemplates(templates).map((each) => templateState(each, items, events, day)),
+    [templates, items, events, day],
+  )
+
+  /**
+   * Тап по быстрой кнопке.
+   *
+   * Все отметки пишутся одной пачкой и одним обновлением состояния. По одной
+   * через `addMark` нельзя: каждая взяла бы список отметок того же кадра,
+   * и вторая затёрла бы в состоянии первую — в базе обе, на экране одна.
+   *
+   * Отмечено уже всё — тап снимает сегодняшние отметки этих позиций, как
+   * повторный тап по карточке. Отмечена часть — тап доставляет остальные.
+   */
+  const pressTemplate = useCallback(
+    async (state: TemplateState) => {
+      const previous = events
+      const ids = new Set(state.marks.map((mark) => mark.item.id))
+      const todays = previous.filter(
+        (event) => !event.deleted && event.date === day && ids.has(event.itemId),
+      )
+
+      if (state.doneToday) {
+        const removed = todays.map((event) => ({ ...event, deleted: true }))
+        const byId = new Map(removed.map((event) => [event.id, event]))
+        await apply(
+          () => setEvents(previous.map((event) => byId.get(event.id) ?? event)),
+          () => setEvents(previous),
+          () => db.putMany('cycleEvents', removed),
+        )
+        return
+      }
+
+      const marked = new Set(todays.map((event) => event.itemId))
+      const added: CycleEvent[] = state.marks
+        .filter((mark) => !marked.has(mark.item.id))
+        .map((mark) => ({
+          id: ulid(),
+          updatedAt: nowIso(),
+          itemId: mark.item.id,
+          date: day,
+          ...(mark.price === null ? {} : { price: mark.price }),
+        }))
+      if (added.length === 0) return
+
+      const saved = await apply(
+        () => setEvents([...previous, ...added]),
+        () => setEvents(previous),
+        () => db.putMany('cycleEvents', added),
+      )
+      if (saved) {
+        const byId = new Map(saved.map((event) => [event.id, event]))
+        setEvents((current) => current.map((event) => byId.get(event.id) ?? event))
+      }
+    },
+    [events, day, apply],
+  )
+
+  const writeTemplate = useCallback(
+    async (template: Template, previous: Template[]) => {
+      const exists = previous.some((each) => each.id === template.id)
+      const saved = await apply(
+        () =>
+          setTemplates(
+            exists
+              ? previous.map((each) => (each.id === template.id ? template : each))
+              : [...previous, template],
+          ),
+        () => setTemplates(previous),
+        () => db.put('templates', template),
+      )
+      if (saved) setTemplates((all) => all.map((each) => (each.id === saved.id ? saved : each)))
+    },
+    [apply],
+  )
+
+  /**
+   * Кнопка заводится с позиции, а не конструктором (Р-49): цена берётся
+   * из последней отметки, название — пустое, то есть из имени позиции.
+   */
+  const addTemplate = useCallback(
+    async (itemId: string) => {
+      const price = lastPrice(events, itemId)
+      const template: Template = {
+        id: ulid(),
+        updatedAt: nowIso(),
+        label: '',
+        kind: 'cycle',
+        preset: cyclePreset([price === null ? { itemId } : { itemId, price }]),
+        order: nextOrder(templates),
+      }
+      await writeTemplate(template, templates)
+    },
+    [events, templates, writeTemplate],
+  )
+
+  const updateTemplate = useCallback(
+    async (id: string, patch: { label?: string; marks?: TemplateMark[] }) => {
+      const current = templates.find((each) => each.id === id)
+      if (!current) return
+      const updated: Template = {
+        ...current,
+        ...(patch.label === undefined ? {} : { label: patch.label }),
+        // Прочие поля заготовки сохраняются: их мог положить более новый
+        // код с другого устройства, и затирать чужое молча нельзя.
+        ...(patch.marks === undefined ? {} : { preset: { ...current.preset, ...cyclePreset(patch.marks) } }),
+        updatedAt: nowIso(),
+      }
+      await writeTemplate(updated, templates)
+    },
+    [templates, writeTemplate],
+  )
+
+  const removeTemplate = useCallback(
+    async (id: string) => {
+      const previous = templates
+      await apply(
+        () =>
+          setTemplates(previous.map((each) => (each.id === id ? { ...each, deleted: true } : each))),
+        () => setTemplates(previous),
+        () => db.remove('templates', id),
+      )
+    },
+    [templates, apply],
+  )
+
   const live = useMemo(() => items.filter((item) => !item.deleted), [items])
   const liveEvents = useMemo(() => events.filter((event) => !event.deleted), [events])
 
@@ -299,5 +452,10 @@ export function useCycles(): Cycles {
     addItem,
     updateItem,
     removeItem,
+    quick,
+    pressTemplate,
+    addTemplate,
+    updateTemplate,
+    removeTemplate,
   }
 }

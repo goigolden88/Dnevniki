@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { cycleState } from './cycles.ts'
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
-import { divergence, formatMoney, parsePrice, spentText, statusText } from './labels.ts'
+import { cyclePreset, cycleState, templateState } from './cycles.ts'
+import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
+import {
+  divergence,
+  formatMoney,
+  parsePrice,
+  spentText,
+  statusText,
+  templateButtonText,
+  templateLabel,
+} from './labels.ts'
 
 function item(over: Partial<CycleItem> = {}): CycleItem {
   return {
@@ -115,5 +123,45 @@ describe('spentText', () => {
 
   it('молчит, когда цен нет ни одной: «0 ₽ за 0 отметок» ничего не сообщает', () => {
     expect(spentText({ sum: 0, priced: 0, marks: 12 })).toBe('')
+  })
+})
+
+describe('быстрые кнопки — Р-49', () => {
+  const cut = item({ id: 'c1', name: 'Стрижка' })
+  const filter = item({ id: 'f1', name: 'Барьер 3 стадии' })
+  const second = item({ id: 'f2', name: 'Барьер 2 стадия' })
+
+  function template(marks: { itemId: string; price?: number }[], label = ''): Template {
+    return {
+      id: 't1',
+      updatedAt: '2026-09-07T00:00:00.000Z',
+      label,
+      kind: 'cycle',
+      preset: cyclePreset(marks),
+      order: 0,
+    }
+  }
+
+  const state = (t: Template) => templateState(t, [cut, filter, second], [], '2026-09-10')
+
+  it('без своего названия кнопка называется позициями через плюс', () => {
+    const both = state(template([{ itemId: 'f1' }, { itemId: 'f2' }]))
+    expect(templateLabel(both)).toBe('Барьер 3 стадии + Барьер 2 стадия')
+  })
+
+  it('своё название побеждает, пробелы по краям не в счёт', () => {
+    const both = state(template([{ itemId: 'f1' }, { itemId: 'f2' }], '  Барьер целиком '))
+    expect(templateLabel(both)).toBe('Барьер целиком')
+    expect(templateLabel(state(template([{ itemId: 'c1' }], '   ')))).toBe('Стрижка')
+  })
+
+  it('цена на кнопке — только у одиночной позиции и только если она есть', () => {
+    expect(templateButtonText(state(template([{ itemId: 'c1', price: 700 }])))).toBe(
+      `Стрижка · ${formatMoney(700)}`,
+    )
+    expect(templateButtonText(state(template([{ itemId: 'c1' }])))).toBe('Стрижка')
+    expect(
+      templateButtonText(state(template([{ itemId: 'f1', price: 2500 }, { itemId: 'f2', price: 1089 }]))),
+    ).toBe('Барьер 3 стадии + Барьер 2 стадия')
   })
 })

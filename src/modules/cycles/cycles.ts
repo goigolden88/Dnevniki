@@ -9,7 +9,7 @@
  * отдельного поля в позиции нет: порог общий на всё приложение.
  */
 
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
+import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
 import { addDays, daysBetween, isDateStr, today, type DateStr } from '../../core/dates.ts'
 
 /** Доля интервала, после которой позиция «подходит к сроку». Р-22. */
@@ -477,4 +477,113 @@ export function spendTree(
 /** Итог по всему экрану трат. */
 export function totalSpent(cats: SpentCat[]): Spent {
   return cats.reduce((all, cat) => plus(all, cat.spent), NOTHING)
+}
+
+// ─── Быстрые кнопки ────────────────────────────────────────────────────────
+
+/**
+ * Одна отметка в заготовке шаблона: какая позиция и почём (Р-49).
+ *
+ * Шаблон вида `cycle` — кнопка, которая отмечает сегодня одну или несколько
+ * позиций разом. Несколько — ради «включающего обслуживания»: полная замена
+ * «Барьера» меняет и вторую стадию, ТО меняет и масло. Одна кнопка ставит
+ * обе отметки, и связь между позициями в модели не нужна.
+ */
+export type TemplateMark = { itemId: string; price?: number }
+
+/**
+ * Отметки из заготовки шаблона.
+ *
+ * Заготовка в модели — `Record<string, unknown>`, и приезжает она из
+ * синхронизации: форму никто не гарантирует. Кривое отбрасывается поштучно,
+ * а не роняет кнопку целиком — тем же правилом, что у кривой цены отметки.
+ * Повтор позиции схлопывается: две отметки одной позиции в один день —
+ * это одна отметка (см. `markDates`).
+ */
+export function templateMarks(preset: Record<string, unknown>): TemplateMark[] {
+  const raw = preset.marks
+  if (!Array.isArray(raw)) return []
+
+  const seen = new Set<string>()
+  const marks: TemplateMark[] = []
+  for (const each of raw) {
+    if (typeof each !== 'object' || each === null) continue
+    const { itemId, price } = each as { itemId?: unknown; price?: unknown }
+    if (typeof itemId !== 'string' || !itemId || seen.has(itemId)) continue
+    seen.add(itemId)
+    const good = typeof price === 'number' && Number.isFinite(price) && price >= 0
+    marks.push(good ? { itemId, price } : { itemId })
+  }
+  return marks
+}
+
+/** Обратно: отметки → заготовка для записи в `Template.preset`. */
+export function cyclePreset(marks: readonly TemplateMark[]): Record<string, unknown> {
+  return { marks: marks.map((mark) => ({ ...mark })) }
+}
+
+/** Живые шаблоны циклов в порядке показа. Шаблоны других видов не трогаем. */
+export function cycleTemplates(templates: readonly Template[]): Template[] {
+  return templates
+    .filter((template) => !template.deleted && template.kind === 'cycle')
+    .sort((a, b) => a.order - b.order || a.id.localeCompare(b.id))
+}
+
+/** Порядковый номер для нового шаблона: в конец ряда. */
+export function nextOrder(templates: readonly Template[]): number {
+  return templates.reduce((max, template) => Math.max(max, template.order), -1) + 1
+}
+
+export type TemplateState = {
+  template: Template
+  /**
+   * Отметки, чьи позиции существуют. Удалённая позиция из кнопки выпадает:
+   * отметить её нельзя, а воскрешать надгробие отметкой — тем более.
+   */
+  marks: { item: CycleItem; price: number | null }[]
+  /** Все позиции кнопки уже отмечены сегодня — повторный тап их снимет. */
+  doneToday: boolean
+}
+
+/**
+ * Состояние кнопки на день `now`.
+ *
+ * «Отмечено сегодня» — только когда отмечены все позиции. Если отмечена одна
+ * из двух, тап доставит вторую, а не снимет первую: кнопка обещает «сделай
+ * всё», и доделать — это то, чего от неё ждут.
+ */
+export function templateState(
+  template: Template,
+  items: readonly CycleItem[],
+  events: readonly CycleEvent[],
+  now: DateStr = today(),
+): TemplateState {
+  const byId = new Map(items.filter((item) => !item.deleted).map((item) => [item.id, item]))
+  const marks = templateMarks(template.preset).flatMap((mark) => {
+    const item = byId.get(mark.itemId)
+    return item ? [{ item, price: mark.price ?? null }] : []
+  })
+
+  const markedToday = new Set(
+    events.filter((event) => !event.deleted && event.date === now).map((event) => event.itemId),
+  )
+  const doneToday = marks.length > 0 && marks.every((mark) => markedToday.has(mark.item.id))
+
+  return { template, marks, doneToday }
+}
+
+/**
+ * Последняя цена позиции — по дате отметки, а не по времени правки.
+ *
+ * Кнопку заводят с позиции, и цена в неё берётся отсюда: «Стрижка · 700 ₽»
+ * получается сама, без отдельного поля. Нет ни одной цены — null, и кнопка
+ * отмечает без цены, как обычный тап.
+ */
+export function lastPrice(events: readonly CycleEvent[], itemId: string): number | null {
+  const priced = events
+    .filter((event) => event.itemId === itemId && !event.deleted && isDateStr(event.date))
+    .filter((event) => priceOf(event) !== null)
+    .sort((a, b) => b.date.localeCompare(a.date))
+  const latest = priced[0]
+  return latest === undefined ? null : priceOf(latest)
 }

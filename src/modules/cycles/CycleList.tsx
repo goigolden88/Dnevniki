@@ -19,6 +19,7 @@ import {
   spentText,
   statusText,
 } from './labels.ts'
+import { QuickRow } from './Quick.tsx'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
 export function CycleList() {
@@ -44,6 +45,8 @@ export function CycleList() {
   return (
     <>
       {cycles.error && <p className="error">Не сохранилось: {cycles.error}</p>}
+
+      <QuickRow quick={cycles.quick} onPress={cycles.pressTemplate} />
 
       {cycles.states.length === 0 && (
         <p className="stub">
