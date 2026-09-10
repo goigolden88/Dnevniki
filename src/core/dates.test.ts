@@ -7,6 +7,8 @@ import {
   formatDate,
   formatDateLong,
   formatDateLoose,
+  formatDateOrMonth,
+  formatMonth,
   isDateStr,
   parseDate,
   plural,
@@ -191,5 +193,24 @@ describe('formatDateLoose', () => {
     expect(formatDateLoose('когда-то')).toBe('когда-то')
     expect(formatDateLoose('2026-13-45')).toBe('2026-13-45')
     expect(formatDateLoose('')).toBe('')
+  })
+})
+
+describe('formatMonth и formatDateOrMonth', () => {
+  it('месяц показывается месяцем, а не первым числом — Р-25', () => {
+    expect(formatMonth('2026-01')).toBe('январь 2026')
+    expect(formatMonth('2026-09')).toBe('сентябрь 2026')
+  })
+
+  it('дата известной точности показывается по своей точности', () => {
+    expect(formatDateOrMonth('2026-01')).toBe('январь 2026')
+    expect(formatDateOrMonth('2026-01-05')).toBe('05.01.2026')
+  })
+
+  it('нечитаемое отдаётся как есть — экран не должен падать из-за строки', () => {
+    expect(formatDateOrMonth('когда-то весной')).toBe('когда-то весной')
+    expect(formatDateOrMonth('2026-13')).toBe('2026-13')
+    expect(formatMonth('2026-01-05')).toBe('2026-01-05')
+    expect(formatDateOrMonth('')).toBe('')
   })
 })

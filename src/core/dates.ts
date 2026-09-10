@@ -30,6 +30,13 @@ const MONTHS_GENITIVE = [
   'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
 ]
 
+// Именительный падеж — для месяца, который стоит сам по себе:
+// «январь 2026», а не «7 января 2026».
+const MONTHS_NOMINATIVE = [
+  'январь', 'февраль', 'март', 'апрель', 'май', 'июнь',
+  'июль', 'август', 'сентябрь', 'октябрь', 'ноябрь', 'декабрь',
+]
+
 const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})$/
 const ISO_MONTH = /^(\d{4})-(\d{2})$/
 // Разделители разбираются по отдельности: в данных Obsidian встречается
@@ -152,6 +159,27 @@ export function formatDate(d: DateStr): string {
  */
 export function formatDateLoose(d: string): string {
   return isDateStr(d) ? formatDate(d) : d
+}
+
+/** `2026-01` → `январь 2026`. Не месяц — отдаёт строку как есть. */
+export function formatMonth(m: MonthStr): string {
+  if (!isMonthStr(m)) return m
+  return `${MONTHS_NOMINATIVE[Number(m.slice(5, 7)) - 1]} ${m.slice(0, 4)}`
+}
+
+/**
+ * Дата известной точности на экран (Р-25): день показывается днём,
+ * месяц — месяцем.
+ *
+ * Заведено под контент, где в дневнике дней нет вовсе. Подставлять
+ * первое число нельзя: через год никто не вспомнит, что «01.01» —
+ * это не то, что было записано. Нечитаемая строка отдаётся как есть,
+ * по той же причине, что и в `formatDateLoose`.
+ */
+export function formatDateOrMonth(value: string): string {
+  if (isDateStr(value)) return formatDate(value)
+  if (isMonthStr(value)) return formatMonth(value)
+  return value
 }
 
 /** `2026-09-07` → `7 сентября 2026` */
