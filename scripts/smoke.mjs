@@ -325,6 +325,20 @@ async function scenario() {
     byText('button', 'Добавить')?.click()
   `)
   await sleep(500)
+
+  // Р-51: у даты есть «сегодня». Сначала уводим дату в сторону, потом
+  // возвращаем чипом — иначе проверять нечего, поле и так сегодняшнее.
+  await act(`set(document.querySelector('form input[type=date]'), '2026-01-15')`)
+  await sleep(200)
+  await act(`byText('button', 'сегодня')?.click()`)
+  await sleep(300)
+  const startValue = await run(`document.querySelector('form input[type=date]')?.value`)
+  const todayValue = await run(`(() => {
+    const d = new Date()
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
+  })()`)
+  check('«сегодня» у даты возвращает сегодняшний день — Р-51', startValue === todayValue, `в поле ${startValue}`)
+
   await act(`byText('button', 'Завести')?.click()`)
   await sleep(800)
   const sick = await screen()

@@ -3,6 +3,7 @@ import { formatScore, statusLabel, TYPES } from './labels.ts'
 import { parseScore, SCORE_MAX, SCORE_MIN } from './content.ts'
 import { currentMonth, type EntryDraft } from './useContent.ts'
 import type { ContentEntry } from '../../core/model.ts'
+import { TodayButton } from '../../ui/TodayButton.tsx'
 
 const STATUSES: ContentEntry['status'][] = ['planned', 'active', 'done', 'dropped']
 
@@ -40,15 +41,23 @@ function PrecisionDate({
     }
   }
 
+  // «Сегодня» ставит день, а не месяц (Р-51): месяц по умолчанию нужен
+  // там, где день забыт, а сегодняшний день известен наверняка.
+  function pickToday(day: string) {
+    setPrecise(true)
+    onChange(day)
+  }
+
   return (
     <div className="field">
       <span>{label}</span>
-      <div className="row">
+      <div className="row row--wrap">
         <input
           type={precise ? 'date' : 'month'}
           value={precise ? (value ?? '') : (value ?? '').slice(0, 7)}
           onChange={(event) => onChange(event.target.value || null)}
         />
+        <TodayButton value={value} onPick={pickToday} />
         <button type="button" className="btn" onClick={toggle}>
           {precise ? 'Только месяц' : 'Уточнить день'}
         </button>

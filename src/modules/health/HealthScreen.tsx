@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { today } from '../../core/dates.ts'
 import type { Episode } from '../../core/model.ts'
+import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { EpisodeState } from './health.ts'
 import { episodeText, sourceText, symptomNames } from './labels.ts'
 import { Measures } from './Measures.tsx'
@@ -229,19 +230,24 @@ export function EpisodeForm({
         </div>
       </div>
 
-      <label className="field">
+      <div className="field">
         <span>Начало</span>
-        <input type="date" value={start} onChange={(event) => setStart(event.target.value)} />
-      </label>
+        <div className="row">
+          <input type="date" value={start} onChange={(event) => setStart(event.target.value)} />
+          <TodayButton value={start} onPick={setStart} />
+        </div>
+      </div>
 
       <div className="field">
         <span>Окончание</span>
-        <div className="row">
+        <div className="row row--wrap">
           <input
             type="date"
             value={end ?? ''}
             onChange={(event) => setEnd(event.target.value || null)}
           />
+          {/* Здесь «сегодня» — это «выздоровел сегодня» прямо из формы. */}
+          <TodayButton value={end} onPick={setEnd} />
           <button type="button" className="btn" onClick={() => setEnd(null)} disabled={end === null}>
             {end === null ? 'Ещё болею' : 'Сбросить'}
           </button>

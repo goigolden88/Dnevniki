@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { formatDateLoose, plural, today } from '../../core/dates.ts'
 import { activityTotals } from './health.ts'
 import type { Health } from './useHealth.ts'
+import { TodayButton } from '../../ui/TodayButton.tsx'
 
 /**
  * Тренировки: свод по видам и ввод.
@@ -125,8 +126,9 @@ function SessionForm({ health }: { health: Health }) {
         </datalist>
       </label>
 
-      <div className="row">
+      <div className="row row--wrap">
         <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        <TodayButton value={date} onPick={setDate} />
         <input
           className="price-input"
           value={minutes}

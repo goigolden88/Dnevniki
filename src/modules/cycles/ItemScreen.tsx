@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { daysBetween, days, formatDateLoose, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
+import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { CycleState } from './cycles.ts'
 import { knownGroups, MIN_INTERVALS, spent } from './cycles.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
@@ -305,9 +306,10 @@ function AddMark({
   return (
     <section className="block">
       <h2>Отметка задним числом</h2>
-      <div className="row">
+      <div className="row row--wrap">
         {/* type="date" отдаёт ровно YYYY-MM-DD — тот же формат, что в модели. */}
         <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <TodayButton value={date} onPick={setDate} />
         {/* Цена необязательна: у стрижки она есть, у мытья окон её нет. */}
         <input
           className="price-input"

@@ -3,6 +3,7 @@ import { formatDate, formatDateLoose, today } from '../../core/dates.ts'
 import { metricsOf, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
+import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { Health } from './useHealth.ts'
 
 /**
@@ -121,8 +122,9 @@ function MeasureForm({ metric, health }: { metric: string; health: Health }) {
   }
 
   return (
-    <form className="row" onSubmit={submit}>
+    <form className="row row--wrap" onSubmit={submit}>
       <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+      <TodayButton value={date} onPick={setDate} />
       <input
         className="price-input"
         value={value}
