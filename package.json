@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
+    "smoke": "node scripts/smoke.mjs",
     "icons": "node scripts/icons.mjs"
   },
   "dependencies": {
