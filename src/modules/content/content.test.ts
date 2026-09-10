@@ -3,6 +3,7 @@ import {
   contentStats,
   filterEntries,
   groupByMonth,
+  monthsOf,
   parseScore,
   scoreBucket,
   sortEntries,
@@ -227,6 +228,36 @@ describe('yearsOf', () => {
 
   it('записи без даты года не дают', () => {
     expect(yearsOf([entry({ start: null }), entry({ id: '2', start: 'мусор' })])).toEqual([])
+  })
+})
+
+describe('monthsOf', () => {
+  const all = [
+    entry({ id: '1', start: '2026-04' }),
+    entry({ id: '2', start: '2026-01-05' }),
+    entry({ id: '3', start: '2025-09' }),
+    entry({ id: '4', start: '2026-04-20' }),
+  ]
+
+  it('месяцы по возрастанию — это календарь, а не лента', () => {
+    expect(monthsOf(all, '2026')).toEqual([1, 4])
+  })
+
+  it('без года — месяцы по всем годам сразу', () => {
+    expect(monthsOf(all)).toEqual([1, 4, 9])
+  })
+
+  it('повторы схлопываются', () => {
+    expect(monthsOf([entry({ id: 'а', start: '2026-04' }), entry({ id: 'б', start: '2026-04' })])).toEqual([4])
+  })
+
+  it('записи без даты и надгробия месяцев не дают', () => {
+    expect(monthsOf([entry({ start: null }), entry({ id: '2', start: 'мусор' })])).toEqual([])
+    expect(monthsOf([entry({ start: '2026-04', deleted: true })])).toEqual([])
+  })
+
+  it('пустой год даёт пустой список — чипов не будет вовсе', () => {
+    expect(monthsOf(all, '2019')).toEqual([])
   })
 })
 

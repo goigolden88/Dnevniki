@@ -390,6 +390,37 @@ async function scenario() {
     line(watched, 'Сентябрь'),
   )
 
+  // Вторая запись другим месяцем — иначе фильтр по месяцам не из чего
+  // строить: ряд чипов появляется, только когда месяцев больше одного.
+  await act(`byText('button', 'Добавить запись')?.click()`)
+  await sleep(300)
+  await act(`
+    set(document.querySelector('form input'), 'Мартовский фильм')
+    set(document.querySelector('form input[type=month]'), '2026-03')
+    byText('button', 'просмотрено')?.click()
+  `)
+  await sleep(400)
+  await act(`byText('button', 'Добавить')?.click()`)
+  await sleep(800)
+  const twoMonths = await screen()
+  check(
+    'два месяца — два заголовка',
+    has(twoMonths, 'Сентябрь 2026') && has(twoMonths, 'Март 2026'),
+    line(twoMonths, 'Март'),
+  )
+
+  await act(`byText('button', 'мар')?.click()`)
+  await sleep(500)
+  const march = await screen()
+  const inMarch = await run(`document.querySelectorAll('.cycles li').length`)
+  check('фильтр по месяцу оставляет только свой месяц', inMarch === 1, `карточек ${inMarch}`)
+  check('и это правда март', has(march, 'Мартовский фильм') && !has(march, 'Сентябрь 2026'))
+
+  await act(`byText('button', 'Весь год')?.click()`)
+  await sleep(500)
+  const wholeYear = await run(`document.querySelectorAll('.cycles li').length`)
+  check('«весь год» возвращает обе записи', wholeYear === 2, `карточек ${wholeYear}`)
+
   await act(`byText('button', 'брошено')?.click()`)
   await sleep(500)
   const dropped = await screen()

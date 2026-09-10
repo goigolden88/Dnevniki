@@ -2,11 +2,13 @@ import { useState } from 'react'
 import {
   filterEntries,
   groupByMonth,
+  monthsOf,
   sortEntries,
   yearsOf,
   type EntryStatus,
   type EntryType,
 } from './content.ts'
+import { MONTHS_SHORT } from '../../core/dates.ts'
 import { entriesText, monthHeading, statusLabel, TYPES } from './labels.ts'
 import { EntryCard } from './EntryCard.tsx'
 import type { Content } from './useContent.ts'
@@ -35,12 +37,18 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
   const [status, setStatus] = useState<EntryStatus>('done')
   const [type, setType] = useState<EntryType | null>(null)
   const [year, setYear] = useState<string>(ALL_YEARS)
+  const [month, setMonth] = useState<number | null>(null)
   const [query, setQuery] = useState('')
 
   const years = yearsOf(entries)
-  // У намерений даты нет по определению (Р-21), и выбор года над ними —
+  // У намерений даты нет по определению (Р-21), и выбор периода над ними —
   // переключатель, который ничего не переключает.
   const dated = status !== 'planned'
+
+  // Месяцы считаются по статусу и году, но не по типу: иначе ряд чипов
+  // перестраивался бы под пальцем при каждом переключении типа.
+  const inPeriod = entries.filter((entry) => entry.status === status)
+  const months = monthsOf(inPeriod, year === ALL_YEARS ? null : year)
 
   const shown = sortEntries(
     filterEntries(entries, {
@@ -48,6 +56,7 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
       type,
       query,
       year: dated && year !== ALL_YEARS ? year : null,
+      month: dated ? month : null,
     }),
   )
   const groups = groupByMonth(shown)
@@ -64,7 +73,12 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
             type="button"
             className={each === status ? 'chip chip--on' : 'chip'}
             aria-pressed={each === status}
-            onClick={() => setStatus(each)}
+            onClick={() => {
+              setStatus(each)
+              // По той же причине, по которой месяц сбрасывается вместе
+              // с годом: у брошенного апреля может не быть вовсе.
+              setMonth(null)
+            }}
           >
             {statusLabel(each)}
           </button>
@@ -101,9 +115,39 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
               type="button"
               className={each === year ? 'chip chip--on' : 'chip'}
               aria-pressed={each === year}
-              onClick={() => setYear(each)}
+              onClick={() => {
+                setYear(each)
+                // Месяц сбрасывается вместе с годом: апрель, выбранный
+                // в 2026-м, в 2025-м может оказаться пустым, и список
+                // молча стал бы пустым при переключении года.
+                setMonth(null)
+              }}
             >
               {each}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {dated && months.length > 1 && (
+        <div className="chips">
+          <button
+            type="button"
+            className={month === null ? 'chip chip--on' : 'chip'}
+            aria-pressed={month === null}
+            onClick={() => setMonth(null)}
+          >
+            Весь год
+          </button>
+          {months.map((each) => (
+            <button
+              key={each}
+              type="button"
+              className={each === month ? 'chip chip--on' : 'chip'}
+              aria-pressed={each === month}
+              onClick={() => setMonth(each)}
+            >
+              {MONTHS_SHORT[each - 1]}
             </button>
           ))}
         </div>

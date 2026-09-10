@@ -170,6 +170,28 @@ export function yearsOf(entries: readonly ContentEntry[]): string[] {
   return [...years].sort((a, b) => b.localeCompare(a))
 }
 
+/**
+ * Месяцы 1..12, за которые в списке есть записи. По возрастанию — это
+ * календарь, а не лента: выбирают месяц по счёту в году, а не по свежести.
+ *
+ * Только непустые: чип на месяц, в котором ничего нет, — это тап, ведущий
+ * к «ничего не нашлось». Годы над списком отбираются по тому же правилу.
+ *
+ * `year` сужает выбор до одного года; null — месяцы по всем годам сразу.
+ */
+export function monthsOf(entries: readonly ContentEntry[], year: string | null = null): number[] {
+  const months = new Set<number>()
+
+  for (const entry of live(entries)) {
+    const start = startOf(entry)
+    if (start === null) continue
+    if (year !== null && start.slice(0, 4) !== year) continue
+    months.add(Number(start.slice(5, 7)))
+  }
+
+  return [...months].sort((a, b) => a - b)
+}
+
 // ─── Оценки ────────────────────────────────────────────────────────────────
 
 /**
