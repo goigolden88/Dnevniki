@@ -235,11 +235,12 @@ async function go(hash) {
 // ─── Сценарий ──────────────────────────────────────────────────────────────
 
 /**
- * Обычный путь человека через оба модуля.
+ * Обычный путь человека через все три модуля.
  *
  * Ровно то, что делают каждый день: отметить, вписать цену, завести
- * эпизод, закрыть его. Экраны, на которые никто не заходит, сюда
- * добавлять незачем — они и сломаются незаметно.
+ * эпизод, закрыть его, завести запись контента и досмотреть её. Экраны,
+ * на которые никто не заходит, сюда добавлять незачем — они и сломаются
+ * незаметно.
  */
 async function scenario() {
   await send('Runtime.enable')
@@ -348,8 +349,47 @@ async function scenario() {
   const summary = await screen()
   check('сводка для врача собирается', has(summary, 'Хронология'))
 
-  await go('/settings')
-  check('настройки открываются', has(await screen(), 'Версия схемы'))
+  // ─ Контент
+  await go('/content')
+  check('экран контента открылся', has(await screen(), 'Контент'))
+
+  await act(`byText('button', 'Добавить запись')?.click()`)
+  await sleep(300)
+  await act(`
+    const fields = [...document.querySelectorAll('form input')]
+    set(fields[0], 'Пробное аниме')
+    set(document.querySelector('.score-input'), '7,5')
+    byText('button', 'Добавить')?.click()
+  `)
+  await sleep(800)
+  const added = await screen()
+  check('запись завелась и попала в «смотрю сейчас»', has(added, 'Смотрю сейчас'))
+  check('оценка с десятыми сохранилась', has(added, '7,5'), line(added, '7,5'))
+
+  await go('/')
+  check('«смотрю сейчас» видно на главной', has(await screen(), 'Смотрю сейчас'))
+
+  await go('/content')
+  await act(`byText('button', 'Досмотрел')?.click()`)
+  await sleep(800)
+  const watched = await screen()
+  check('запись досмотрена', !has(watched, 'Смотрю сейчас'))
+  check(
+    'итоги считают начатое и законченное',
+    has(watched, 'Начато 1') && has(watched, 'закончено 1'),
+    line(watched, 'Начато'),
+  )
+  check(
+    'среднее идёт с числом записей — Р-38',
+    has(watched, 'по 1 записи'),
+    line(watched, 'Средняя оценка'),
+  )
+
+  // Настройки открываются шестерёнкой, а не вкладкой (Р-43).
+  await go('/')
+  await act(`document.querySelector('.gear')?.click()`)
+  await sleep(700)
+  check('настройки открываются шестерёнкой', has(await screen(), 'Версия схемы'))
 }
 
 /** Строка экрана с образцом внутри. Для внятного отчёта о непрошедшем. */
