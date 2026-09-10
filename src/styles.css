@@ -80,6 +80,31 @@ p {
   margin-bottom: 24px;
 }
 
+/* Заголовок с шестерёнкой справа. Настройки ушли из нижней панели
+   в шапку «Сейчас» (Р-43): открывают их раз в месяц, а место в панели
+   они занимали наравне с ежедневным. */
+.screen-head__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.gear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Не меньше 44 пикселей: палец в глиф размером с букву не попадает. */
+  min-width: 44px;
+  min-height: 44px;
+  margin-right: -10px;
+  color: var(--muted);
+  font-size: 22px;
+  line-height: 1;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .screen-head p {
   margin: 4px 0 0;
 }
@@ -152,14 +177,22 @@ p {
 
 .tab {
   flex: 1;
+  /* min-width: auto у элементов флекса не даёт подписи сжиматься ниже
+     собственной ширины, и панель уезжает вбок при крупном системном
+     шрифте. Ноль вместе с многоточием держит её на месте всегда. */
+  min-width: 0;
   height: var(--tabs-height);
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0 2px;
   color: var(--muted);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -450,12 +483,12 @@ p {
   accent-color: var(--accent);
 }
 
-/* Точка на вкладке «Настройки»: очередь не ушла либо что-то сломалось.
-   Стоит в потоке рядом с надписью: вкладка — flex-строка, и позиционировать
-   точку абсолютно не от чего. */
+/* Точка на шестерёнке: очередь не ушла либо что-то сломалось.
+   Стоит в потоке рядом с глифом — шестерёнка flex-строка, и
+   позиционировать точку абсолютно не от чего. */
 .dot {
-  align-self: center;
-  margin: 0 0 6px 5px;
+  align-self: flex-start;
+  margin: 6px 0 0 1px;
   width: 7px;
   height: 7px;
   flex: none;
@@ -617,6 +650,87 @@ p {
 .months__name {
   font-size: 10px;
   color: var(--muted);
+}
+
+/* ─── Контент ────────────────────────────────────────────────────────────── */
+
+/* Распределение оценок: столбик на балл, подпись баллом снизу.
+   Своё семейство классов, а не общее с сезонностью здоровья: столбиков
+   десять против двенадцати, и модули друг про друга не знают. */
+.scores {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 70px;
+  margin: 12px 0;
+}
+
+.scores__cell {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 3px;
+}
+
+.scores__bar {
+  width: 100%;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  background: var(--accent);
+}
+
+.scores__name {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.search {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 12px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+}
+
+.score-input {
+  /* Оценка вводится с телефона одной рукой: поле во всю ширину,
+     как остальные поля формы. */
+  width: 100%;
+}
+
+/* Раскрытая карточка записи. Комментарии в перенесённых записях бывают
+   в несколько строк, и разворачиваются они на месте, а не на своём экране. */
+.entry__more {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.entry__comment {
+  margin: 0;
+  font-size: 14px;
+  white-space: pre-wrap;
+}
+
+/* Название-кнопка. Выглядит как название, ведёт себя как кнопка:
+   раскрывает карточку, а не уводит на другой экран. */
+.plain-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Сводка для врача. На бумаге не нужны ни вкладки, ни кнопки:

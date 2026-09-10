@@ -1,22 +1,21 @@
 import { NavLink, Outlet } from 'react-router-dom'
-import { useSyncStatus } from './useSync.ts'
 
+/**
+ * Нижняя панель: только то, что открывают каждый день.
+ *
+ * «Настроек» здесь нет намеренно (Р-43). В них заходят раз в месяц,
+ * а место в панели они занимали наравне с ежедневным — и с появлением
+ * контента панель перестала помещаться на телефоне. Настройки живут
+ * шестерёнкой в шапке экрана «Сейчас», там же индикатор синхронизации.
+ */
 const TABS = [
   { to: '/', label: 'Сейчас', end: true },
   { to: '/health', label: 'Здоровье', end: false },
+  { to: '/content', label: 'Контент', end: false },
   { to: '/feed', label: 'Лента', end: false },
-  { to: '/settings', label: 'Настройки', end: false },
 ]
 
 export function Layout() {
-  const status = useSyncStatus()
-
-  // Синхронизация живёт в фоне, и единственное место, где о ней можно узнать,
-  // — «Настройки». Точка на вкладке говорит, что туда стоит заглянуть:
-  // красная — что-то сломалось, тусклая — очередь не ушла.
-  const mark =
-    status.state === 'error' ? 'dot dot--error' : status.pending > 0 ? 'dot' : ''
-
   return (
     <div className="layout">
       <main className="content">
@@ -32,7 +31,6 @@ export function Layout() {
             className={({ isActive }) => (isActive ? 'tab tab--active' : 'tab')}
           >
             {tab.label}
-            {tab.to === '/settings' && mark && <span className={mark} aria-hidden="true" />}
           </NavLink>
         ))}
       </nav>

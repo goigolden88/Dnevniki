@@ -7,6 +7,7 @@ import { ItemScreen } from './modules/cycles/ItemScreen.tsx'
 import { HealthScreen } from './modules/health/HealthScreen.tsx'
 import { EpisodeScreen } from './modules/health/EpisodeScreen.tsx'
 import { SummaryScreen } from './modules/health/SummaryScreen.tsx'
+import { ContentScreen } from './modules/content/ContentScreen.tsx'
 import { Feed } from './screens/Feed.tsx'
 import { Settings } from './screens/Settings.tsx'
 
@@ -30,6 +31,7 @@ export function App() {
           <Route path="health" element={<HealthScreen />} />
           <Route path="health/summary" element={<SummaryScreen />} />
           <Route path="episode/:id" element={<EpisodeScreen />} />
+          <Route path="content" element={<ContentScreen />} />
           <Route path="feed" element={<Feed />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to="/" replace />} />
