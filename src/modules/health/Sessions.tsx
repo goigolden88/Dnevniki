@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { formatDateLoose, plural, today } from '../../core/dates.ts'
 import { activityTotals } from './health.ts'
+import { sessionText } from './labels.ts'
 import type { Health } from './useHealth.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 
@@ -34,7 +35,7 @@ export function Sessions({ health }: { health: Health }) {
                 <td className="num">
                   {total.sessions} {plural(total.sessions, ['раз', 'раза', 'раз'])}
                 </td>
-                <td className="num muted">{totalText(total.minutes, total.km)}</td>
+                <td className="num muted">{sessionText(total.minutes, total.km)}</td>
               </tr>
             ))}
           </tbody>
@@ -51,7 +52,7 @@ export function Sessions({ health }: { health: Health }) {
                   <td>{formatDateLoose(session.date)}</td>
                   <td>{names.get(session.activity) ?? '?'}</td>
                   <td className="num muted">
-                    {totalText(session.durationMin ?? 0, session.distanceKm ?? 0)}
+                    {sessionText(session.durationMin ?? 0, session.distanceKm ?? 0)}
                   </td>
                   <td className="num">
                     <button
@@ -71,14 +72,6 @@ export function Sessions({ health }: { health: Health }) {
       )}
     </section>
   )
-}
-
-/** «40 мин · 7.5 км». Ноль не показывается: его не записывали. */
-function totalText(minutes: number, km: number): string {
-  const parts: string[] = []
-  if (minutes > 0) parts.push(`${minutes} мин`)
-  if (km > 0) parts.push(`${km} км`)
-  return parts.join(' · ')
 }
 
 function SessionForm({ health }: { health: Health }) {

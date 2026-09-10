@@ -738,6 +738,63 @@ p {
   margin-top: 4px;
 }
 
+/* Группа с нечитаемой датой стоит в ленте сверху и красным: это поломка,
+   которую надо увидеть и поправить (Р-34, Р-52), а не обычный месяц. */
+.month-group__head--warn {
+  color: var(--error);
+}
+
+/* ─── Лента ──────────────────────────────────────────────────────────────── */
+
+/* Строки, а не карточки: в ленте их сотни, и карточка на каждую
+   превратила бы год в три метра прокрутки. */
+.feed {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+}
+
+.feed__row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.feed__date {
+  flex: none;
+  width: 4.6em;
+  font-size: 13px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.feed__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.feed__title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.feed__detail {
+  font-size: 13px;
+}
+
+.feed__kind {
+  flex: none;
+  font-size: 12px;
+}
+
 .search {
   width: 100%;
   min-height: 44px;

@@ -374,7 +374,7 @@ const NOTHING: Spent = { sum: 0, priced: 0, marks: 0 }
  * ломать сумму по всей категории. Ноль — годная цена: замена по гарантии
  * стоила нисколько, и это тоже факт.
  */
-function priceOf(event: CycleEvent): number | null {
+export function priceOf(event: CycleEvent): number | null {
   const price = event.price
   if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return null
   return price

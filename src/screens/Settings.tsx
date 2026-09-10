@@ -11,6 +11,7 @@ import {
   type ReminderStatus,
   type RemindResult,
 } from '../notify.ts'
+import { markdownExport } from '../registry.ts'
 import { backupNote } from '../ui/backup.ts'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
@@ -139,20 +140,33 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
     setError('')
     try {
       const snapshot = await db.exportAll()
-      const blob = new Blob([JSON.stringify(snapshot, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `dnevniki-${today()}.json`
-      link.click()
-      // Ссылка держит слепок в памяти, пока её не отпустить.
-      URL.revokeObjectURL(url)
+      download(`dnevniki-${today()}.json`, JSON.stringify(snapshot, null, 2), 'application/json')
       // Браузер не сообщает, дошёл ли файл до диска: диалог мог быть отменён.
       // Отметка означает «выгрузку запускали», а не «копия точно есть».
       const at = new Date().toISOString()
       await db.settings.set(LAST_EXPORT, at)
       setLastSaved(at)
       setNote('Файл сохранён')
+    } catch (failure) {
+      setError(describe(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Markdown — для чтения глазами и на случай отказа от приложения:
+   * дневники остаются текстом, открываемым где угодно. Отметку о выгрузке
+   * не ставит — это не копия, из которой можно восстановиться.
+   */
+  async function saveMarkdown() {
+    setBusy(true)
+    setNote('')
+    setError('')
+    try {
+      const snapshot = await db.exportAll()
+      download(`dnevniki-${today()}.md`, markdownExport(snapshot.data, today()), 'text/markdown')
+      setNote('Markdown сохранён. Он для чтения: обратно в приложение загружается только JSON.')
     } catch (failure) {
       setError(describe(failure))
     } finally {
@@ -201,6 +215,12 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
         </button>
       </div>
 
+      <div className="row row--end">
+        <button type="button" className="btn" onClick={() => void saveMarkdown()} disabled={busy}>
+          Сохранить в markdown
+        </button>
+      </div>
+
       <input
         ref={input}
         type="file"
@@ -226,6 +246,17 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
 }
 
 const LAST_EXPORT = 'lastExportAt'
+
+/** Отдать текст файлом через ссылку со скачиванием. */
+function download(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }))
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  link.click()
+  // Ссылка держит содержимое в памяти, пока её не отпустить.
+  URL.revokeObjectURL(url)
+}
 
 const REMINDER_TEXT: Record<ReminderStatus, string> = {
   unsupported:

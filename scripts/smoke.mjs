@@ -520,11 +520,37 @@ async function scenario() {
   const cards = await run(`document.querySelectorAll('.cycles li').length`)
   check('просмотренное в брошенные не затесалось', cards === 0, `карточек ${cards}`)
 
+  // ─ Лента (Р-48, Р-52): записи всех трёх модулей одним списком.
+  await go('/feed')
+  const feedText = await screen()
+  check(
+    'лента собирает записи всех трёх модулей',
+    has(feedText, 'Стрижка') && has(feedText, 'Пробный эпизод') && has(feedText, 'Мартовский фильм'),
+    line(feedText, 'запис'),
+  )
+  const rows = () => run(`document.querySelectorAll('.feed li').length`)
+  const allRows = await rows()
+  await act(`set(document.querySelector('.search'), 'пробный эпизод')`)
+  await sleep(400)
+  const found = await rows()
+  check('поиск сужает ленту', found === 1, `строк ${found} из ${allRows}`)
+  await act(`set(document.querySelector('.search'), '')`)
+  await sleep(300)
+  await act(`byText('button', 'Контент')?.click()`)
+  await sleep(400)
+  const contentRows = await rows()
+  check('чип вида отбирает свой модуль', contentRows === 2, `строк ${contentRows}`)
+  check('«к просмотру» в ленте названо словами', has(await screen(), 'в ленту не входит'))
+
   // Настройки открываются шестерёнкой, а не вкладкой (Р-43).
   await go('/')
   await act(`document.querySelector('.gear')?.click()`)
   await sleep(700)
   check('настройки открываются шестерёнкой', has(await screen(), 'Версия схемы'))
+
+  await act(`byText('button', 'Сохранить в markdown')?.click()`)
+  await sleep(700)
+  check('выгрузка в markdown собирается без ошибок', has(await screen(), 'Markdown сохранён'))
 
   // ─ Service worker свой (Р-50). Главный риск перехода — что работник
   // вовсе не встанет, и приложение потеряет офлайн и автообновление.
@@ -576,6 +602,33 @@ async function scenario() {
     (await pressed()) === 'true' && !has(done, 'Требует внимания'),
     line(done, 'Фильтр'),
   )
+
+  // ─ Без сети (Р-50). Ради этого работник и существует, а после перехода
+  // на свой файл подмена навигации и кеш написаны руками. Проверяется и то,
+  // что страницу отдал работник: иначе при непойманном офлайне проверка
+  // прошла бы на обычной загрузке из сети.
+  await send('Network.enable')
+  await send('Network.emulateNetworkConditions', {
+    offline: true,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  })
+  await send('Page.navigate', { url: `${APP}#/feed` })
+  await sleep(2000)
+  const offline = await screen()
+  const controlled = await run('navigator.serviceWorker.controller !== null')
+  check(
+    'без сети приложение открывается из кеша',
+    has(offline, 'Лента') && has(offline, 'Стрижка') && controlled === true,
+    `работник ${controlled ? 'управляет' : 'не управляет'} страницей`,
+  )
+  await send('Network.emulateNetworkConditions', {
+    offline: false,
+    latency: 0,
+    downloadThroughput: -1,
+    uploadThroughput: -1,
+  })
 }
 
 /**

@@ -25,6 +25,17 @@ export function metricUnit(metric: string): string {
   return METRICS.find((each) => each.key === metric)?.unit ?? ''
 }
 
+/**
+ * «40 мин · 7.5 км» — длительность и дистанция тренировки.
+ * Ноль не показывается: его не записывали, а «0 км» у зарядки — неправда.
+ */
+export function sessionText(minutes: number, km: number): string {
+  const parts: string[] = []
+  if (minutes > 0) parts.push(`${minutes} мин`)
+  if (km > 0) parts.push(`${km} км`)
+  return parts.join(' · ')
+}
+
 /** Значение измерения с единицей: «75 кг», «120/80». */
 export function measureText(metric: string, value: number, value2?: number): string {
   if (value2 !== undefined) return `${value}/${value2}`
