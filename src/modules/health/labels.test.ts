@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { episodeState, recentSymptoms } from './health.ts'
-import { episodeText, measureText, statsText, symptomNames, gapText } from './labels.ts'
+import {
+  episodeText,
+  gapText,
+  healthyText,
+  measureText,
+  statsText,
+  symptomNames,
+} from './labels.ts'
 import { healthStats } from './health.ts'
 import type { Episode, Tag } from '../../core/model.ts'
 
@@ -98,7 +105,9 @@ describe('statsText и gapText', () => {
   })
 
   it('промежуток здоровья — отдельная строка про другой вопрос', () => {
-    expect(gapText(healthStats(year, {}, NOW))).toBe('Между эпизодами в среднем 42 дня без болезни')
+    expect(gapText(healthStats(year, {}, NOW))).toBe(
+      'Между эпизодами проходило в среднем 42 дня — по 1 промежутку',
+    )
   })
 })
 
@@ -122,5 +131,43 @@ describe('recentSymptoms', () => {
       episode({ id: 'b', start: '2026-08-01', symptoms: ['жар'], deleted: true }),
     ]
     expect(recentSymptoms(episodes, ['горло', 'жар'])).toEqual(['горло', 'жар'])
+  })
+})
+
+describe('healthyText', () => {
+  it('называет полосу здоровья и дату, с которой она идёт', () => {
+    const stats = healthStats([episode({ start: '2025-09-01', end: '2025-09-05' })], {}, NOW)
+    expect(healthyText(stats)).toBe('Не болел 369 дней — с 05.09.2025')
+  })
+
+  it('в день выздоровления говорит об этом прямо', () => {
+    const stats = healthStats([episode({ start: '2026-09-01', end: NOW })], {}, NOW)
+    expect(healthyText(stats)).toBe('Выздоровел сегодня')
+  })
+
+  it('молчит, пока болеешь', () => {
+    const stats = healthStats([episode({ start: '2026-09-01', end: null })], {}, NOW)
+    expect(healthyText(stats)).toBe('')
+  })
+})
+
+describe('gapText называет число промежутков', () => {
+  it('среднее по двум наблюдениям сообщает, что их два', () => {
+    const three = [
+      episode({ id: 'a', start: '2026-01-05', end: '2026-01-09' }),
+      episode({ id: 'b', start: '2026-02-20', end: '2026-02-21' }),
+      episode({ id: 'c', start: '2026-04-01', end: '2026-04-03' }),
+    ]
+    expect(gapText(healthStats(three, {}, NOW))).toBe(
+      'Между эпизодами проходило в среднем 40,5 дня — по 2 промежуткам',
+    )
+  })
+
+  it('один промежуток склоняется правильно', () => {
+    const two = [
+      episode({ id: 'a', start: '2026-01-05', end: '2026-01-09' }),
+      episode({ id: 'b', start: '2026-02-20', end: '2026-02-21' }),
+    ]
+    expect(gapText(healthStats(two, {}, NOW))).toContain('по 1 промежутку')
   })
 })

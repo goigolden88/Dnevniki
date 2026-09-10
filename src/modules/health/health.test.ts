@@ -251,3 +251,42 @@ describe('activityTotals', () => {
     expect(activityTotals(dirty)).toHaveLength(2)
   })
 })
+
+describe('здоровая полоса', () => {
+  it('считает дни с последнего выздоровления', () => {
+    // То, из-за чего всё и затевалось: год без болезней не отражался
+    // на экране никак, потому что промежутки считаются только между
+    // эпизодами, а последнюю полосу закрыть нечем.
+    const stats = healthStats([episode({ start: '2025-09-01', end: '2025-09-05' })], {}, NOW)
+    expect(stats.healthySince).toBe('2025-09-05')
+    expect(stats.healthyDays).toBe(369)
+  })
+
+  it('молчит, пока эпизод открыт: «не болел» тогда неправда', () => {
+    const list = [
+      episode({ id: 'a', start: '2025-09-01', end: '2025-09-05' }),
+      episode({ id: 'b', start: '2026-09-01', end: null }),
+    ]
+    const stats = healthStats(list, {}, NOW)
+    expect(stats.healthyDays).toBeNull()
+    expect(stats.healthySince).toBeNull()
+  })
+
+  it('без единого закрытого эпизода считать не из чего', () => {
+    expect(healthStats([], {}, NOW).healthyDays).toBeNull()
+  })
+
+  it('берёт самый поздний конец, а не конец последнего начавшегося', () => {
+    // Эпизоды накладываются: начатый раньше может кончиться позже.
+    const list = [
+      episode({ id: 'долгий', start: '2026-01-01', end: '2026-06-01' }),
+      episode({ id: 'короткий', start: '2026-02-01', end: '2026-02-03' }),
+    ]
+    expect(healthStats(list, {}, NOW).healthySince).toBe('2026-06-01')
+  })
+
+  it('выздоровление сегодня — ноль дней, а не минус', () => {
+    const stats = healthStats([episode({ start: '2026-09-01', end: NOW })], {}, NOW)
+    expect(stats.healthyDays).toBe(0)
+  })
+})

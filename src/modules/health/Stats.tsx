@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { days } from '../../core/dates.ts'
 import { healthStats } from './health.ts'
-import { gapText, MONTHS_SHORT, statsText } from './labels.ts'
+import { gapText, healthyText, MONTHS_SHORT, statsText } from './labels.ts'
 import type { Health } from './useHealth.ts'
 
 /** Что показывается, когда год не выбран. */
@@ -25,6 +25,12 @@ export function Stats({ health }: { health: Health }) {
   const period = year === ALL ? {} : { from: `${year}-01-01`, to: `${year}-12-31` }
   const stats = healthStats(episodes, period, health.day)
 
+  // Нынешняя полоса здоровья считается по всей истории и стоит над
+  // переключателем года: это факт про сегодня, а не про выбранный период.
+  // Внутри периода она была бы невидимой ровно тогда, когда важнее всего, —
+  // когда последний эпизод был в прошлом году, а этот год чистый.
+  const now = healthStats(episodes, {}, health.day)
+
   if (health.episodes.length === 0) return null
 
   const names = new Map(health.tags.map((tag) => [tag.id, tag.name]))
@@ -33,6 +39,8 @@ export function Stats({ health }: { health: Health }) {
   return (
     <section className="block">
       <h2>Итоги</h2>
+
+      {healthyText(now) && <p className="lead">{healthyText(now)}</p>}
 
       {years.length > 1 && (
         <div className="chips">
@@ -51,7 +59,9 @@ export function Stats({ health }: { health: Health }) {
       )}
 
       {stats.count === 0 ? (
-        <p className="muted">За этот период эпизодов не было.</p>
+        <p className="muted">
+          {year === ALL ? 'Эпизодов пока нет.' : `За ${year} год эпизодов не было.`}
+        </p>
       ) : (
         <>
           <p>{statsText(stats)}</p>

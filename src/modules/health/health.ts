@@ -95,10 +95,26 @@ export type HealthStats = {
   averageDays: number | null
   medianDays: number | null
   longestDays: number | null
-  /** Промежутки здоровья: от конца одного эпизода до начала следующего. */
+  /**
+   * Промежутки здоровья: от конца одного эпизода до начала следующего.
+   *
+   * Только между эпизодами. Время после последнего эпизода сюда не входит
+   * и войти не может: промежуток нечем закрыть, следующего эпизода нет.
+   * Для него есть `healthyDays` — без него год без болезней не был бы
+   * виден на экране вовсе.
+   */
   gaps: number[]
   /** Средний промежуток между эпизодами. Null — их меньше двух. */
   averageGap: number | null
+  /**
+   * Сколько дней прошло с последнего выздоровления.
+   *
+   * Null, если болеешь прямо сейчас или ни один эпизод не закрыт: «не болел
+   * столько-то» в этих случаях либо неправда, либо не из чего считать.
+   */
+  healthyDays: number | null
+  /** Дата последнего выздоровления — та, от которой считается `healthyDays`. */
+  healthySince: DateStr | null
   /** Сколько эпизодов началось в каждом месяце. Двенадцать чисел с января. */
   byMonth: number[]
   /** Симптомы по убыванию частоты, при равенстве — по id для устойчивости. */
@@ -172,6 +188,13 @@ export function healthStats(
     gaps.push(Math.max(daysBetween(finish, next.start), 0))
   }
 
+  // Сколько дней здоровья идёт прямо сейчас. Считается от самого позднего
+  // конца, а не от конца последнего начавшегося: эпизоды могут накладываться,
+  // и более ранний по началу иногда кончается позже.
+  const ends = taken.map(endOf).filter((end): end is DateStr => end !== null)
+  const anyOpen = taken.some((episode) => episode.end === null)
+  const healthySince = anyOpen || ends.length === 0 ? null : ends.sort().at(-1) ?? null
+
   return {
     count: taken.length,
     closed: durations.length,
@@ -180,6 +203,8 @@ export function healthStats(
     longestDays: durations.length === 0 ? null : Math.max(...durations),
     gaps,
     averageGap: average(gaps),
+    healthyDays: healthySince === null ? null : Math.max(daysBetween(healthySince, now), 0),
+    healthySince,
     byMonth,
     symptoms: [...symptoms.entries()]
       .map(([tagId, count]) => ({ tagId, count }))
