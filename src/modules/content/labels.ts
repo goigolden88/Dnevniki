@@ -6,9 +6,16 @@
  * и русских строк не содержит.
  */
 
-import { formatDateOrMonth, formatMonth, monthName, plural } from '../../core/dates.ts'
+import { formatDateOrMonth, formatMonth, MONTHS_SHORT, monthName, plural } from '../../core/dates.ts'
 import type { ContentEntry } from '../../core/model.ts'
-import { scoreOf, startOf, type ContentStats, type EntryType, type TypeCount } from './content.ts'
+import {
+  monthRanges,
+  scoreOf,
+  startOf,
+  type ContentStats,
+  type EntryType,
+  type TypeCount,
+} from './content.ts'
 
 /**
  * Шесть типов из модели. Порядок — тот, в котором они предлагаются
@@ -140,6 +147,34 @@ export function monthHeading(month: string | null): string {
   if (month === null) return 'Без даты'
   const text = formatMonth(month)
   return text.charAt(0).toUpperCase() + text.slice(1)
+}
+
+/**
+ * Выбранные месяцы одной строкой: `[1,2,3,5]` → «янв–мар, май».
+ *
+ * Сплошные отрезки склеиваются: перечисление двенадцати сокращений
+ * длиннее строки, ради которой затевалось. Пусто — месяцы не выбраны,
+ * то есть все, и говорить об этом нечего.
+ */
+export function monthsText(months: readonly number[]): string {
+  return monthRanges(months)
+    .map(([from, to]) =>
+      from === to ? MONTHS_SHORT[from - 1] : `${MONTHS_SHORT[from - 1]}–${MONTHS_SHORT[to - 1]}`,
+    )
+    .join(', ')
+}
+
+/**
+ * Выбранный период человеческими словами — для строки под фильтрами.
+ *
+ * Она отвечает на вопрос «а что сейчас показано», когда сами ряды чипов
+ * свёрнуты. Без неё свёрнутый фильтр молча врал бы: список короткий,
+ * а почему — не видно.
+ */
+export function periodText(year: string | null, months: readonly number[]): string {
+  const period = year === null ? 'всё время' : year
+  const chosen = monthsText(months)
+  return chosen ? `${period}, ${chosen}` : period
 }
 
 /**

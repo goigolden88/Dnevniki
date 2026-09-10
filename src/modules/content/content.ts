@@ -84,8 +84,14 @@ export type EntryFilter = {
   query?: string
   /** Год `YYYY`. null — все годы. */
   year?: string | null
-  /** Месяц 1..12. null — все месяцы. */
-  month?: number | null
+  /**
+   * Месяцы 1..12. Пусто — все месяцы.
+   *
+   * Список, а не одно число: «что я смотрел прошлой весной» — это март,
+   * апрель и май разом, и три отдельных просмотра на этот вопрос
+   * не отвечают.
+   */
+  months?: readonly number[]
   /**
    * Только записи без разбираемой даты начала.
    *
@@ -120,11 +126,12 @@ export function filterEntries(
 
     if (filter.undated && startOf(entry) !== null) return false
 
-    if (filter.year || filter.month) {
+    const months = filter.months ?? []
+    if (filter.year || months.length > 0) {
       const start = startOf(entry)
       if (start === null) return false
       if (filter.year && start.slice(0, 4) !== filter.year) return false
-      if (filter.month && Number(start.slice(5, 7)) !== filter.month) return false
+      if (months.length > 0 && !months.includes(Number(start.slice(5, 7)))) return false
     }
 
     if (!needle) return true
@@ -201,6 +208,41 @@ export function monthsOf(entries: readonly ContentEntry[], year: string | null =
   }
 
   return [...months].sort((a, b) => a - b)
+}
+
+/**
+ * Оставляет из выбранных месяцев только те, что есть в новом периоде.
+ *
+ * Нужна при смене года и статуса. Полный сброс выбора (как было до
+ * многослойного фильтра) терял осмысленную часть: если выбраны март
+ * и апрель, а в новом году есть март, разумно оставить март, а не
+ * молча показать весь год. Если не осталось ничего — выбор пуст,
+ * и это честнее пустого списка.
+ */
+export function keepAvailable(
+  chosen: readonly number[],
+  available: readonly number[],
+): number[] {
+  return chosen.filter((month) => available.includes(month))
+}
+
+/**
+ * Сплошные отрезки в наборе месяцев: `[1,2,3,5]` → `[[1,3],[5,5]]`.
+ *
+ * Ради подписи: «янв–мар, май» короче и читается лучше, чем
+ * «янв, фев, мар, май». Порядок входа не важен.
+ */
+export function monthRanges(months: readonly number[]): [number, number][] {
+  const sorted = [...new Set(months)].sort((a, b) => a - b)
+  const ranges: [number, number][] = []
+
+  for (const month of sorted) {
+    const last = ranges.at(-1)
+    if (last && month === last[1] + 1) last[1] = month
+    else ranges.push([month, month])
+  }
+
+  return ranges
 }
 
 /**

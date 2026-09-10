@@ -409,12 +409,29 @@ async function scenario() {
     line(twoMonths, 'Март'),
   )
 
+  // Период слоями: готовый ответ, потом выбор месяцев руками (Р-47).
+  await act(`byText('button', 'Этот месяц')?.click()`)
+  await sleep(500)
+  const thisMonth = await screen()
+  const inThisMonth = await run(`document.querySelectorAll('.cycles li').length`)
+  check('готовый период «этот месяц» отбирает свой месяц', inThisMonth === 1, `карточек ${inThisMonth}`)
+  check('и это правда сентябрь', has(thisMonth, 'Пробное аниме') && !has(thisMonth, 'Март 2026'))
+
+  await act(`byText('button', 'Выбрать период')?.click()`)
+  await sleep(400)
   await act(`byText('button', 'мар')?.click()`)
   await sleep(500)
-  const march = await screen()
+  const twoPicked = await screen()
+  const inTwo = await run(`document.querySelectorAll('.cycles li').length`)
+  check('месяцы отмечаются несколькими', inTwo === 2, `карточек ${inTwo}`)
+  check('и период назван словами', has(twoPicked, 'мар, сен'), line(twoPicked, 'Показано'))
+
+  await act(`byText('button', 'сен')?.click()`)
+  await sleep(500)
+  const onlyMarch = await screen()
   const inMarch = await run(`document.querySelectorAll('.cycles li').length`)
-  check('фильтр по месяцу оставляет только свой месяц', inMarch === 1, `карточек ${inMarch}`)
-  check('и это правда март', has(march, 'Мартовский фильм') && !has(march, 'Сентябрь 2026'))
+  check('повторный тап снимает месяц', inMarch === 1, `карточек ${inMarch}`)
+  check('остался март', has(onlyMarch, 'Мартовский фильм') && !has(onlyMarch, 'Сентябрь 2026'))
 
   await act(`byText('button', 'Все месяцы')?.click()`)
   await sleep(500)

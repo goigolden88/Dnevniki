@@ -4,6 +4,8 @@ import {
   filterEntries,
   groupByMonth,
   hasUndated,
+  keepAvailable,
+  monthRanges,
   monthsOf,
   parseScore,
   scoreBucket,
@@ -153,14 +155,32 @@ describe('filterEntries', () => {
       entry({ id: 'прошлый', start: '2025-04' }),
     ]
     expect(filterEntries(dated, { year: '2026' }).map((each) => each.id)).toEqual(['янв', 'апр'])
-    expect(filterEntries(dated, { month: 4 }).map((each) => each.id)).toEqual(['апр', 'прошлый'])
-    expect(filterEntries(dated, { year: '2026', month: 4 }).map((each) => each.id)).toEqual(['апр'])
+    expect(filterEntries(dated, { months: [4] }).map((each) => each.id)).toEqual(['апр', 'прошлый'])
+    expect(filterEntries(dated, { year: '2026', months: [4] }).map((each) => each.id)).toEqual([
+      'апр',
+    ])
+  })
+
+  it('несколько месяцев разом — «что смотрел прошлой весной»', () => {
+    const spring = [
+      entry({ id: 'мар', start: '2026-03' }),
+      entry({ id: 'апр', start: '2026-04' }),
+      entry({ id: 'май', start: '2026-05' }),
+      entry({ id: 'июн', start: '2026-06' }),
+    ]
+    const found = filterEntries(spring, { months: [3, 4, 5] })
+    expect(found.map((each) => each.id)).toEqual(['мар', 'апр', 'май'])
+  })
+
+  it('пустой список месяцев означает «все», а не «ни одного»', () => {
+    const dated = [entry({ id: 'янв', start: '2026-01' })]
+    expect(filterEntries(dated, { months: [] })).toHaveLength(1)
   })
 
   it('запись без даты не попадает ни в один месяц и ни в один год', () => {
     const mixed = [entry({ id: 'есть', start: '2026-01' }), entry({ id: 'нет', start: null })]
     expect(filterEntries(mixed, { year: '2026' }).map((each) => each.id)).toEqual(['есть'])
-    expect(filterEntries(mixed, { month: 1 }).map((each) => each.id)).toEqual(['есть'])
+    expect(filterEntries(mixed, { months: [1] }).map((each) => each.id)).toEqual(['есть'])
     // Без фильтра периода — на месте.
     expect(filterEntries(mixed, {})).toHaveLength(2)
   })
@@ -171,7 +191,7 @@ describe('filterEntries', () => {
       entry({ id: 'не тот тип', type: 'game', start: '2026-01', title: 'Фрирен' }),
       entry({ id: 'не тот месяц', type: 'anime', start: '2026-05', title: 'Фрирен' }),
     ]
-    const found = filterEntries(mixed, { type: 'anime', year: '2026', month: 1, query: 'фри' })
+    const found = filterEntries(mixed, { type: 'anime', year: '2026', months: [1], query: 'фри' })
     expect(found.map((each) => each.id)).toEqual(['то'])
   })
 })
@@ -291,6 +311,48 @@ describe('monthsOf', () => {
 
   it('пустой год даёт пустой список — чипов не будет вовсе', () => {
     expect(monthsOf(all, '2019')).toEqual([])
+  })
+})
+
+describe('keepAvailable', () => {
+  it('оставляет пересечение, а не сбрасывает выбор целиком', () => {
+    expect(keepAvailable([3, 4, 5], [1, 3, 7])).toEqual([3])
+  })
+
+  it('всё доступно — выбор не меняется', () => {
+    expect(keepAvailable([3, 4], [3, 4, 5])).toEqual([3, 4])
+  })
+
+  it('ничего не осталось — пустой выбор, то есть все месяцы', () => {
+    expect(keepAvailable([3, 4], [11, 12])).toEqual([])
+  })
+
+  it('порядок выбора сохраняется', () => {
+    expect(keepAvailable([5, 3], [3, 5])).toEqual([5, 3])
+  })
+})
+
+describe('monthRanges', () => {
+  it('склеивает сплошные отрезки', () => {
+    expect(monthRanges([1, 2, 3])).toEqual([[1, 3]])
+  })
+
+  it('разрыв разделяет отрезки', () => {
+    expect(monthRanges([1, 2, 3, 5])).toEqual([
+      [1, 3],
+      [5, 5],
+    ])
+  })
+
+  it('порядок на входе не важен, повторы схлопываются', () => {
+    expect(monthRanges([5, 1, 3, 2, 3])).toEqual([
+      [1, 3],
+      [5, 5],
+    ])
+  })
+
+  it('пусто на пустом', () => {
+    expect(monthRanges([])).toEqual([])
   })
 })
 

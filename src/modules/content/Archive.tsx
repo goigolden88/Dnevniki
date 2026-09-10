@@ -1,16 +1,17 @@
 import { useState } from 'react'
+import { MONTHS_SHORT, today } from '../../core/dates.ts'
 import {
   filterEntries,
   groupByMonth,
   hasUndated,
+  keepAvailable,
   monthsOf,
   sortEntries,
   yearsOf,
   type EntryStatus,
   type EntryType,
 } from './content.ts'
-import { MONTHS_SHORT } from '../../core/dates.ts'
-import { entriesText, monthHeading, statusLabel, TYPES } from './labels.ts'
+import { entriesText, monthHeading, periodText, statusLabel, TYPES } from './labels.ts'
 import { EntryCard } from './EntryCard.tsx'
 import type { Content } from './useContent.ts'
 import type { ContentEntry } from '../../core/model.ts'
@@ -22,11 +23,19 @@ const ALL_YEARS = 'всё время'
  * Записи, у которых даты начала нет или она не читается (Р-34).
  *
  * Отдельным выбором рядом с годами, а не спрятанное внутри них: отбор
- * по году такую запись отбрасывает, и без этого чипа она стала бы
+ * по году такую запись отбрасывает, и без этого выбора она стала бы
  * невидимой ровно тогда, когда её надо найти и поправить. Появляется,
  * только если такие записи есть.
  */
 const UNDATED = 'без даты'
+
+/** Что выбрано в периоде. Год и месяцы связаны, и живут они вместе. */
+type Period = {
+  /** `YYYY`, `ALL_YEARS` либо `UNDATED`. */
+  year: string
+  /** Месяцы 1..12. Пусто — все месяцы выбранного года. */
+  months: number[]
+}
 
 /**
  * Статусы отдельными переключателями.
@@ -38,47 +47,96 @@ const UNDATED = 'без даты'
 const TABS: EntryStatus[] = ['done', 'dropped', 'planned']
 
 /**
- * Список записей: статус, тип, год, поиск — и разбивка по месяцам.
+ * Список записей: статус, тип, период, поиск — и разбивка по месяцам.
  *
- * Месяцы заголовками, как было в Obsidian: там дневник и вёлся разделами
- * по месяцам, дня не было ни у одной записи. Заголовки показывают год
- * лентой целиком, а не по одному месяцу за тап.
+ * Период устроен слоями (Р-47): сверху три готовых ответа — всё, этот год,
+ * этот месяц, — а под ними, если развернуть, выбор года и месяцев вручную.
+ * Месяцы предлагаются только те, что есть в выбранном году: иначе при
+ * нескольких годах «мар» означал бы март любого из них.
+ *
+ * Месяцы заодно остаются заголовками в самом списке — так дневник и вёлся
+ * в Obsidian. Фильтр отвечает на «покажи апрель», заголовки — на «что было
+ * за год». Вопросы разные (Р-45).
  */
 export function Archive({ entries, content }: { entries: ContentEntry[]; content: Content }) {
   const years = yearsOf(entries)
+  const thisYear = today().slice(0, 4)
+  const thisMonth = Number(today().slice(5, 7))
 
   const [status, setStatus] = useState<EntryStatus>('done')
   const [type, setType] = useState<EntryType | null>(null)
   // Свежий год по умолчанию — то же, что в «Итогах». Иначе при появлении
-  // второго года экран открывался бы сразу обоими, и чем дальше, тем
-  // длиннее. Пока год один, ряд годов не показывается вовсе.
-  const [year, setYear] = useState<string>(years[0] ?? ALL_YEARS)
-  const [month, setMonth] = useState<number | null>(null)
+  // второго года экран открывался бы сразу обоими, и чем дальше, тем длиннее.
+  const [period, setPeriod] = useState<Period>({ year: years[0] ?? ALL_YEARS, months: [] })
+  const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
 
   // У намерений даты нет по определению (Р-21), как и у записей с испорченной
-  // датой. Выбор периода над ними — переключатель, который нечего переключать.
-  const dated = status !== 'planned' && year !== UNDATED
+  // датой. Выбор периода над ними — переключатель, которому нечего переключать.
+  const dated = status !== 'planned' && period.year !== UNDATED
 
   // Месяцы считаются по статусу и году, но не по типу: иначе ряд чипов
-  // перестраивался бы под пальцем при каждом переключении типа.
+  // перестраивался бы под пальцем при каждом переключении соседнего фильтра.
   const inStatusEntries = entries.filter((entry) => entry.status === status)
-  const months = monthsOf(inStatusEntries, year === ALL_YEARS ? null : year)
-
-  const periods = [...years, ...(hasUndated(inStatusEntries) ? [UNDATED] : []), ALL_YEARS]
+  const months = monthsOf(inStatusEntries, period.year === ALL_YEARS ? null : period.year)
 
   const shown = sortEntries(
     filterEntries(entries, {
       status,
       type,
       query,
-      year: dated && year !== ALL_YEARS ? year : null,
-      month: dated ? month : null,
-      undated: status !== 'planned' && year === UNDATED,
+      year: dated && period.year !== ALL_YEARS ? period.year : null,
+      months: dated ? period.months : [],
+      undated: status !== 'planned' && period.year === UNDATED,
     }),
   )
   const groups = groupByMonth(shown)
   const inStatus = inStatusEntries.length
+
+  /** Смена года: выбранные месяцы не сбрасываются, а сужаются до доступных. */
+  function pickYear(year: string) {
+    const scope = year === ALL_YEARS || year === UNDATED ? null : year
+    setPeriod({ year, months: keepAvailable(period.months, monthsOf(inStatusEntries, scope)) })
+  }
+
+  function toggleMonth(month: number) {
+    setPeriod({
+      year: period.year,
+      months: period.months.includes(month)
+        ? period.months.filter((each) => each !== month)
+        : [...period.months, month],
+    })
+  }
+
+  function pickStatus(next: EntryStatus) {
+    setStatus(next)
+    // По той же причине, по которой месяцы сужаются при смене года:
+    // у брошенного апреля может не быть вовсе.
+    const scope = period.year === ALL_YEARS || period.year === UNDATED ? null : period.year
+    const available = monthsOf(
+      entries.filter((entry) => entry.status === next),
+      scope,
+    )
+    setPeriod({ year: period.year, months: keepAvailable(period.months, available) })
+  }
+
+  const presets: { label: string; period: Period }[] = [
+    { label: 'Всё', period: { year: ALL_YEARS, months: [] } },
+    { label: 'Этот год', period: { year: thisYear, months: [] } },
+    { label: 'Этот месяц', period: { year: thisYear, months: [thisMonth] } },
+  ]
+
+  function isPreset(each: Period): boolean {
+    return (
+      each.year === period.year &&
+      each.months.length === period.months.length &&
+      each.months.every((month) => period.months.includes(month))
+    )
+  }
+
+  const periods = [...years, ...(hasUndated(inStatusEntries) ? [UNDATED] : []), ALL_YEARS]
+  // Разворачивать нечего, когда и год один, и месяцев меньше двух.
+  const adjustable = periods.length > 2 || months.length > 1
 
   return (
     <section className="block">
@@ -91,12 +149,7 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
             type="button"
             className={each === status ? 'chip chip--on' : 'chip'}
             aria-pressed={each === status}
-            onClick={() => {
-              setStatus(each)
-              // По той же причине, по которой месяц сбрасывается вместе
-              // с годом: у брошенного апреля может не быть вовсе.
-              setMonth(null)
-            }}
+            onClick={() => pickStatus(each)}
           >
             {statusLabel(each)}
           </button>
@@ -125,50 +178,74 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
         ))}
       </div>
 
-      {status !== 'planned' && periods.length > 2 && (
-        <div className="chips">
-          {periods.map((each) => (
+      {status !== 'planned' && adjustable && (
+        <>
+          <div className="chips">
+            {presets.map((each) => (
+              <button
+                key={each.label}
+                type="button"
+                className={isPreset(each.period) ? 'chip chip--on' : 'chip'}
+                aria-pressed={isPreset(each.period)}
+                onClick={() => setPeriod(each.period)}
+              >
+                {each.label}
+              </button>
+            ))}
             <button
-              key={each}
               type="button"
-              className={each === year ? 'chip chip--on' : 'chip'}
-              aria-pressed={each === year}
-              onClick={() => {
-                setYear(each)
-                // Месяц сбрасывается вместе с годом: апрель, выбранный
-                // в 2026-м, в 2025-м может оказаться пустым, и список
-                // молча стал бы пустым при переключении года.
-                setMonth(null)
-              }}
+              className={open ? 'chip chip--on' : 'chip'}
+              aria-expanded={open}
+              onClick={() => setOpen(!open)}
             >
-              {each}
+              {open ? 'Свернуть' : 'Выбрать период'}
             </button>
-          ))}
-        </div>
-      )}
+          </div>
 
-      {dated && months.length > 1 && (
-        <div className="chips">
-          <button
-            type="button"
-            className={month === null ? 'chip chip--on' : 'chip'}
-            aria-pressed={month === null}
-            onClick={() => setMonth(null)}
-          >
-            Все месяцы
-          </button>
-          {months.map((each) => (
-            <button
-              key={each}
-              type="button"
-              className={each === month ? 'chip chip--on' : 'chip'}
-              aria-pressed={each === month}
-              onClick={() => setMonth(each)}
-            >
-              {MONTHS_SHORT[each - 1]}
-            </button>
-          ))}
-        </div>
+          {open && (
+            <>
+              {periods.length > 2 && (
+                <div className="chips chips--nested">
+                  {periods.map((each) => (
+                    <button
+                      key={each}
+                      type="button"
+                      className={each === period.year ? 'chip chip--on' : 'chip'}
+                      aria-pressed={each === period.year}
+                      onClick={() => pickYear(each)}
+                    >
+                      {each === ALL_YEARS ? 'Все годы' : each}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {dated && months.length > 1 && (
+                <div className="chips chips--nested">
+                  <button
+                    type="button"
+                    className={period.months.length === 0 ? 'chip chip--on' : 'chip'}
+                    aria-pressed={period.months.length === 0}
+                    onClick={() => setPeriod({ year: period.year, months: [] })}
+                  >
+                    Все месяцы
+                  </button>
+                  {months.map((each) => (
+                    <button
+                      key={each}
+                      type="button"
+                      className={period.months.includes(each) ? 'chip chip--on' : 'chip'}
+                      aria-pressed={period.months.includes(each)}
+                      onClick={() => toggleMonth(each)}
+                    >
+                      {MONTHS_SHORT[each - 1]}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </>
       )}
 
       <input
@@ -186,10 +263,14 @@ export function Archive({ entries, content }: { entries: ContentEntry[]; content
         </p>
       ) : (
         <>
+          {/* Период называется словами всегда, даже когда ряды свёрнуты:
+              иначе короткий список молча выдавал бы себя за весь. */}
           <p className="muted">
             {shown.length === inStatus
               ? entriesText(shown.length)
-              : `Показано ${shown.length} из ${inStatus}.`}
+              : `Показано ${shown.length} из ${inStatus}`}
+            {dated &&
+              ` · ${periodText(period.year === ALL_YEARS ? null : period.year, period.months)}`}
           </p>
 
           {groups.map((group) => (

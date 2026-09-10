@@ -5,7 +5,9 @@ import {
   entryText,
   formatScore,
   monthHeading,
+  monthsText,
   peakMonthText,
+  periodText,
   startedText,
   statusLabel,
   typeCountText,
@@ -173,6 +175,25 @@ describe('monthHeading', () => {
 
   it('записи без даты собираются под своим заголовком, а не прячутся', () => {
     expect(monthHeading(null)).toBe('Без даты')
+  })
+})
+
+describe('monthsText и periodText', () => {
+  it('сплошные месяцы пишутся отрезком', () => {
+    expect(monthsText([1, 2, 3])).toBe('янв–мар')
+    expect(monthsText([3])).toBe('мар')
+    expect(monthsText([1, 2, 3, 5])).toBe('янв–мар, май')
+  })
+
+  it('пусто, когда месяцы не выбраны: говорить не о чем', () => {
+    expect(monthsText([])).toBe('')
+  })
+
+  it('период называется словами', () => {
+    expect(periodText('2026', [])).toBe('2026')
+    expect(periodText('2026', [3, 4, 5])).toBe('2026, мар–май')
+    expect(periodText(null, [])).toBe('всё время')
+    expect(periodText(null, [1])).toBe('всё время, янв')
   })
 })
 
