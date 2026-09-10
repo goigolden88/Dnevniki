@@ -3,6 +3,14 @@ import { db } from '../core/db.ts'
 import { today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
 import type { SyncedStore } from '../core/model.ts'
+import {
+  checkReminder,
+  disableReminders,
+  enableReminders,
+  reminderStatus,
+  type ReminderStatus,
+  type RemindResult,
+} from '../notify.ts'
 import { backupNote } from '../ui/backup.ts'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
@@ -90,6 +98,8 @@ export function Settings() {
       </section>
 
       <SyncSettings onChanged={load} />
+
+      <Reminders />
 
       <DataTransfer onChanged={load} />
 
@@ -216,6 +226,107 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
 }
 
 const LAST_EXPORT = 'lastExportAt'
+
+const REMINDER_TEXT: Record<ReminderStatus, string> = {
+  unsupported:
+    'Этот браузер не умеет напоминать, когда приложение закрыто. Напоминания работают ' +
+    'в Chrome на Android у установленного приложения.',
+  denied: 'Уведомления для этого сайта запрещены в настройках браузера. Разрешить их можно только там.',
+  off: 'Примерно раз в сутки приложение проверит сроки и напомнит о просроченном — даже закрытое.',
+  'not-installed':
+    'Уведомления разрешены, но фоновую проверку браузер не дал. Так бывает, когда приложение ' +
+    'открыто во вкладке, а не установлено иконкой.',
+  on: 'Включено. Браузер проверяет примерно раз в сутки, точное время выбирает сам.',
+}
+
+const CHECK_TEXT: Record<RemindResult | 'denied' | 'unsupported', string> = {
+  shown: 'Уведомление показано.',
+  nothing: 'Просроченного нет — пришло пустое уведомление, чтобы было видно, что они доходят.',
+  already: 'Сегодня уже напоминало.',
+  denied: 'Уведомления запрещены — показать нечего.',
+  unsupported: REMINDER_TEXT.unsupported,
+}
+
+/**
+ * Напоминания о просроченном (Р-50).
+ *
+ * Включаются кнопкой, а не сами: разрешение на уведомления браузер
+ * спрашивает только по действию человека. «Проверить сейчас» — чтобы
+ * не ждать сутки, прежде чем узнать, работает ли.
+ */
+function Reminders() {
+  const [status, setStatus] = useState<ReminderStatus | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+
+  useEffect(() => {
+    void reminderStatus()
+      .then(setStatus)
+      .catch(() => setStatus('unsupported'))
+  }, [])
+
+  async function act(action: () => Promise<void>) {
+    setBusy(true)
+    setNote('')
+    try {
+      await action()
+    } catch (failure) {
+      setNote(describe(failure))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Состояние ещё читается — мигать «не поддерживается» на полсекунды незачем.
+  if (status === null) return null
+
+  return (
+    <section className="block">
+      <h2>Напоминания</h2>
+      <p className="muted">{REMINDER_TEXT[status]}</p>
+
+      <div className="row row--wrap">
+        {(status === 'off' || status === 'not-installed') && (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void act(async () => setStatus(await enableReminders()))}
+          >
+            Напоминать о просроченном
+          </button>
+        )}
+        {status === 'on' && (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                await disableReminders()
+                setStatus('off')
+              })
+            }
+          >
+            Выключить
+          </button>
+        )}
+        {status !== 'unsupported' && status !== 'denied' && (
+          <button
+            type="button"
+            className="btn"
+            disabled={busy}
+            onClick={() => void act(async () => setNote(CHECK_TEXT[await checkReminder()]))}
+          >
+            Проверить сейчас
+          </button>
+        )}
+      </div>
+
+      {note && <p className="muted">{note}</p>}
+    </section>
+  )
+}
 
 /**
  * Где лежит копия данных и стоит ли об этом беспокоиться.

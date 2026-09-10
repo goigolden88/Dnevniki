@@ -186,6 +186,34 @@ export function spentText(value: Spent): string {
   return `${formatMoney(value.sum)} за ${marks}${full}`
 }
 
+// ─── Напоминание ───────────────────────────────────────────────────────────
+
+/** Сколько позиций перечислять в уведомлении. Дальше — «и ещё N». */
+const NOTICE_LINES = 5
+
+/**
+ * Текст уведомления о просроченном (Р-50). Null — напоминать не о чем.
+ *
+ * Только просроченное, без «подходит к сроку»: уведомление, приходящее
+ * каждый день ради жёлтого, быстро перестают читать. Одна позиция
+ * называется в заголовке — это ровно то, что надо сделать. Несколько —
+ * списком по срочности, с перебором в днях: «перебор 2 дня» и «перебор
+ * 40 дней» — разные новости.
+ */
+export function overdueNotice(states: readonly CycleState[]): { title: string; body: string } | null {
+  const overdue = states.filter((state) => state.status === 'overdue')
+  const first = overdue[0]
+  if (first === undefined) return null
+  if (overdue.length === 1) return { title: `Просрочено: ${first.item.name}`, body: statusText(first) }
+
+  const lines = overdue.slice(0, NOTICE_LINES).map((state) => `${state.item.name} — ${statusText(state)}`)
+  const rest = overdue.length - NOTICE_LINES
+  if (rest > 0) lines.push(`и ещё ${rest}`)
+
+  const count = `${overdue.length} ${plural(overdue.length, ['позиция', 'позиции', 'позиций'])}`
+  return { title: `Просрочено ${count}`, body: lines.join('\n') }
+}
+
 // ─── Быстрые кнопки ────────────────────────────────────────────────────────
 
 /**

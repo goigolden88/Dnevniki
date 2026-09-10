@@ -246,6 +246,10 @@ async function scenario() {
   await send('Runtime.enable')
   await send('Page.enable')
 
+  // Разрешение на уведомления — до первой загрузки: уже открытая страница
+  // выданное позже не видит. Проверяется в конце, у напоминаний (Р-50).
+  const granted = await grantNotifications()
+
   await send('Page.navigate', { url: APP })
   await sleep(2000)
 
@@ -342,6 +346,29 @@ async function scenario() {
     has(remarked, 'Отмечено') && has(remarked, '1 900,50 ₽ за 2 отметки'),
     line(remarked, 'Траты'),
   )
+
+  // Вторая позиция, заведомо просроченная: интервал 10 дней, отметка
+  // в июле. Нужна напоминанию (о чём-то же надо напомнить) и кнопке
+  // на две позиции в конце сценария.
+  await act(`byText('button', 'Добавить позицию')?.click()`)
+  await sleep(300)
+  await act(`
+    set(document.querySelector('form input'), 'Фильтр')
+    const interval = [...document.querySelectorAll('form input')].find((el) => el.placeholder === 'по истории')
+    set(interval, '10')
+    byText('button', 'Добавить')?.click()
+  `)
+  await sleep(600)
+  await act(`byText('a', 'Фильтр')?.click()`)
+  await sleep(800)
+  await act(`
+    set([...document.querySelectorAll('input[type=date]')].at(-1), '2026-07-01')
+    byText('button', 'Добавить')?.click()
+  `)
+  await sleep(600)
+  await go('/')
+  const attention = await screen()
+  check('просроченная позиция в «требует внимания»', has(attention, 'Требует внимания') && has(attention, 'перебор'), line(attention, 'перебор'))
 
   // ─ Здоровье
   await go('/health')
@@ -498,6 +525,76 @@ async function scenario() {
   await act(`document.querySelector('.gear')?.click()`)
   await sleep(700)
   check('настройки открываются шестерёнкой', has(await screen(), 'Версия схемы'))
+
+  // ─ Service worker свой (Р-50). Главный риск перехода — что работник
+  // вовсе не встанет, и приложение потеряет офлайн и автообновление.
+  const worker = await run(`Promise.race([
+    navigator.serviceWorker.ready.then((r) => r.active?.state ?? 'нет'),
+    new Promise((done) => setTimeout(() => done('не дождался'), 5000)),
+  ])`)
+  check('service worker встал и активен', worker === 'activated', `состояние ${worker}`)
+
+  // Напоминание «Проверить сейчас»: разрешение на уведомления выдаётся
+  // через протокол отладки — в безголовом браузере спросить некого.
+  const seenPermission = await run('Notification.permission')
+  check(
+    'разрешение на уведомления выдано',
+    granted && seenPermission === 'granted',
+    `страница видит ${seenPermission}`,
+  )
+  await act(`byText('button', 'Проверить сейчас')?.click()`)
+  await sleep(1500)
+  const titles = await run(`navigator.serviceWorker.ready
+    .then((r) => r.getNotifications())
+    .then((list) => list.map((each) => each.title).join(' | '))`)
+  // Раздел целиком — в отчёт: по нему видно, чем кончилась проверка,
+  // если уведомления не нашлось.
+  const reminders = await run(`[...document.querySelectorAll('section')]
+    .find((each) => each.querySelector('h2')?.textContent === 'Напоминания')
+    ?.innerText.replace(/\\s+/g, ' ') ?? 'раздела нет'`)
+  check(
+    'напоминание называет просроченную позицию',
+    typeof titles === 'string' && titles.includes('Просрочено: Фильтр'),
+    `уведомления: «${titles}»; раздел: ${reminders}`,
+  )
+
+  // ─ Кнопка на две позиции (Р-49): «включающее обслуживание» одним тапом.
+  await go('/')
+  await act(`byText('a', 'Фильтр')?.click()`)
+  await sleep(800)
+  await act(`startsWith('button', 'Добавить в «')?.click()`)
+  await sleep(600)
+  await go('/')
+  const both = await run(`document.querySelector('.quick .mark')?.textContent ?? ''`)
+  check('позиция добавилась в чужую кнопку', has(both, 'Стрижка + Фильтр'), both)
+  check('отмечена одна из двух — кнопка не нажата', (await pressed()) === 'false')
+  await act(`document.querySelector('.quick .mark')?.click()`)
+  await sleep(700)
+  const done = await screen()
+  check(
+    'один тап отметил обе позиции',
+    (await pressed()) === 'true' && !has(done, 'Требует внимания'),
+    line(done, 'Фильтр'),
+  )
+}
+
+/**
+ * Разрешение на уведомления для адреса приложения. Без него «Проверить
+ * сейчас» упирается в вопрос о разрешении, на который в безголовом
+ * браузере некому ответить.
+ *
+ * Выдаётся из сессии самой вкладки. Через отдельное соединение с браузером
+ * не работает, и молча: без контекста ответ «ok», а вкладка по-прежнему
+ * видит «не спрашивали»; с контекстом вкладки браузер отвечает, что такого
+ * контекста не знает. Проверено 10.09.2026 на Chrome из прогона.
+ */
+async function grantNotifications() {
+  const reply = await send('Browser.grantPermissions', {
+    origin: new URL(APP).origin,
+    permissions: ['notifications'],
+  })
+  // Ответ с ошибкой приходит без `result` — `send` отдаёт undefined.
+  return reply !== undefined
 }
 
 /** Строка экрана с образцом внутри. Для внятного отчёта о непрошедшем. */

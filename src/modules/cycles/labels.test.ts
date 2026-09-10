@@ -4,6 +4,7 @@ import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
 import {
   divergence,
   formatMoney,
+  overdueNotice,
   parsePrice,
   spentText,
   statusText,
@@ -163,5 +164,39 @@ describe('быстрые кнопки — Р-49', () => {
     expect(
       templateButtonText(state(template([{ itemId: 'f1', price: 2500 }, { itemId: 'f2', price: 1089 }]))),
     ).toBe('Барьер 3 стадии + Барьер 2 стадия')
+  })
+})
+
+describe('overdueNotice — Р-50', () => {
+  const day = '2026-09-10'
+  const long = [event('2026-07-01')]
+  const overdue = (name: string, id: string) =>
+    cycleState(item({ id, name, intervalDays: 10 }), long.map((e) => ({ ...e, itemId: id })), day)
+
+  it('напоминать не о чем — null', () => {
+    const fresh = cycleState(item({ intervalDays: 30 }), [event('2026-09-01')], day)
+    expect(overdueNotice([fresh])).toBeNull()
+    expect(overdueNotice([])).toBeNull()
+  })
+
+  it('одна позиция — в заголовке, перебор в тексте', () => {
+    expect(overdueNotice([overdue('Таймер полива', 'a')])).toEqual({
+      title: 'Просрочено: Таймер полива',
+      body: 'перебор 61 день',
+    })
+  })
+
+  it('«подходит к сроку» не напоминается', () => {
+    const due = cycleState(item({ intervalDays: 10 }), [event('2026-09-01')], day)
+    expect(due.status).toBe('due')
+    expect(overdueNotice([due])).toBeNull()
+  })
+
+  it('несколько — число в заголовке и не больше пяти строк списка', () => {
+    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => overdue(`Позиция ${id}`, id))
+    const notice = overdueNotice(many)
+    expect(notice?.title).toBe('Просрочено 7 позиций')
+    expect(notice?.body.split('\n')).toHaveLength(6)
+    expect(notice?.body.split('\n').at(-1)).toBe('и ещё 2')
   })
 })

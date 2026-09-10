@@ -25,10 +25,19 @@ export default defineConfig({
     react(),
 
     VitePWA({
+      // Service worker свой, а не собранный плагином (Р-50): в нём живут
+      // напоминания о просроченном, а в сгенерированный код их не положить.
+      // Имя на выходе прежнее — sw.js, иначе установленные копии остались бы
+      // со старым работником навсегда.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
+
       // autoUpdate, а не prompt: новый service worker забирает управление
       // немедленно и перезагружает страницу. Иначе выходит классическая
       // боль PWA — выкатил сборку, а телефон неделю показывает вчерашнюю
-      // и ни на что не реагирует.
+      // и ни на что не реагирует. Со своим работником половина этого —
+      // skipWaiting и clientsClaim — написана в src/sw.ts руками.
       registerType: 'autoUpdate',
 
       includeAssets: ['favicon.svg', 'apple-touch-icon-180x180.png'],
@@ -58,14 +67,11 @@ export default defineConfig({
         ],
       },
 
-      workbox: {
+      // Что уходит в кеш для работы без сети. Подмена навигации на
+      // index.html, чистка старых кешей и немедленный захват управления —
+      // в src/sw.ts: при generateSW это были опции здесь же.
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,webmanifest}'],
-        // Без этого офлайн-открытие по прямой ссылке даёт пустую страницу:
-        // запрос уходит в сеть, сети нет, показать нечего.
-        navigateFallback: `${BASE}index.html`,
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: true,
       },
 
       // Чтобы офлайн проверялся локально, а не только после деплоя.
