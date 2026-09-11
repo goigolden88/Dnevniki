@@ -264,6 +264,9 @@ async function unfold(title) {
 async function scenario() {
   await send('Runtime.enable')
   await send('Page.enable')
+  // Скачанное — во временный профиль, который удаляется после прогона.
+  // Без этого безголовый Chrome клал выгрузку markdown в «Загрузки» человека.
+  await send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: profile })
 
   // Разрешение на уведомления — до первой загрузки: уже открытая страница
   // выданное позже не видит. Проверяется в конце, у напоминаний (Р-50).
