@@ -90,6 +90,17 @@ p {
   gap: 12px;
 }
 
+/* «?» и шестерёнка рядом (Р-63). Отступ к краю — у пары, а не у каждой. */
+.screen-head__tools {
+  display: flex;
+  align-items: center;
+  margin-right: -10px;
+}
+
+.screen-head__tools .gear {
+  margin-right: 0;
+}
+
 .gear {
   display: flex;
   align-items: center;

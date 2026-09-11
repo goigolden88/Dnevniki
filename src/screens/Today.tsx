@@ -20,10 +20,17 @@ export function Today() {
       <header className="screen-head">
         <div className="screen-head__row">
           <h1>Сейчас</h1>
-          <Link className="gear" to="/settings" aria-label="Настройки">
-            <span aria-hidden="true">⚙</span>
-            {mark && <span className={mark} aria-hidden="true" />}
-          </Link>
+          {/* Справка рядом с настройками (Р-63): непонятное случается здесь,
+              на главном экране, а не в настройках. */}
+          <div className="screen-head__tools">
+            <Link className="gear" to="/help" aria-label="Справка">
+              <span aria-hidden="true">?</span>
+            </Link>
+            <Link className="gear" to="/settings" aria-label="Настройки">
+              <span aria-hidden="true">⚙</span>
+              {mark && <span className={mark} aria-hidden="true" />}
+            </Link>
+          </div>
         </div>
         <p className="muted">{formatDateLong(today())}</p>
       </header>

@@ -10,6 +10,7 @@ import { SummaryScreen } from './modules/health/SummaryScreen.tsx'
 import { ContentScreen } from './modules/content/ContentScreen.tsx'
 import { Feed } from './screens/Feed.tsx'
 import { Settings } from './screens/Settings.tsx'
+import { Help } from './screens/Help.tsx'
 
 /**
  * Роутинг через хеш (Р-10): на GitHub Pages обычные пути дают 404 при
@@ -34,6 +35,7 @@ export function App() {
           <Route path="content" element={<ContentScreen />} />
           <Route path="feed" element={<Feed />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="help" element={<Help />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

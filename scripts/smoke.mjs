@@ -579,7 +579,18 @@ async function scenario() {
 
   // Настройки открываются шестерёнкой, а не вкладкой (Р-43).
   await go('/')
-  await act(`document.querySelector('.gear')?.click()`)
+  // Справка (Р-63): «?» рядом с шестерёнкой, вопросы свёрнуты.
+  await act(`document.querySelector('[aria-label="Справка"]')?.click()`)
+  await sleep(700)
+  await unfold('Синхронизация между устройствами')
+  const help = await screen()
+  check(
+    'справка открывается с «Сейчас», вопрос раскрывается — Р-63',
+    has(help, 'Справка') && has(help, 'fine-grained токен'),
+  )
+  await go('/')
+
+  await act(`document.querySelector('[aria-label="Настройки"]')?.click()`)
   await sleep(700)
   // Разделы свёрнуты оглавлением (Р-61): заголовки видны, содержимого нет.
   const settings = await screen()
