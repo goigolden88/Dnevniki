@@ -6,6 +6,7 @@ import { Watching } from '../modules/content/Watching.tsx'
 import { IosNote } from '../ui/Install.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
 import { useFirstRun } from './useFirstRun.ts'
+import { Welcome } from './Welcome.tsx'
 
 export function Today() {
   const status = useSyncStatus()
@@ -37,6 +38,9 @@ export function Today() {
         </div>
         <p className="muted">{formatDateLong(today())}</p>
       </header>
+
+      {/* Первый запуск (Р-70): пока база пуста и приветствие не закрыли. */}
+      {first.welcome && <Welcome onDone={first.dismissWelcome} />}
 
       {/* iPhone во вкладке Safari (Р-69): у установленного своё хранилище. */}
       {first.iosNote && (

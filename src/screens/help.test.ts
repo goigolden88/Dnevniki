@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import help from './Help.tsx?raw'
+import welcome from './Welcome.tsx?raw'
 
 /**
  * Строки исходника, где число вписано цифрой. Импорты, комментарии и имена
@@ -15,9 +16,12 @@ function typedNumbers(source: string): string[] {
     .map((line) => line.trim())
 }
 
-describe('справка — числа только из констант (Р-65, Р-67)', () => {
-  it('в Help.tsx ни одна цифра не вписана руками', () => {
-    expect(typedNumbers(help)).toEqual([])
+describe('справка и приветствие — числа только из констант (Р-65, Р-67)', () => {
+  it.each([
+    ['Help.tsx', help],
+    ['Welcome.tsx', welcome],
+  ])('в %s ни одна цифра не вписана руками', (_name, source) => {
+    expect(typedNumbers(source)).toEqual([])
   })
 
   it('сторож ловит вписанное число и не трогает комментарии и импорты', () => {

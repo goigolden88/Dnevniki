@@ -35,6 +35,15 @@ export function HealthScreen() {
 
       {health.error && <p className="error">Не сохранилось: {health.error}</p>}
 
+      {/* Пустой экран говорит, что сюда писать (Р-70). */}
+      {health.episodes.length === 0 && health.measures.length === 0 && health.sessions.length === 0 && (
+        <p className="stub">
+          Здесь болезни, измерения и тренировки. Заболел — «Завести эпизод»: он повиснет в «Болею
+          сейчас» и на главном экране, пока не отметишь выздоровление. Вес и давление — в «Измерениях»,
+          зал и пробежки — в «Тренировках».
+        </p>
+      )}
+
       {health.open.length > 0 && (
         <Fold id="health:open" title="Болею сейчас" summary={health.open.length}>
           <ul className="cycles">

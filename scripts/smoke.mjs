@@ -266,6 +266,19 @@ async function scenario() {
   const start = await screen()
   check('главный экран открылся', has(start, 'Сейчас'), start.slice(0, 60))
 
+  // Первый запуск (Р-70): на пустой базе — приветствие с установкой;
+  // «Понятно» убирает его насовсем, и после перезапуска оно не возвращается.
+  check(
+    'на пустой базе — приветствие — Р-70',
+    has(start, 'С чего начать') && has(start, 'Установка'),
+    start.replace(/\s+/g, ' ').slice(0, 160),
+  )
+  await act(`byText('button', 'Понятно')?.click()`)
+  await sleep(400)
+  await send('Page.reload')
+  await sleep(2000)
+  check('«Понятно» убирает приветствие и после перезапуска — Р-70', !has(await screen(), 'С чего начать'))
+
   // ─ Циклы
   await act(`byText('button', 'Добавить позицию')?.click()`)
   await sleep(300)

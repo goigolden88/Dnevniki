@@ -25,7 +25,10 @@ export function Sessions({ health }: { health: Health }) {
       <SessionForm health={health} />
 
       {totals.length === 0 ? (
-        <p className="muted">Тренировок пока нет.</p>
+        <p className="muted">
+          Тренировок пока нет. Вид — словами: бег, зал, плавание; дальше он подскажется сам. Минуты
+          и километры — по желанию.
+        </p>
       ) : (
         <table className="stats">
           <tbody>

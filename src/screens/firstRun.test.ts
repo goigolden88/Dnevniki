@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { iosNote, isEmptyBase } from './firstRun.ts'
+import { iosNote, isEmptyBase, showWelcome } from './firstRun.ts'
+
+describe('приветствие — Р-70', () => {
+  it('пустая база, не закрывали — показать', () => {
+    expect(showWelcome({ empty: true, done: false })).toBe(true)
+  })
+
+  it('первая запись убирает его сама', () => {
+    expect(showWelcome({ empty: false, done: false })).toBe(false)
+  })
+
+  it('«Понятно» — насовсем, даже на пустой базе', () => {
+    expect(showWelcome({ empty: true, done: true })).toBe(false)
+  })
+})
 
 describe('пустая база — Р-69', () => {
   it('ничего не посчитано — пусто', () => {

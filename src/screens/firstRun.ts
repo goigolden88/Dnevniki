@@ -28,6 +28,17 @@ export function isEmptyBase(counts: Counts): boolean {
   return OWN_STORES.every((store) => (counts[store] ?? 0) === 0)
 }
 
+/**
+ * Показывать ли приветствие (Р-70): база пуста и его не закрывали.
+ *
+ * Первая запись убирает его само собой — своя или приехавшая синхронизацией
+ * со второго устройства. «Понятно» — насовсем, даже если база пуста: всё
+ * сказанное есть в справке.
+ */
+export function showWelcome(state: { empty: boolean; done: boolean }): boolean {
+  return state.empty && !state.done
+}
+
 /** Какую строку про iPhone показать на «Сейчас». Null — никакую. */
 export type IosNoteKind = 'before' | 'after' | null
 
