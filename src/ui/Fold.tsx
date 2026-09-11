@@ -10,6 +10,9 @@ import { useFold } from './useFold.ts'
  *
  * Что свёрнуто, помнит устройство. Отдельного выключателя в настройках
  * нет: тап по заголовку короче, чем заход в настройки.
+ *
+ * `sub` — подгруппа внутри блока: «Циклы» и «Здоровье» в «Категориях
+ * и названиях». Заголовок мельче, отступы короче, механика та же.
  */
 export function Fold({
   id,
@@ -17,6 +20,7 @@ export function Fold({
   summary,
   folded: byDefault = false,
   reveal = false,
+  sub = false,
   children,
 }: {
   /** Постоянный ключ блока: по нему устройство помнит, что свёрнуто. */
@@ -27,6 +31,8 @@ export function Fold({
   folded?: boolean
   /** Внутри — цель перехода: развернуть, даже если свёрнут. */
   reveal?: boolean
+  /** Подгруппа внутри другого блока. */
+  sub?: boolean
   children: ReactNode
 }) {
   const { folded, known, toggle, set } = useFold(id, byDefault)
@@ -38,14 +44,16 @@ export function Fold({
     if (reveal && known && folded) set(false)
   }, [reveal, known, folded, set])
 
+  const Head = sub ? 'h3' : 'h2'
+
   return (
-    <section className="block">
-      <h2 className="fold__head">
+    <section className={sub ? 'block fold--sub' : 'block'}>
+      <Head className="fold__head">
         <button type="button" className="fold__btn" aria-expanded={!folded} onClick={toggle}>
           {title}
         </button>
         {summary !== undefined && summary !== '' && <span className="fold__summary">· {summary}</span>}
-      </h2>
+      </Head>
       {/* Пока не прочитано, что свёрнуто, содержимого нет: иначе свёрнутый
           блок на мгновение раскрывался бы и схлопывался, и экран прыгал. */}
       {known && !folded && children}

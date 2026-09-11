@@ -103,11 +103,14 @@ export function Settings() {
           Каждое название ниже — поле. Тапни, поправь и убери палец или нажми Enter — сохранится.
           Впишешь название, которое уже есть, — два сольются в одно, записи перейдут к оставшемуся.
         </p>
-        {/* Подсписок на модуль: так видно, что к чему относится. */}
-        <h3>Циклы</h3>
-        <CategorySettings />
-        <h3>Здоровье</h3>
-        <HealthNames />
+        {/* Подгруппа на модуль: так видно, что к чему относится,
+            и лишнее сворачивается. */}
+        <Fold id="settings:names:cycles" title="Циклы" sub>
+          <CategorySettings />
+        </Fold>
+        <Fold id="settings:names:health" title="Здоровье" sub>
+          <HealthNames />
+        </Fold>
       </Fold>
 
       <QuickSettings />
@@ -289,69 +292,81 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       }
       folded
     >
-      <h3>Копия всех данных</h3>
-      <div className="row row--wrap">
-        <button type="button" className="btn" onClick={() => void save('file')} disabled={busy}>
-          Сохранить в файл
-        </button>
-        {/* На телефоне файл уходит сразу в мессенджер или на диск, а не
-            ищется потом в «Загрузках» (Р-61). Не умеет браузер — кнопки нет. */}
-        {sharable && (
-          <button type="button" className="btn" onClick={() => void save('share')} disabled={busy}>
-            Поделиться
+      {/* Подгруппы (Р-61): копия, markdown и импорт — разные вопросы,
+          и раздел открывают ради одного из них. */}
+      <Fold id="settings:transfer:copy" title="Копия всех данных" sub>
+        <div className="row row--wrap">
+          <button type="button" className="btn" onClick={() => void save('file')} disabled={busy}>
+            Сохранить в файл
           </button>
-        )}
-        <button
-          type="button"
-          className="btn"
-          onClick={() => input.current?.click()}
-          disabled={busy}
-        >
-          Восстановить из копии
-        </button>
-      </div>
-
-      <h3>Markdown — для чтения</h3>
-      <div className="chips">
-        {KIND_ORDER.map((kind) => (
-          <button
-            key={kind}
-            type="button"
-            className={kinds.includes(kind) ? 'chip chip--on' : 'chip'}
-            aria-pressed={kinds.includes(kind)}
-            onClick={() =>
-              setKinds(kinds.includes(kind) ? kinds.filter((each) => each !== kind) : [...kinds, kind])
-            }
-          >
-            {KINDS[kind].label}
-          </button>
-        ))}
-      </div>
-      <div className="row row--wrap">
-        <button
-          type="button"
-          className="btn"
-          onClick={() => void saveMarkdown('file')}
-          disabled={busy || kinds.length === 0}
-        >
-          Сохранить в markdown
-        </button>
-        {sharable && (
+          {/* На телефоне файл уходит сразу в мессенджер или на диск, а не
+              ищется потом в «Загрузках» (Р-61). Не умеет браузер — кнопки нет. */}
+          {sharable && (
+            <button type="button" className="btn" onClick={() => void save('share')} disabled={busy}>
+              Поделиться
+            </button>
+          )}
           <button
             type="button"
             className="btn"
-            onClick={() => void saveMarkdown('share')}
+            onClick={() => input.current?.click()}
+            disabled={busy}
+          >
+            Восстановить из копии
+          </button>
+        </div>
+
+        <LastExport at={lastSaved} />
+
+        <p className="muted">
+          Восстановление не стирает то, что уже есть: записи сливаются по времени правки,
+          побеждает более поздняя.
+        </p>
+      </Fold>
+
+      <Fold id="settings:transfer:markdown" title="Markdown — для чтения" sub>
+        <div className="chips">
+          {KIND_ORDER.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              className={kinds.includes(kind) ? 'chip chip--on' : 'chip'}
+              aria-pressed={kinds.includes(kind)}
+              onClick={() =>
+                setKinds(kinds.includes(kind) ? kinds.filter((each) => each !== kind) : [...kinds, kind])
+              }
+            >
+              {KINDS[kind].label}
+            </button>
+          ))}
+        </div>
+        <div className="row row--wrap">
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void saveMarkdown('file')}
             disabled={busy || kinds.length === 0}
           >
-            Поделиться markdown
+            Сохранить в markdown
           </button>
-        )}
-      </div>
+          {sharable && (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void saveMarkdown('share')}
+              disabled={busy || kinds.length === 0}
+            >
+              Поделиться markdown
+            </button>
+          )}
+        </div>
+      </Fold>
 
+      {/* .txt — копия, отправленная через «Поделиться» (см. deliver). */}
       <input
         ref={input}
         type="file"
-        accept="application/json,.json"
+        accept="application/json,.json,text/plain,.txt"
         hidden
         onChange={(event) => {
           const file = event.target.files?.[0]
@@ -362,17 +377,11 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       {note && <p className="muted">{note}</p>}
       {error && <p className="error">{error}</p>}
 
-      <LastExport at={lastSaved} />
-
-      <p className="muted">
-        Восстановление не стирает то, что уже есть: записи сливаются по времени правки,
-        побеждает более поздняя.
-      </p>
-
       {/* Два входа, а не один (Р-60): копия — свой файл, полный, ей верим;
           импорт — чужие записи, их проверяем по полю и показываем до записи. */}
-      <h3>Импорт записей</h3>
-      <ImportRecords onChanged={onChanged} />
+      <Fold id="settings:transfer:import" title="Импорт записей" sub>
+        <ImportRecords onChanged={onChanged} />
+      </Fold>
     </Fold>
   )
 }
@@ -387,7 +396,7 @@ function canShareFiles(): boolean {
   try {
     return (
       typeof navigator.canShare === 'function' &&
-      navigator.canShare({ files: [new File([''], 'x.json', { type: 'application/json' })] })
+      navigator.canShare({ files: [new File([''], 'x.txt', { type: 'text/plain' })] })
     )
   } catch {
     return false
@@ -403,8 +412,13 @@ async function deliver(via: Via, name: string, text: string, type: string): Prom
     download(name, text, type)
     return true
   }
+  // Chrome на Android делится только файлами из своего списка — картинки,
+  // видео, PDF, .txt; .json и .md в нём нет, и отказ приходит словами
+  // «Permission denied». Поэтому делимся .txt: содержимое то же, и
+  // «Восстановить из копии» принимает его как есть.
+  const shared = new File([text], name.replace(/\.(json|md)$/, '.txt'), { type: 'text/plain' })
   try {
-    await navigator.share({ files: [new File([text], name, { type })], title: name })
+    await navigator.share({ files: [shared], title: shared.name })
     return true
   } catch (failure) {
     if (failure instanceof DOMException && failure.name === 'AbortError') return false

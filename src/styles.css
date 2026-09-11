@@ -896,6 +896,19 @@ p {
   font-weight: 400;
 }
 
+/* Подгруппа внутри блока: «Циклы» и «Здоровье» в «Категориях и названиях». */
+.fold--sub {
+  margin-bottom: 12px;
+}
+
+.fold--sub > .fold__head {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 /* Импорт записей (Р-60): поле под ответ ИИ и сам промпт. */
 .import__text {
   width: 100%;

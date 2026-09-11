@@ -840,7 +840,7 @@ async function scenario() {
   const names = await screen()
   check(
     'в «Категориях и названиях» есть здоровье: симптомы и виды тренировок — Р-59',
-    has(names, 'Симптомы') && has(names, 'Виды тренировок'),
+    has(names, 'Симптомы') && has(names, 'Виды тренировок') && has(names, 'Здоровье'),
   )
   const seeded = await run(`[...document.querySelectorAll('.category input')].map((el) => el.value).join(', ')`)
   await act(`
