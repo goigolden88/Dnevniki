@@ -6,7 +6,7 @@
  * и русских строк не содержит.
  */
 
-import { formatDateOrMonth, formatMonth, MONTHS_SHORT, monthName, plural } from '../../core/dates.ts'
+import { days, formatDateOrMonth, formatMonth, MONTHS_SHORT, monthName, plural } from '../../core/dates.ts'
 import type { ContentEntry } from '../../core/model.ts'
 import {
   monthRanges,
@@ -14,6 +14,7 @@ import {
   startOf,
   type ContentStats,
   type EntryType,
+  type Stale,
   type TypeCount,
 } from './content.ts'
 
@@ -193,4 +194,43 @@ export function peakMonthText(stats: ContentStats): string {
 
   const month = monthName(stats.byMonth.indexOf(peak) + 1)
   return `Плотнее всего ${month} — ${entriesText(peak)}`
+}
+
+// ─── «Ещё смотришь?» (Р-58) ────────────────────────────────────────────────
+
+/** «без новостей 94 дня» — строка на карточке зависшей записи. */
+export function staleText(count: number): string {
+  return `без новостей ${days(count)}`
+}
+
+/** Сколько записей перечислять в уведомлении. Дальше — «и ещё N». */
+const NOTICE_LINES = 5
+
+/**
+ * Вопрос о записях, зависших в «смотрю» (Р-58). Null — спрашивать не о чем.
+ *
+ * Вопрос, а не утверждение, как у болезни (Р-54): приложение не знает,
+ * досмотрено ли, оно знает только, что давно ничего не менялось. Тап ведёт
+ * к самой записи, где есть все три ответа, а при нескольких — на «Контент».
+ */
+export function staleNotice(
+  stale: readonly Stale[],
+): { title: string; body: string; target: string } | null {
+  const first = stale[0]
+  if (first === undefined) return null
+
+  const line = (each: Stale) => `${each.entry.title} — ${staleText(each.days)}`
+  const ask = 'Досмотрел, бросил или ещё смотришь?'
+  if (stale.length === 1) {
+    return {
+      title: 'Ещё смотришь?',
+      body: `${line(first)}. ${ask}`,
+      target: `/content?open=${first.entry.id}`,
+    }
+  }
+
+  const lines = stale.slice(0, NOTICE_LINES).map(line)
+  const rest = stale.length - NOTICE_LINES
+  if (rest > 0) lines.push(`и ещё ${rest}`)
+  return { title: 'Ещё смотришь?', body: [...lines, ask].join('\n'), target: '/content' }
 }

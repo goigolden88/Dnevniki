@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   addDays,
+  lastDayOf,
   days,
   daysAgo,
   daysBetween,
@@ -103,6 +104,15 @@ describe('арифметика дней', () => {
     const from = '2026-01-15'
     const to = '2026-07-04'
     expect(addDays(from, daysBetween(from, to))).toBe(to)
+  })
+})
+
+describe('lastDayOf', () => {
+  it('последний день месяца, февраль високосного тоже', () => {
+    expect(lastDayOf('2026-02')).toBe('2026-02-28')
+    expect(lastDayOf('2024-02')).toBe('2024-02-29')
+    expect(lastDayOf('2026-04')).toBe('2026-04-30')
+    expect(lastDayOf('2026-12')).toBe('2026-12-31')
   })
 })
 

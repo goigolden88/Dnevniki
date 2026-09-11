@@ -45,6 +45,12 @@ export type Content = {
   finishEntry: (id: string) => Promise<void>
   /** Бросил. Это результат, а не пауза (Р-42). */
   dropEntry: (id: string) => Promise<void>
+  /**
+   * «Ещё смотрю» (Р-58): правка без изменений. Сдвигает `updatedAt`,
+   * и отсчёт до вопроса «Ещё смотришь?» начинается заново — на всех
+   * устройствах, потому что правка уезжает синхронизацией.
+   */
+  touchEntry: (id: string) => Promise<void>
 }
 
 function describe(error: unknown): string {
@@ -193,6 +199,8 @@ export function useContent(): Content {
     [updateEntry],
   )
 
+  const touchEntry = useCallback(async (id: string) => updateEntry(id, {}), [updateEntry])
+
   return {
     status,
     error,
@@ -204,5 +212,6 @@ export function useContent(): Content {
     startEntry,
     finishEntry,
     dropEntry,
+    touchEntry,
   }
 }

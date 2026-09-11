@@ -5,12 +5,16 @@ import {
   groupByMonth,
   hasUndated,
   keepAvailable,
+  lastSign,
   monthRanges,
   monthsOf,
   parseScore,
   scoreBucket,
   sortEntries,
   scoreOf,
+  STALE_AFTER_DAYS,
+  staleDays,
+  staleWatching,
   startOf,
   watching,
   yearsOf,
@@ -32,6 +36,51 @@ function entry(over: Partial<ContentEntry> = {}): ContentEntry {
     ...over,
   }
 }
+
+describe('зависшее в «смотрю» — Р-58', () => {
+  const TODAY = '2026-09-11'
+  const OLD = '2026-01-01T10:00:00.000Z'
+  const active = (over: Partial<ContentEntry>) => entry({ status: 'active', score: null, updatedAt: OLD, ...over })
+
+  it('месячная дата начала — последним днём месяца', () => {
+    expect(lastSign(active({ start: '2026-05' }))).toBe('2026-05-31')
+  })
+
+  it('поздняя правка главнее начала', () => {
+    expect(lastSign(active({ start: '2026-01', updatedAt: '2026-08-20T10:00:00.000Z' }))).toBe('2026-08-20')
+  })
+
+  it('нечитаемое начало — остаётся правка', () => {
+    expect(lastSign(active({ start: 'чепуха' }))).toBe('2026-01-01')
+  })
+
+  it('порог 90 дней включительно', () => {
+    expect(STALE_AFTER_DAYS).toBe(90)
+    expect(staleDays(active({ start: '2026-06-13' }), TODAY)).toBe(90)
+    expect(staleDays(active({ start: '2026-06-14' }), TODAY)).toBeNull()
+  })
+
+  it('месяц начала считается в пользу записи: май — 103 дня, а не 133', () => {
+    expect(staleDays(active({ start: '2026-05' }), TODAY)).toBe(103)
+  })
+
+  it('спрашивают только о «смотрю» и только о живых', () => {
+    expect(staleDays(active({ start: '2026-01', status: 'done' }), TODAY)).toBeNull()
+    expect(staleDays(active({ start: '2026-01', deleted: true }), TODAY)).toBeNull()
+  })
+
+  it('самые давние первыми, свежие не попадают', () => {
+    const list = staleWatching(
+      [
+        active({ id: 'may', start: '2026-05' }),
+        active({ id: 'jan', start: '2026-01' }),
+        active({ id: 'aug', start: '2026-08' }),
+      ],
+      TODAY,
+    )
+    expect(list.map((each) => each.entry.id)).toEqual(['jan', 'may'])
+  })
+})
 
 describe('startOf', () => {
   it('берёт и месяц, и полный день — Р-25', () => {

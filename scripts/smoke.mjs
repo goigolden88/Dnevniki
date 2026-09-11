@@ -29,7 +29,7 @@
 
 import { spawn } from 'node:child_process'
 import { build, preview } from 'vite'
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -596,6 +596,38 @@ async function scenario() {
   await sleep(700)
   check('выгрузка в markdown собирается без ошибок', has(await screen(), 'Markdown сохранён'))
 
+  // Запись, зависшая в «смотрю» (Р-58), заводится загрузкой слепка: у неё
+  // должна быть давняя правка, а форма ставит время правки «сейчас».
+  // Заодно проверяется сама загрузка из файла — тем путём, каким её
+  // делает человек.
+  const staleFile = join(profile, 'stale.json')
+  writeFileSync(
+    staleFile,
+    JSON.stringify({
+      schemaVersion: 1,
+      exportedAt: '2026-01-15T10:00:00.000Z',
+      data: {
+        content: [
+          {
+            id: 'stale-series',
+            updatedAt: '2026-01-15T10:00:00.000Z',
+            type: 'series',
+            title: 'Забытый сериал',
+            start: '2026-01',
+            end: null,
+            status: 'active',
+            score: null,
+          },
+        ],
+      },
+    }),
+  )
+  const { root } = await send('DOM.getDocument')
+  const { nodeId } = await send('DOM.querySelector', { nodeId: root.nodeId, selector: 'input[type=file]' })
+  await send('DOM.setFileInputFiles', { nodeId, files: [staleFile] })
+  await sleep(1000)
+  check('слепок загружается из файла', has(await screen(), 'Загружено записей: 1'))
+
   await unfold('Быстрые кнопки')
   const listed = await run(`[...document.querySelectorAll('.quick__item')].map((el) => el.textContent).join(', ')`)
   check('все быстрые кнопки видны в настройках — Р-56', listed.includes('Стрижка'), listed)
@@ -661,6 +693,24 @@ async function scenario() {
     'напоминание о незакрытой болезни — Р-54',
     typeof shown === 'string' && shown.includes('Всё ещё болеешь?: Затянувшийся кашель — первый день'),
     `уведомления: «${shown}»`,
+  )
+
+  check(
+    'напоминание о зависшем в «смотрю» — Р-58',
+    typeof shown === 'string' && shown.includes('Ещё смотришь?: Забытый сериал'),
+    `уведомления: «${shown}»`,
+  )
+
+  // Карточка зависшей записи спрашивает сама; «Ещё смотрю» снимает вопрос.
+  await go('/content')
+  const staleCard = await screen()
+  await act(`byText('button', 'Ещё смотрю')?.click()`)
+  await sleep(700)
+  const touched = await screen()
+  check(
+    'зависшая запись спрашивает, «Ещё смотрю» снимает вопрос — Р-58',
+    has(staleCard, 'ещё смотришь?') && !has(touched, 'ещё смотришь?'),
+    line(staleCard, 'без новостей'),
   )
 
   // ─ Кнопка на две позиции (Р-49): «включающее обслуживание» одним тапом.

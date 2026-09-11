@@ -8,6 +8,8 @@ import {
   monthsText,
   peakMonthText,
   periodText,
+  staleNotice,
+  staleText,
   startedText,
   statusLabel,
   typeCountText,
@@ -31,6 +33,38 @@ function entry(over: Partial<ContentEntry> = {}): ContentEntry {
     ...over,
   }
 }
+
+describe('«Ещё смотришь?» — Р-58', () => {
+  it('строка на карточке', () => {
+    expect(staleText(94)).toBe('без новостей 94 дня')
+  })
+
+  it('спрашивать не о чем — молчит', () => {
+    expect(staleNotice([])).toBeNull()
+  })
+
+  it('одна запись — вопрос с названием, тап к самой записи', () => {
+    const notice = staleNotice([{ entry: entry({ id: 'c1', title: 'Забытый сериал' }), days: 103 }])
+    expect(notice).toEqual({
+      title: 'Ещё смотришь?',
+      body: 'Забытый сериал — без новостей 103 дня. Досмотрел, бросил или ещё смотришь?',
+      target: '/content?open=c1',
+    })
+  })
+
+  it('несколько — списком не длиннее пяти, тап на «Контент»', () => {
+    const many = Array.from({ length: 7 }, (_, index) => ({
+      entry: entry({ id: `c${index}`, title: `Сериал ${index}` }),
+      days: 100 - index,
+    }))
+    const notice = staleNotice(many)
+    const lines = notice?.body.split('\n') ?? []
+    expect(notice?.target).toBe('/content')
+    expect(lines).toHaveLength(7)
+    expect(lines[5]).toBe('и ещё 2')
+    expect(lines[6]).toBe('Досмотрел, бросил или ещё смотришь?')
+  })
+})
 
 describe('типы', () => {
   it('название типа по-русски', () => {

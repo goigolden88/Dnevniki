@@ -14,12 +14,20 @@
  * Две особенности данных, заданные решениями:
  *
  * - Дата допускает месячную точность (Р-25). Арифметике по дням такая
- *   дата не поддаётся, и здесь она не применяется ни разу: год берётся
- *   первыми четырьмя символами, сравнение — лексикографическое.
+ *   дата не поддаётся: год берётся первыми четырьмя символами, сравнение —
+ *   лексикографическое. Одно исключение — «Ещё смотришь?» (Р-58): там
+ *   месяц сначала становится своим последним днём, и только потом считается.
  * - Закончено считается по статусу, а не по дате окончания (Р-42).
  */
 
-import { isDateOrMonth } from '../../core/dates.ts'
+import {
+  daysBetween,
+  isDateOrMonth,
+  isMonthStr,
+  lastDayOf,
+  toDateStr,
+  type DateStr,
+} from '../../core/dates.ts'
 import type { ContentEntry } from '../../core/model.ts'
 
 export type EntryType = ContentEntry['type']
@@ -75,6 +83,54 @@ export function sortEntries(entries: readonly ContentEntry[]): ContentEntry[] {
 /** Что смотрю прямо сейчас — для главного экрана и верха вкладки. */
 export function watching(entries: readonly ContentEntry[]): ContentEntry[] {
   return sortEntries(live(entries).filter((entry) => entry.status === 'active'))
+}
+
+// ─── Зависшее в «смотрю» (Р-58) ────────────────────────────────────────────
+
+/** Сколько дней без признаков жизни, прежде чем спросить «Ещё смотришь?». */
+export const STALE_AFTER_DAYS = 90
+
+/**
+ * Последний признак жизни записи: позднее из дня начала и дня последней
+ * правки. Месячная дата начала берётся последним днём месяца — сомнение
+ * толкуется в пользу записи. Null — не читается ни то, ни другое.
+ */
+export function lastSign(entry: ContentEntry): DateStr | null {
+  const start = startOf(entry)
+  const started = start === null ? null : isMonthStr(start) ? lastDayOf(start) : start
+  const time = Date.parse(entry.updatedAt)
+  const edited = Number.isNaN(time) ? null : toDateStr(new Date(time))
+  if (started === null) return edited
+  if (edited === null) return started
+  return started > edited ? started : edited
+}
+
+/**
+ * Сколько дней запись «смотрю» живёт без новостей — если пора спросить.
+ * Null — не «смотрю», ещё не пора или признаков жизни не прочитать.
+ */
+export function staleDays(
+  entry: ContentEntry,
+  today: DateStr,
+  after: number = STALE_AFTER_DAYS,
+): number | null {
+  if (entry.deleted || entry.status !== 'active') return null
+  const sign = lastSign(entry)
+  if (sign === null) return null
+  const quiet = daysBetween(sign, today)
+  return quiet >= after ? quiet : null
+}
+
+export type Stale = { entry: ContentEntry; days: number }
+
+/** Записи, о которых пора спросить, — самые давние первыми. */
+export function staleWatching(entries: readonly ContentEntry[], today: DateStr): Stale[] {
+  const stale: Stale[] = []
+  for (const entry of live(entries)) {
+    const days = staleDays(entry, today)
+    if (days !== null) stale.push({ entry, days })
+  }
+  return stale.sort((a, b) => b.days - a.days)
 }
 
 export type EntryFilter = {

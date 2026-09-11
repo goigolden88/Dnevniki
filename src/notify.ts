@@ -16,7 +16,9 @@
  */
 
 import { db } from './core/db.ts'
-import { toDateStr } from './core/dates.ts'
+import { daysBetween, toDateStr } from './core/dates.ts'
+import { staleWatching } from './modules/content/content.ts'
+import { staleNotice } from './modules/content/labels.ts'
 import { cycleStates } from './modules/cycles/cycles.ts'
 import { overdueNotice } from './modules/cycles/labels.ts'
 import { openEpisodes } from './modules/health/health.ts'
@@ -39,6 +41,8 @@ export const REMINDER_TAG = 'overdue'
 const LOUD_DAY = 'reminderLastDay'
 /** В какой день уже приходило тихое, вне окна. Второй раз за ночь незачем. */
 const QUIET_DAY = 'reminderQuietDay'
+/** В какой день уже спрашивали «Ещё смотришь?». Не чаще раза в неделю (Р-58). */
+const CONTENT_DAY = 'reminderContentDay'
 /** Часы со звуком. */
 const WINDOW = 'reminderWindow'
 /** Последние фоновые пробуждения. */
@@ -108,6 +112,20 @@ export function planWake(state: {
   return state.quietDay === state.day ? 'already' : 'quiet'
 }
 
+// ─── «Ещё смотришь?» (Р-58) ────────────────────────────────────────────────
+
+/** Как часто спрашивать о зависшем в «смотрю». */
+export const CONTENT_EVERY_DAYS = 7
+
+/**
+ * Пора ли спросить о зависшем в «смотрю». Вопрос масштаба месяцев
+ * ежедневного уведомления не стоит — раз в неделю. В тот же день можно:
+ * ночное тихое повторяется днём со звуком целиком, вместе с этим вопросом.
+ */
+export function contentDue(lastDay: string | null, day: string): boolean {
+  return lastDay === null || lastDay === day || daysBetween(lastDay, day) >= CONTENT_EVERY_DAYS
+}
+
 // ─── Журнал пробуждений (Р-57) ─────────────────────────────────────────────
 
 /** Одно пробуждение фоновой проверки: когда и чем кончилось. */
@@ -161,13 +179,16 @@ async function decide(
 ): Promise<RemindResult> {
   const day = toDateStr(now)
   let loud = true
+  let contentDay: string | null = null
 
   if (!force) {
-    const [loudDay, quietDay, window] = await Promise.all([
+    const [loudDay, quietDay, window, asked] = await Promise.all([
       db.settings.get<string>(LOUD_DAY),
       db.settings.get<string>(QUIET_DAY),
       db.settings.get<unknown>(WINDOW),
+      db.settings.get<string>(CONTENT_DAY),
     ])
+    contentDay = asked ?? null
     const plan = planWake({
       day,
       hour: now.getHours(),
@@ -179,10 +200,11 @@ async function decide(
     loud = plan === 'loud'
   }
 
-  const [items, events, episodes] = await Promise.all([
+  const [items, events, episodes, entries] = await Promise.all([
     db.getAll('items'),
     db.getAll('cycleEvents'),
     db.getAll('episodes'),
+    db.getAll('content'),
   ])
 
   const notices: Notice[] = []
@@ -190,6 +212,10 @@ async function decide(
   if (overdue) notices.push({ ...overdue, tag: 'overdue', target: '/' })
   const illness = illnessNotice(openEpisodes(episodes, day))
   if (illness) notices.push({ ...illness, tag: 'illness' })
+  // Проверка руками спрашивает всегда: иначе не увидеть, работает ли вопрос.
+  const stale = staleNotice(staleWatching(entries, day))
+  const askContent = stale !== null && (force || contentDue(contentDay, day))
+  if (stale && askContent) notices.push({ ...stale, tag: 'content' })
 
   try {
     if (notices.length === 0) {
@@ -198,7 +224,7 @@ async function decide(
           registration,
           {
             title: 'Напоминать не о чем',
-            body: 'Просроченного нет, незакрытых болезней нет.',
+            body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло.',
             tag: 'overdue',
             target: '/',
           },
@@ -213,7 +239,10 @@ async function decide(
     return 'failed'
   }
 
-  if (!force) await db.settings.set(loud ? LOUD_DAY : QUIET_DAY, day)
+  if (!force) {
+    await db.settings.set(loud ? LOUD_DAY : QUIET_DAY, day)
+    if (askContent) await db.settings.set(CONTENT_DAY, day)
+  }
   return loud ? 'shown' : 'quiet'
 }
 

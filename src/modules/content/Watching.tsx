@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
-import { watching } from './content.ts'
-import { entryText } from './labels.ts'
+import { today } from '../../core/dates.ts'
+import { staleDays, watching } from './content.ts'
+import { entryText, staleText } from './labels.ts'
 import { useContent } from './useContent.ts'
 import { Fold } from '../../ui/Fold.tsx'
 
@@ -21,6 +22,7 @@ export function Watching() {
 
   const active = watching(content.entries)
   if (active.length === 0) return null
+  const day = today()
 
   return (
     <Fold id="today:watching" title="Смотрю сейчас" summary={active.length}>
@@ -29,11 +31,15 @@ export function Watching() {
           <li className="cycle cycle--due" key={entry.id}>
             <div className="cycle__foot">
               <div className="cycle__facts">
-                {/* Название ведёт к самой записи, а не просто на вкладку (Р-56). */}
+                {/* Название ведёт к самой записи, а не просто на вкладку (Р-56).
+                    У зависшей там же ответы на «Ещё смотришь?» (Р-58). */}
                 <Link className="cycle__name" to={`/content?open=${entry.id}`}>
                   {entry.title}
                 </Link>
                 <span className="muted">{entryText(entry)}</span>
+                {staleDays(entry, day) !== null && (
+                  <span className="error">{staleText(staleDays(entry, day) ?? 0)} — ещё смотришь?</span>
+                )}
               </div>
               <button
                 type="button"

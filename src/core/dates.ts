@@ -225,6 +225,15 @@ export function addDays(d: DateStr, n: number): DateStr {
 }
 
 /**
+ * Последний день месяца: `2026-02` → `2026-02-28`. Для месячных дат
+ * (Р-25), когда сомнение толкуется в пользу позднего дня.
+ */
+export function lastDayOf(month: MonthStr): DateStr {
+  // Нулевой день следующего месяца — последний день этого.
+  return toDateStr(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0))
+}
+
+/**
  * Русское склонение по числу.
  *
  * Формы: 1 день / 2 дня / 5 дней.

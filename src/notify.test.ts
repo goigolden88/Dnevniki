@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   appendWake,
+  CONTENT_EVERY_DAYS,
+  contentDue,
   DEFAULT_WINDOW,
   inWindow,
   LOG_SIZE,
@@ -69,6 +71,22 @@ describe('что делать при пробуждении — Р-57', () => {
 
   it('вчерашнее громкое сегодня не мешает', () => {
     expect(planWake({ ...base, hour: 15, loudDay: '2026-09-10' })).toBe('loud')
+  })
+})
+
+describe('«Ещё смотришь?» не чаще раза в неделю — Р-58', () => {
+  it('ни разу не спрашивали — пора', () => {
+    expect(contentDue(null, '2026-09-11')).toBe(true)
+  })
+
+  it('через неделю — пора, раньше — нет', () => {
+    expect(CONTENT_EVERY_DAYS).toBe(7)
+    expect(contentDue('2026-09-04', '2026-09-11')).toBe(true)
+    expect(contentDue('2026-09-05', '2026-09-11')).toBe(false)
+  })
+
+  it('в тот же день можно: ночное тихое повторяется днём со звуком целиком', () => {
+    expect(contentDue('2026-09-11', '2026-09-11')).toBe(true)
   })
 })
 

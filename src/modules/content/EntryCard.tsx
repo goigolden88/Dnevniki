@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { entryText, statusLabel } from './labels.ts'
+import { today } from '../../core/dates.ts'
+import { staleDays } from './content.ts'
+import { entryText, staleText, statusLabel } from './labels.ts'
 import { EntryForm } from './EntryForm.tsx'
 import type { Content } from './useContent.ts'
 import type { ContentEntry } from '../../core/model.ts'
@@ -38,6 +40,7 @@ export function EntryCard({
   const [open, setOpen] = useState(focused)
   const [editing, setEditing] = useState(false)
   const action = actionFor(entry, content)
+  const stale = staleDays(entry, today())
   const card = useRef<HTMLLIElement>(null)
 
   useEffect(() => {
@@ -99,6 +102,22 @@ export function EntryCard({
           </button>
         )}
       </div>
+
+      {/* Зависла в «смотрю» (Р-58). У вопроса три ответа: «Досмотрел» —
+          кнопка выше, «Ещё смотрю» и «Бросил» — здесь. */}
+      {stale !== null && (
+        <div className="entry__stale">
+          <p className="muted">{staleText(stale)} — ещё смотришь?</p>
+          <div className="row row--wrap">
+            <button type="button" className="btn" onClick={() => void content.touchEntry(entry.id)}>
+              Ещё смотрю
+            </button>
+            <button type="button" className="btn" onClick={() => void content.dropEntry(entry.id)}>
+              Бросил
+            </button>
+          </div>
+        </div>
+      )}
 
       {open && (
         <div className="entry__more">
