@@ -20,9 +20,19 @@
 import type { Snapshot } from './core/db.ts'
 import { formatDate, type DateStr } from './core/dates.ts'
 import type { FeedItem } from './core/feed.ts'
+import {
+  buildPrompt,
+  mergeResults,
+  readImportFile,
+  type ImportContext,
+  type ImportPlan,
+  type ImportSpec,
+} from './core/importing.ts'
 import type { EventKind } from './core/model.ts'
 import { contentFeed, contentMarkdown } from './modules/content/feed.ts'
+import { contentImportSpec, importContent } from './modules/content/import.ts'
 import { cycleFeed, cycleMarkdown } from './modules/cycles/feed.ts'
+import { cycleImportSpec, importCycles } from './modules/cycles/import.ts'
 import {
   episodeFeed,
   episodeMarkdown,
@@ -31,6 +41,14 @@ import {
   sessionFeed,
   sessionMarkdown,
 } from './modules/health/feed.ts'
+import {
+  episodeImportSpec,
+  importEpisodes,
+  importMeasures,
+  importSessions,
+  measureImportSpec,
+  sessionImportSpec,
+} from './modules/health/import.ts'
 
 /**
  * Все синхронизируемые хранилища, вместе с надгробиями. Надгробия нужны
@@ -44,6 +62,8 @@ type KindEntry = {
   label: string
   feed: (data: Data, day: DateStr) => FeedItem[]
   markdown: (data: Data, day: DateStr) => string
+  /** Раздел импорта записей (Р-60): описание для промпта и разбор. */
+  import: { spec: ImportSpec; run: (raw: unknown, data: Data, ctx: ImportContext) => ImportPlan }
 }
 
 export const KINDS: { readonly [K in EventKind]: KindEntry } = {
@@ -51,26 +71,31 @@ export const KINDS: { readonly [K in EventKind]: KindEntry } = {
     label: 'Циклы',
     feed: (data) => cycleFeed(data.items, data.cycleEvents),
     markdown: (data, day) => cycleMarkdown(data.items, data.cycleEvents, day, data.categories),
+    import: { spec: cycleImportSpec, run: importCycles },
   },
   episode: {
     label: 'Болезни',
     feed: (data, day) => episodeFeed(data.episodes, data.tags, day),
     markdown: (data, day) => episodeMarkdown(data.episodes, data.tags, day),
+    import: { spec: episodeImportSpec, run: importEpisodes },
   },
   measure: {
     label: 'Измерения',
     feed: (data) => measureFeed(data.measures),
     markdown: (data) => measureMarkdown(data.measures),
+    import: { spec: measureImportSpec, run: importMeasures },
   },
   session: {
     label: 'Тренировки',
     feed: (data) => sessionFeed(data.sessions, data.tags),
     markdown: (data) => sessionMarkdown(data.sessions, data.tags),
+    import: { spec: sessionImportSpec, run: importSessions },
   },
   content: {
     label: 'Контент',
     feed: (data) => contentFeed(data.content),
     markdown: (data) => contentMarkdown(data.content),
+    import: { spec: contentImportSpec, run: importContent },
   },
 }
 
@@ -97,4 +122,34 @@ export function markdownExport(data: Data, day: DateStr): string {
   ].join('\n')
   const sections = KIND_ORDER.map((kind) => KINDS[kind].markdown(data, day))
   return `${[head, ...sections].join('\n\n')}\n`
+}
+
+/**
+ * План импорта записей (Р-60): что добавится, что уже есть, что не
+ * разобрано. В базу не пишет — сначала сводка, запись только по кнопке.
+ * Кидает, если файл не тот вовсе.
+ */
+export function planImport(text: string, data: Data, ctx: ImportContext): ImportPlan {
+  const sections = readImportFile(text)
+  const bySection = new Map(KIND_ORDER.map((kind) => [KINDS[kind].import.spec.section, KINDS[kind].import]))
+
+  const results = Object.entries(sections).map(([section, raw]): ImportPlan => {
+    const entry = bySection.get(section)
+    if (entry) return entry.run(raw, data, ctx)
+    return {
+      writes: {},
+      added: [],
+      skipped: 0,
+      issues: [{ section, title: `раздел «${section}»`, reason: 'такого раздела нет — пропущен целиком' }],
+    }
+  })
+  return mergeResults(results)
+}
+
+/** Промпт для ИИ — из описаний всех разделов, в порядке таблицы. */
+export function importPrompt(day: DateStr): string {
+  return buildPrompt(
+    KIND_ORDER.map((kind) => KINDS[kind].import.spec),
+    day,
+  )
 }

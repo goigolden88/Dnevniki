@@ -22,6 +22,7 @@ import { HealthNames } from '../modules/health/Names.tsx'
 import { markdownExport } from '../registry.ts'
 import { backupNote, backupSummary } from '../ui/backup.ts'
 import { Fold } from '../ui/Fold.tsx'
+import { ImportRecords } from './ImportRecords.tsx'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
 
@@ -94,6 +95,10 @@ export function Settings() {
       {/* Раздел общий на модули (Р-59): каждый отдаёт свою часть,
           экран только ставит их рядом. */}
       <Fold id="settings:names" title="Категории и названия" folded>
+        <p className="muted">
+          Каждое название ниже — поле. Тапни, поправь и убери палец или нажми Enter — сохранится.
+          Впишешь название, которое уже есть, — два сольются в одно, записи перейдут к оставшемуся.
+        </p>
         <h3>Категории циклов</h3>
         <CategorySettings />
         <HealthNames />
@@ -270,7 +275,8 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       }
       folded
     >
-      <div className="row">
+      <h3>Копия всех данных</h3>
+      <div className="row row--wrap">
         <button type="button" className="btn" onClick={() => void save()} disabled={busy}>
           Сохранить в файл
         </button>
@@ -280,7 +286,7 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
           onClick={() => input.current?.click()}
           disabled={busy}
         >
-          Загрузить из файла
+          Восстановить из копии
         </button>
       </div>
 
@@ -307,9 +313,14 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       <LastExport at={lastSaved} />
 
       <p className="muted">
-        Загрузка не стирает то, что уже есть: записи сливаются по времени правки, побеждает
-        более поздняя.
+        Восстановление не стирает то, что уже есть: записи сливаются по времени правки,
+        побеждает более поздняя.
       </p>
+
+      {/* Два входа, а не один (Р-60): копия — свой файл, полный, ей верим;
+          импорт — чужие записи, их проверяем по полю и показываем до записи. */}
+      <h3>Импорт записей</h3>
+      <ImportRecords onChanged={onChanged} />
     </Fold>
   )
 }

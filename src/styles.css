@@ -885,6 +885,19 @@ p {
   font-weight: 400;
 }
 
+/* Импорт записей (Р-60): поле под ответ ИИ и сам промпт. */
+.import__text {
+  width: 100%;
+  font: inherit;
+}
+
+.prompt {
+  white-space: pre-wrap;
+  font-size: 12px;
+  max-height: 320px;
+  overflow: auto;
+}
+
 /* Траты — отдельной панелью: это не список дел, а справка, и на фоне
    карточек циклов она должна читаться как другое. */
 .panel {

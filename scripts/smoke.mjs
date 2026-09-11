@@ -628,6 +628,52 @@ async function scenario() {
   await sleep(1000)
   check('слепок загружается из файла', has(await screen(), 'Загружено записей: 1'))
 
+  // ─ Импорт записей (Р-60): текстом, как на телефоне, и в блоке ```json —
+  // ровно так его отдаёт ИИ. Сводка до записи; повтор ничего не удваивает.
+  const importText =
+    '```json\n' +
+    JSON.stringify({
+      format: 'dnevniki-import',
+      version: 1,
+      content: [{ type: 'course', title: 'Курс из Obsidian', start: '2026-02', status: 'done', score: 8 }],
+      episodes: [{ title: 'Ангина', start: '2026-02-01', end: '2026-02-06', symptoms: ['горло'] }],
+      cycles: [{ name: 'Стрижка', cat: 'Гигиена', marks: ['2026-02-02'] }],
+      food: [],
+    }) +
+    '\n```'
+  const pasteImport = async () => {
+    await act(`
+      set(document.querySelector('textarea.import__text'), ${JSON.stringify(importText)})
+      byText('button', 'Разобрать')?.click()
+    `)
+    await sleep(800)
+    return run(`document.querySelector('.import__plan')?.innerText ?? ''`)
+  }
+  const firstPlan = await pasteImport()
+  check(
+    'импорт показывает сводку до записи: что добавится и что не разобрано — Р-60',
+    has(firstPlan, '1 запись контента') &&
+      has(firstPlan, '1 эпизод') &&
+      has(firstPlan, '1 отметка') &&
+      has(firstPlan, 'такого раздела нет'),
+    firstPlan.replace(/\s+/g, ' ').slice(0, 200),
+  )
+  await act(`startsWith('button', 'Загрузить ')?.click()`)
+  await sleep(1000)
+  check('импорт записывает по кнопке', has(await screen(), 'Загружено записей: 3'))
+  const secondPlan = await pasteImport()
+  check(
+    'повтор того же файла ничего не удваивает — Р-60',
+    has(secondPlan, 'Добавлять нечего') && has(secondPlan, 'Уже есть'),
+    secondPlan.replace(/\s+/g, ' ').slice(0, 160),
+  )
+  await act(`byText('button', 'Отмена')?.click()`)
+  const prompt = await run(`document.querySelector('pre.prompt')?.textContent ?? ''`)
+  check(
+    'промпт для ИИ собран из разделов и знает формат — Р-60',
+    prompt.includes('"format": "dnevniki-import"') && prompt.includes('"cycles"') && prompt.includes('Мои данные'),
+  )
+
   await unfold('Быстрые кнопки')
   const listed = await run(`[...document.querySelectorAll('.quick__item')].map((el) => el.textContent).join(', ')`)
   check('все быстрые кнопки видны в настройках — Р-56', listed.includes('Стрижка'), listed)
