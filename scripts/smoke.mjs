@@ -631,6 +631,17 @@ async function scenario() {
     `страница видит ${seenPermission}`,
   )
   await unfold('Напоминания')
+  // Окно со звуком и журнал пробуждений (Р-57). Пробуждений в прогоне
+  // не бывает: фоновую проверку будит только браузер, и не по команде.
+  const reminderSection = `[...document.querySelectorAll('section')]
+    .find((each) => each.querySelector('.fold__btn')?.textContent === 'Напоминания')`
+  const hours = await run(`[...(${reminderSection})?.querySelectorAll('select') ?? []].map((el) => el.value).join('–')`)
+  const reminderText = await run(`(${reminderSection})?.innerText ?? ''`)
+  check(
+    'окно напоминаний по умолчанию 12–20, журнал пуст — Р-57',
+    hours === '12–20' && has(reminderText, 'ещё ни разу не просыпалась'),
+    `окно «${hours}»`,
+  )
   await act(`byText('button', 'Проверить сейчас')?.click()`)
   await sleep(1500)
   const shown = await run(`navigator.serviceWorker.ready

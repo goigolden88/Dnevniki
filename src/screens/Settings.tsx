@@ -7,9 +7,14 @@ import {
   checkReminder,
   disableReminders,
   enableReminders,
+  readWakes,
+  readWindow,
   reminderStatus,
+  saveWindow,
   type ReminderStatus,
+  type ReminderWindow,
   type RemindResult,
+  type Wake,
 } from '../notify.ts'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { markdownExport } from '../registry.ts'
@@ -122,12 +127,14 @@ function About({ state }: { state: State }) {
         <dd>{built.toLocaleString('ru-RU')}</dd>
         {persistent !== undefined && (
           <>
-            <dt>Хранилище</dt>
+            {/* Не копия: данные те же и там же. Вопрос один — вправе ли
+                браузер стереть их сам, никого не спросив (Р-61). */}
+            <dt>Очистка браузером</dt>
             <dd>
               {persistent === true
-                ? 'постоянное'
+                ? 'не грозит — стереть данные можно только самому'
                 : persistent === false
-                  ? 'браузер может очистить при нехватке места'
+                  ? 'возможна при нехватке места'
                   : 'браузер не сообщает'}
             </dd>
           </>
@@ -334,11 +341,22 @@ const REMINDER_SUMMARY: Record<ReminderStatus, string> = {
 
 const CHECK_TEXT: Record<RemindResult | 'denied' | 'unsupported', string> = {
   shown: 'Уведомление показано.',
+  quiet: 'Уведомление показано без звука.',
   nothing:
     'Напоминать не о чем — пришло пустое уведомление, чтобы было видно, что они доходят.',
   already: 'Сегодня уже напоминало.',
+  failed: 'Показать уведомление не вышло.',
   denied: 'Уведомления запрещены — показать нечего.',
   unsupported: REMINDER_TEXT.unsupported,
+}
+
+/** Чем кончилось фоновое пробуждение — строка журнала (Р-57). */
+const WAKE_TEXT: Record<RemindResult, string> = {
+  shown: 'показано со звуком',
+  quiet: 'показано без звука — вне окна',
+  nothing: 'напоминать было не о чем',
+  already: 'сегодня уже напоминало',
+  failed: 'показать не вышло',
 }
 
 /**
@@ -350,6 +368,8 @@ const CHECK_TEXT: Record<RemindResult | 'denied' | 'unsupported', string> = {
  */
 function Reminders() {
   const [status, setStatus] = useState<ReminderStatus | null>(null)
+  const [hours, setHours] = useState<ReminderWindow | null>(null)
+  const [wakes, setWakes] = useState<Wake[] | null>(null)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
 
@@ -357,7 +377,16 @@ function Reminders() {
     void reminderStatus()
       .then(setStatus)
       .catch(() => setStatus('unsupported'))
+    void readWindow().then(setHours)
+    void readWakes()
+      .then(setWakes)
+      .catch(() => setWakes([]))
   }, [])
+
+  async function pickHours(next: ReminderWindow) {
+    setHours(next)
+    await saveWindow(next)
+  }
 
   async function act(action: () => Promise<void>) {
     setBusy(true)
@@ -371,15 +400,18 @@ function Reminders() {
     }
   }
 
+  const summary =
+    status === null
+      ? undefined
+      : status === 'on' && hours
+        ? `включены, ${hours.from}–${hours.to}`
+        : REMINDER_SUMMARY[status]
+  const usable = status !== null && status !== 'unsupported' && status !== 'denied'
+
   // Пока состояние читается, раздел без итога и без содержимого: мигать
   // «не поддерживается» на полсекунды незачем.
   return (
-    <Fold
-      id="settings:reminders"
-      title="Напоминания"
-      summary={status === null ? undefined : REMINDER_SUMMARY[status]}
-      folded
-    >
+    <Fold id="settings:reminders" title="Напоминания" summary={summary} folded>
       {status !== null && (
         <>
           <p className="muted">{REMINDER_TEXT[status]}</p>
@@ -423,9 +455,98 @@ function Reminders() {
           </div>
 
           {note && <p className="muted">{note}</p>}
+
+          {usable && hours && (
+            <>
+              <div className="row row--wrap">
+                <HourField
+                  label="Со звуком с"
+                  value={hours.from}
+                  onPick={(from) => void pickHours({ ...hours, from })}
+                />
+                <HourField label="до" value={hours.to} onPick={(to) => void pickHours({ ...hours, to })} />
+              </div>
+              <p className="muted">
+                Вне этих часов уведомление приходит без звука и ждёт в шторке. Если в тот же день
+                браузер проверит ещё раз уже в эти часы — повторит со звуком. Часы — по времени
+                этого устройства.
+              </p>
+            </>
+          )}
+
+          {usable && <WakeLog wakes={wakes} />}
         </>
       )}
     </Fold>
+  )
+}
+
+const HOURS = Array.from({ length: 24 }, (_, hour) => hour)
+
+function HourField({
+  label,
+  value,
+  onPick,
+}: {
+  label: string
+  value: number
+  onPick: (hour: number) => void
+}) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onPick(Number(event.target.value))}>
+        {HOURS.map((hour) => (
+          <option key={hour} value={hour}>{`${hour}:00`}</option>
+        ))}
+      </select>
+    </label>
+  )
+}
+
+function wakeTime(at: string): string {
+  return new Date(at).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+/**
+ * Журнал фоновых проверок (Р-57): будит ли их браузер вообще и чем они
+ * кончаются. Без него «ни разу не пришло само» — три неразличимых случая:
+ * не будил; будил, но напоминать было не о чем; будил, но сегодня уже было.
+ */
+function WakeLog({ wakes }: { wakes: Wake[] | null }) {
+  if (wakes === null) return null
+
+  const last = wakes[0]
+  if (!last) {
+    return <p className="muted">Фоновая проверка на этом устройстве ещё ни разу не просыпалась.</p>
+  }
+
+  return (
+    <>
+      <p className="muted">
+        Фоновая проверка последний раз: {wakeTime(last.at)} — {WAKE_TEXT[last.result]}.
+      </p>
+      {wakes.length > 1 && (
+        <details>
+          <summary className="link-btn">Все пробуждения · {wakes.length}</summary>
+          <table className="stats">
+            <tbody>
+              {wakes.map((wake) => (
+                <tr key={wake.at}>
+                  <td>{wakeTime(wake.at)}</td>
+                  <td className="muted">{WAKE_TEXT[wake.result]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </details>
+      )}
+    </>
   )
 }
 
