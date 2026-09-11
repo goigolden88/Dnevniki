@@ -13,6 +13,7 @@ import {
   isDateStr,
   parseDate,
   plural,
+  timeSpan,
   toDateStr,
   today,
 } from './dates.ts'
@@ -188,6 +189,24 @@ describe('склонение дробных', () => {
   it('дробные дни пишутся через запятую', () => {
     expect(days(3.5)).toBe('3,5 дня')
     expect(days(1)).toBe('1 день')
+  })
+})
+
+describe('timeSpan', () => {
+  it('секунды — с числом и склонением', () => {
+    expect(timeSpan(1000)).toBe('1 секунду')
+    expect(timeSpan(3000)).toBe('3 секунды')
+    expect(timeSpan(5000)).toBe('5 секунд')
+  })
+
+  it('одна минута — без числа: «через минуту»', () => {
+    expect(timeSpan(60_000)).toBe('минуту')
+  })
+
+  it('несколько минут — с числом', () => {
+    expect(timeSpan(120_000)).toBe('2 минуты')
+    expect(timeSpan(300_000)).toBe('5 минут')
+    expect(timeSpan(21 * 60_000)).toBe('21 минуту')
   })
 })
 

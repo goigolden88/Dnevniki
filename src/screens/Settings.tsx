@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { db } from '../core/db.ts'
-import { today } from '../core/dates.ts'
+import { days, today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
 import type { EventKind, SyncedStore } from '../core/model.ts'
 import {
   checkReminder,
+  CONTENT_EVERY_DAYS,
   disableReminders,
   enableReminders,
   readWakes,
@@ -18,6 +19,7 @@ import {
   type Wake,
 } from '../notify.ts'
 import { CategorySettings } from '../modules/cycles/Categories.tsx'
+import { STALE_AFTER_DAYS } from '../modules/content/content.ts'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { HealthNames } from '../modules/health/Names.tsx'
 import { KIND_ORDER, KINDS, markdownExport } from '../registry.ts'
@@ -444,7 +446,8 @@ const REMINDER_TEXT: Record<ReminderStatus, string> = {
   denied: 'Уведомления для этого сайта запрещены в настройках браузера. Разрешить их можно только там.',
   off:
     'Примерно раз в сутки приложение напомнит о просроченном и о болезни, которую не закрыли, — ' +
-    'даже закрытое. Раз в неделю спросит о том, что давно висит в «смотрю».',
+    `даже закрытое. О том, что ${days(STALE_AFTER_DAYS)} висит в «смотрю» без правок, спросит ` +
+    `не чаще раза в ${days(CONTENT_EVERY_DAYS)}.`,
   'not-installed':
     'Уведомления разрешены, но фоновую проверку браузер не дал. Так бывает, когда приложение ' +
     'открыто во вкладке, а не установлено иконкой.',

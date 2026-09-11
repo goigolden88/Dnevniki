@@ -7,13 +7,14 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { days, daysBetween, formatDate, isDateStr, today } from '../core/dates.ts'
+import { days, daysBetween, formatDate, isDateStr, timeSpan, today } from '../core/dates.ts'
 import {
   checkAccess,
   expiryDay,
   forgetToken,
   getStatus,
   readConfig,
+  RETRY_MS,
   saveConfig,
   syncNow,
 } from '../core/sync.ts'
@@ -21,8 +22,8 @@ import type { SyncConfig, SyncStatus } from '../core/sync.ts'
 import { Fold } from './Fold.tsx'
 import { useSyncStatus } from './useSync.ts'
 
-/** За сколько дней до конца жизни токена начинать предупреждать. */
-const WARN_DAYS = 30
+/** За сколько дней до конца жизни токена начинать предупреждать. Есть в справке. */
+export const WARN_DAYS = 30
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : 'Неизвестная ошибка'
@@ -38,7 +39,7 @@ function summaryOf(status: SyncStatus, config: SyncConfig | null): ReactNode {
   if (status.state === 'off') return 'выключена'
   if (status.state === 'error') return <span className="error">ошибка</span>
   if (status.state === 'syncing') return 'идёт обмен'
-  if (status.deferred) return 'отложено на минуту'
+  if (status.deferred) return `отложено на ${timeSpan(RETRY_MS)}`
   if (status.pending > 0) return `ждут отправки ${status.pending}`
   if (!status.lastAt) return 'обмена не было'
   return new Date(status.lastAt).toLocaleString('ru-RU', {
@@ -258,7 +259,7 @@ function StatusLine() {
   if (status.deferred) {
     return (
       <p className="muted">
-        Другое устройство или окно отправляло в то же время. Повторю через минуту
+        Другое устройство или окно отправляло в то же время. Повторю через {timeSpan(RETRY_MS)}
         {status.pending > 0 ? ` — ждут отправки ${status.pending}` : ''}.
       </p>
     )

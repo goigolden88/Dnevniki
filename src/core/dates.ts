@@ -264,3 +264,17 @@ export function days(n: number): string {
   const number = Number.isInteger(n) ? String(n) : String(n).replace('.', ',')
   return `${number} ${plural(n, ['день', 'дня', 'дней'])}`
 }
+
+/**
+ * Промежуток из миллисекунд для «через …» и «на …»: `5000` → `5 секунд`,
+ * `60000` → `минуту`, `120000` → `2 минуты`. Текст собирается из константы
+ * кода, а не вписывается руками (Р-65). Одна минута — без числа: «через
+ * минуту» по-русски, «через 1 минуту» — нет.
+ */
+export function timeSpan(ms: number): string {
+  const seconds = Math.round(ms / 1000)
+  if (seconds < 60) return `${seconds} ${plural(seconds, ['секунду', 'секунды', 'секунд'])}`
+  const minutes = Math.round(seconds / 60)
+  if (minutes === 1) return 'минуту'
+  return `${minutes} ${plural(minutes, ['минуту', 'минуты', 'минут'])}`
+}

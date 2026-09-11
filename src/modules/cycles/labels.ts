@@ -6,6 +6,7 @@
  */
 
 import {
+  DUE_RATIO,
   MIN_INTERVALS,
   type CycleState,
   type CycleStatus,
@@ -50,6 +51,9 @@ export function statusText(state: CycleState): string {
 
 /** Сколько отметок нужно, чтобы срок посчитался сам. */
 export const MARKS_FOR_INTERVAL = MIN_INTERVALS + 1
+
+/** С какой доли срока позиция желтеет — в процентах, для текстов (Р-22). */
+export const DUE_PERCENT = Math.round(DUE_RATIO * 100)
 
 /**
  * Расхождение между тем, как надо, и тем, как есть. Р-29.

@@ -588,6 +588,21 @@ async function scenario() {
     'справка открывается с «Сейчас», вопрос раскрывается — Р-63',
     has(help, 'Справка') && has(help, 'fine-grained токен'),
   )
+  // Числа справки собираются из констант (Р-65): раскрыты все вопросы,
+  // подставленное читается, а не «undefined».
+  await act(`document.querySelectorAll('.fold__btn[aria-expanded="false"]').forEach((el) => el.click())`)
+  await sleep(500)
+  const helpAll = await screen()
+  check(
+    'числа справки подставлены из констант — Р-65',
+    has(helpAll, '90 дней висит') &&
+      has(helpAll, 'через 5 секунд') &&
+      has(helpAll, 'с 12 до 20') &&
+      has(helpAll, '4 отметки') &&
+      !has(helpAll, 'undefined') &&
+      !has(helpAll, 'NaN'),
+    helpAll.replace(/\s+/g, ' ').slice(0, 200),
+  )
   await go('/')
 
   await act(`document.querySelector('[aria-label="Настройки"]')?.click()`)
