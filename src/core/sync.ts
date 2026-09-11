@@ -217,10 +217,25 @@ export type Ports = {
   remember: (shas: ShaByPath, commit: string | null) => Promise<void>
 }
 
-/** Сколько раз перечитываем и сливаемся заново, проиграв гонку. */
-const ATTEMPTS = 2
+/** Сколько раз перечитываем и сливаемся заново, проиграв гонку (Р-62). */
+const ATTEMPTS = 3
 
-export async function runSync(api: Client, ports: Ports): Promise<SyncResult> {
+/**
+ * Пауза перед повтором: секунда, потом две (Р-62). Сразу повторять
+ * бесполезно: соседняя отправка ещё не закончилась, голова ветки у GitHub
+ * обновляется не мгновенно, и повтор строится на том же устаревшем
+ * родителе. Две попытки без паузы так и проигрывали обе за доли секунды.
+ */
+function backoff(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, attempt * 1000))
+}
+
+export async function runSync(
+  api: Client,
+  ports: Ports,
+  options: { pause?: (attempt: number) => Promise<void> } = {},
+): Promise<SyncResult> {
+  const pause = options.pause ?? backoff
   // Снято до начала: правки, сделанные во время прохода, останутся грязными
   // и уедут следующим. Терять их нельзя — это худший вид потери данных.
   const dirtyAtStart = await ports.listDirty()
@@ -233,6 +248,7 @@ export async function runSync(api: Client, ports: Ports): Promise<SyncResult> {
       if (!race || attempt >= ATTEMPTS) throw error
       // Второе устройство отправило раньше. Читаем заново — его записи
       // войдут в слияние, и наши поверх них.
+      await pause(attempt)
     }
   }
 }
@@ -385,9 +401,18 @@ export type SyncStatus = {
   error: string
   /** Ошибка именно в токене: он не принят или истёк. */
   badToken: boolean
+  /** Проход проиграл гонку до конца и сам повторится через минуту (Р-62). */
+  deferred: boolean
 }
 
-let status: SyncStatus = { state: 'off', pending: 0, lastAt: null, error: '', badToken: false }
+let status: SyncStatus = {
+  state: 'off',
+  pending: 0,
+  lastAt: null,
+  error: '',
+  badToken: false,
+  deferred: false,
+}
 const listeners = new Set<(value: SyncStatus) => void>()
 
 function publish(patch: Partial<SyncStatus>): void {
@@ -450,15 +475,28 @@ export async function syncNow(): Promise<SyncResult | null> {
       const expiry = api.tokenExpiry()
       if (expiry) await saveConfig({ tokenExpires: expiry })
 
-      publish({ state: 'idle', error: '', badToken: false })
+      publish({ state: 'idle', error: '', badToken: false, deferred: false })
       await refreshStatus()
       return result
     } catch (error) {
+      // Проигранная до конца гонка — не поломка: очередь цела, соседняя
+      // отправка только что прошла. Архитектура обещает «откладываем», а не
+      // красную точку (Р-62). Второй раз подряд — уже повод показать:
+      // вечные молчаливые повторы спрятали бы настоящую поломку.
+      const race = error instanceof GitHubError && error.conflict
+      if (race && !status.deferred) {
+        publish({ state: 'idle', error: '', badToken: false, deferred: true })
+        await refreshStatus()
+        later(RETRY_MS)
+        return null
+      }
+
       const text = error instanceof Error ? error.message : 'Неизвестная ошибка'
       publish({
         state: 'error',
         error: text,
         badToken: error instanceof GitHubError && error.badToken,
+        deferred: false,
       })
       await refreshStatus()
       return null
@@ -469,6 +507,9 @@ export async function syncNow(): Promise<SyncResult | null> {
 
   return running
 }
+
+/** Через сколько повторить проход, проигравший гонку до конца (Р-62). */
+const RETRY_MS = 60_000
 
 // ─── Когда запускать ───────────────────────────────────────────────────────
 

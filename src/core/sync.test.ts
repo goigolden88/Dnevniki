@@ -351,7 +351,7 @@ describe('гонка двух устройств', () => {
       }),
     )
 
-    const result = await runSync(repo.api, local.ports)
+    const result = await runSync(repo.api, local.ports, { pause: () => Promise.resolve() })
 
     // Ни одна из трёх записей не потерялась.
     expect(JSON.parse(repo.files()['items.json'] ?? '[]').map((r: Record_) => r.id).sort())
@@ -360,7 +360,7 @@ describe('гонка двух устройств', () => {
     expect(result.pushed).toBeGreaterThan(0)
   })
 
-  it('проиграв дважды, откладывает, а не давит силой', async () => {
+  it('проиграв трижды, откладывает, а не давит силой; между попытками пауза — Р-62', async () => {
     const repo = fakeRepo(repoWith({ items: [item('i1', '2026-09-01T10:00:00.000Z')] }))
     const local = fakeDb({ items: [item('i2', '2026-09-02T10:00:00.000Z')] })
 
@@ -372,7 +372,15 @@ describe('гонка двух устройств', () => {
       return first(sha, options)
     }
 
-    await expect(runSync(repo.api, local.ports)).rejects.toThrow(GitHubError)
+    // Сразу повторять бесполезно: соседняя отправка ещё не закончилась.
+    const pauses: number[] = []
+    const pause = (attempt: number) => {
+      pauses.push(attempt)
+      return Promise.resolve()
+    }
+
+    await expect(runSync(repo.api, local.ports, { pause })).rejects.toThrow(GitHubError)
+    expect(pauses).toEqual([1, 2])
   })
 })
 

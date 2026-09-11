@@ -215,7 +215,11 @@ export function createClient({ repo, token, fetch = globalThis.fetch }: ClientOp
       // а репозиторий без единого коммита. Повторять такое бессмысленно.
       const empty = detail.toLowerCase().includes('empty')
       return new GitHubError(
-        empty ? 'В репозитории данных нет ни одного коммита' : detail || 'Ветка изменилась под нами. Перечитаю и сольюсь заново',
+        // Текст GitHub («Update is not a fast forward») человеку ничего
+        // не говорит — называем то, что случилось (Р-62).
+        empty
+          ? 'В репозитории данных нет ни одного коммита'
+          : 'Другое устройство или окно отправляло в то же время',
         { status, conflict: !empty },
       )
     }

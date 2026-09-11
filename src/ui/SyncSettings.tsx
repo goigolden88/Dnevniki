@@ -38,6 +38,7 @@ function summaryOf(status: SyncStatus, config: SyncConfig | null): ReactNode {
   if (status.state === 'off') return 'выключена'
   if (status.state === 'error') return <span className="error">ошибка</span>
   if (status.state === 'syncing') return 'идёт обмен'
+  if (status.deferred) return 'отложено на минуту'
   if (status.pending > 0) return `ждут отправки ${status.pending}`
   if (!status.lastAt) return 'обмена не было'
   return new Date(status.lastAt).toLocaleString('ru-RU', {
@@ -147,7 +148,7 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
       // упал, синхронизация выключена, настройки не заполнены. Текст ошибки
       // уже показан строкой состояния, дублировать его здесь незачем.
       if (result === null) {
-        if (getStatus().state === 'error') setNote('')
+        if (getStatus().state === 'error' || getStatus().deferred) setNote('')
         else if (!fresh.enabled) setNote('Синхронизация выключена')
         else setNote('Не заполнены репозиторий или токен')
       } else if (result.pulled === 0 && result.pushed === 0) setNote('Всё и так совпадает')
@@ -252,6 +253,16 @@ function StatusLine() {
   }
 
   if (status.state === 'syncing') return <p className="muted">Синхронизирую…</p>
+
+  // Проигранная гонка (Р-62): записи в очереди, делать ничего не надо.
+  if (status.deferred) {
+    return (
+      <p className="muted">
+        Другое устройство или окно отправляло в то же время. Повторю через минуту
+        {status.pending > 0 ? ` — ждут отправки ${status.pending}` : ''}.
+      </p>
+    )
+  }
 
   const when = status.lastAt ? new Date(status.lastAt).toLocaleString('ru-RU') : null
 
