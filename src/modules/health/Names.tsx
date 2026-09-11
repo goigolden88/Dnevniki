@@ -60,9 +60,13 @@ export function HealthNames() {
 
       {/* Встроенные — вес, рост, давление — не переименовываются: их
           подписи в коде. Здесь только вписанные руками. */}
-      {metrics.length > 0 && (
+      <h3>Свои метрики</h3>
+      {metrics.length === 0 ? (
+        <p className="muted">
+          Своих метрик пока нет. Заводятся в «Здоровье» → «Измерения», чипом «+ своя».
+        </p>
+      ) : (
         <>
-          <h3>Свои метрики</h3>
           {metrics.map((metric) => (
             <div className="row row--wrap" key={metric}>
               <RenameField

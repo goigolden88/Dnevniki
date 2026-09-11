@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { formatDate, formatDateLoose, today } from '../../core/dates.ts'
-import { metricsOf, series } from './health.ts'
+import { metricsOf, resolveMetric, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
 import { Fold } from '../../ui/Fold.tsx'
@@ -11,8 +11,9 @@ import type { Health } from './useHealth.ts'
  * Измерения: ряд с графиком и ввод.
  *
  * Метрика — свободная строка в модели, но в интерфейсе предлагаются три
- * готовые: вес, давление, рост. Остальные появляются в переключателе сами,
- * как только заведены, — иначе метрика, вписанная руками, потерялась бы.
+ * готовые: вес, давление, рост. Своя заводится чипом «+ своя»: до него
+ * завести её было нечем вовсе, хотя модель это позволяла. Дальше она
+ * стоит в переключателе сама, как только записано первое значение.
  */
 export function Measures({ health }: { health: Health }) {
   const known = metricsOf(health.measures)
@@ -20,6 +21,20 @@ export function Measures({ health }: { health: Health }) {
   // с чего начать, когда измерений ещё нет ни одного.
   const all = [...METRICS.map((each) => each.key), ...known.filter((each) => !isPreset(each))]
   const [metric, setMetric] = useState<string>(all[0] ?? 'weight')
+  const [naming, setNaming] = useState(false)
+  const [newName, setNewName] = useState('')
+  // Только что выбранная своя метрика ещё без единого значения — в ряду
+  // её нет, а показать выбранное надо.
+  const shown = all.includes(metric) ? all : [...all, metric]
+
+  function pickNew(event: FormEvent) {
+    event.preventDefault()
+    const clean = newName.trim()
+    if (!clean) return
+    setMetric(resolveMetric(health.measures, clean, METRICS))
+    setNaming(false)
+    setNewName('')
+  }
 
   const row = series(health.measures, metric)
   const recent = health.measures
@@ -31,7 +46,7 @@ export function Measures({ health }: { health: Health }) {
     <Fold id="health:measures" title="Измерения" summary={health.measures.length}>
 
       <div className="chips">
-        {all.map((each) => (
+        {shown.map((each) => (
           <button
             key={each}
             type="button"
@@ -42,7 +57,30 @@ export function Measures({ health }: { health: Health }) {
             {metricLabel(each)}
           </button>
         ))}
+        <button
+          type="button"
+          className={naming ? 'chip chip--on' : 'chip'}
+          aria-expanded={naming}
+          onClick={() => setNaming(!naming)}
+        >
+          + своя
+        </button>
       </div>
+
+      {naming && (
+        <form className="row row--wrap" onSubmit={pickNew}>
+          <input
+            value={newName}
+            placeholder="пульс, сахар, талия"
+            aria-label="Название своей метрики"
+            autoFocus
+            onChange={(event) => setNewName(event.target.value)}
+          />
+          <button type="submit" className="btn">
+            Выбрать
+          </button>
+        </form>
+      )}
 
       {row === null ? (
         <p className="muted">Измерений пока нет. Первое задаст точку отсчёта.</p>

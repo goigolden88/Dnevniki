@@ -74,6 +74,23 @@ export function renameTagPlan(
 }
 
 /**
+ * Какой метрикой считать вписанное название. Встроенной — по её ключу
+ * или подписи: «вес» — это weight, а не вторая метрика рядом. Уже
+ * заведённой своей — в её написании, иначе «Пульс» и «пульс» стали бы
+ * двумя рядами на графике. Иначе — как вписано.
+ */
+export function resolveMetric(
+  measures: readonly Measure[],
+  name: string,
+  presets: readonly { key: string; label: string }[],
+): string {
+  const clean = name.trim()
+  const preset = presets.find((each) => each.key === clean || sameText(each.label, clean))
+  if (preset) return preset.key
+  return measures.find((measure) => !measure.deleted && sameText(measure.metric, clean))?.metric ?? clean
+}
+
+/**
  * Переименование своей метрики по всем её измерениям (Р-59).
  *
  * Метрика — строка у измерения, отдельной записи нет. Встроенные — вес,
@@ -91,11 +108,8 @@ export function renameMetricPlan(
   const clean = to.trim()
   if (!clean || presets.some((preset) => preset.key === from)) return null
 
-  const preset = presets.find((each) => each.key === clean || sameText(each.label, clean))
-  const known = measures.find(
-    (measure) => !measure.deleted && measure.metric !== from && sameText(measure.metric, clean),
-  )?.metric
-  const target = preset?.key ?? known ?? clean
+  const others = measures.filter((measure) => measure.metric !== from)
+  const target = resolveMetric(others, clean, presets)
   if (target === from) return null
 
   return measures
