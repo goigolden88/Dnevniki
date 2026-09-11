@@ -150,12 +150,65 @@ function open(): Promise<IDBDatabase> {
  * все миграции по порядку. Тот же путь, что у базы, приехавшей с версии 1, —
  * значит расхождений между «поставил давно» и «поставил сегодня» не будет.
  */
-function upgrade(database: IDBDatabase, tx: IDBTransaction, from: number): void {
+function upgrade(
+  database: IDBDatabase,
+  tx: IDBTransaction,
+  from: number,
+  to: number = SCHEMA_VERSION,
+): void {
   if (from < 1) createStores(database)
 
   for (const migration of [...migrations].sort((a, b) => a.to - b.to)) {
-    if (migration.to > from) migration.run(database, tx)
+    if (migration.to > from && migration.to <= to) migration.run(database, tx)
   }
+}
+
+/**
+ * База в раскладке версии `version`, с записями внутри — ровно так она лежит
+ * на копии, ещё не получившей обновление. Приложение это не зовёт: нужно
+ * проверке на настоящих данных (Р-72), где такую базу затем открывает
+ * текущий код и проводит через миграции тем же путём, что у человека.
+ *
+ * Возвращает хранилища, которых в той версии не было, а записи для них
+ * пришли, — это расхождение копии со схемой, и промолчать о нём нельзя.
+ */
+export async function createLegacyBase(
+  version: number,
+  data: Partial<Snapshot['data']>,
+): Promise<string[]> {
+  if (!Number.isInteger(version) || version < 1 || version > SCHEMA_VERSION) {
+    throw new Error(`Схемы ${version} не бывает: здесь от 1 до ${SCHEMA_VERSION}`)
+  }
+  if (connection) {
+    ;(await connection).close()
+    connection = null
+  }
+
+  return new Promise((resolve, reject) => {
+    const skipped: string[] = []
+    const request = indexedDB.open(DB_NAME, version)
+    request.onupgradeneeded = (event) => {
+      const tx = request.transaction
+      if (!tx) {
+        reject(new Error('Обновление базы без транзакции'))
+        return
+      }
+      upgrade(request.result, tx, event.oldVersion, version)
+      for (const [store, records] of Object.entries(data)) {
+        if (!request.result.objectStoreNames.contains(store)) {
+          if (records && records.length > 0) skipped.push(store)
+          continue
+        }
+        const target = tx.objectStore(store)
+        for (const record of records ?? []) target.put(record)
+      }
+    }
+    request.onsuccess = () => {
+      request.result.close()
+      resolve(skipped)
+    }
+    request.onerror = () => reject(request.error ?? new Error('База не создалась'))
+  })
 }
 
 /**

@@ -31,10 +31,19 @@ import { spawn } from 'node:child_process'
 import { build, preview } from 'vite'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
+
+/**
+ * Копия настоящих данных для прогона экранов (Р-72):
+ * `npm run smoke -- --data <файл>`. Путь — от того места, где набрали
+ * команду. Нет ключа — обычный сценарий.
+ */
+const DATA_AT = process.argv.indexOf('--data')
+const DATA =
+  DATA_AT === -1 ? null : resolve(process.env.INIT_CWD ?? process.cwd(), process.argv[DATA_AT + 1] ?? '')
 
 /** Адрес собранного приложения. Заполняется, когда поднимется сервер. */
 let APP = ''
@@ -985,6 +994,73 @@ function line(text, part) {
     .find((each) => each.toLowerCase().includes(part.toLowerCase())) ?? ''
 }
 
+// ─── Копия настоящих данных (Р-72) ─────────────────────────────────────────
+
+/** Разворачивает все свёрнутые блоки, вложенные тоже: они появляются после внешних. */
+async function unfoldAll() {
+  for (let round = 0; round < 3; round++) {
+    await act(`document.querySelectorAll('.fold__btn[aria-expanded="false"]').forEach((el) => el.click())`)
+    await sleep(400)
+  }
+}
+
+/**
+ * Экраны на копии настоящих данных. Копия загружается тем же путём, что
+ * у человека, — «Восстановить из копии», — и каждый экран открывается со
+ * всеми развёрнутыми блоками: ошибка на кривой записи прячется именно
+ * в свёрнутом. Условие прохода прежнее — ни одной ошибки в консоли.
+ *
+ * Данные остаются во временном профиле браузера и удаляются вместе с ним.
+ * Миграции IndexedDB здесь не проверяются — копия ложится в базу текущей
+ * схемы; их проверяет `npm run check:data`.
+ */
+async function dataScenario(file) {
+  await send('Runtime.enable')
+  await send('Page.enable')
+  await send('DOM.enable')
+
+  await send('Page.navigate', { url: APP })
+  await sleep(2000)
+
+  await go('/settings')
+  await unfold('Экспорт и импорт')
+  // Поле копии, а не импорта записей: у копии в списке типов есть text/plain.
+  const field = await send('Runtime.evaluate', {
+    expression: `document.querySelector('input[type=file][accept*="text/plain"]')`,
+  })
+  const objectId = field?.result?.objectId
+  check('поле «Восстановить из копии» найдено', Boolean(objectId))
+  if (!objectId) return
+
+  await send('DOM.setFileInputFiles', { files: [file], objectId })
+  await sleep(3000)
+  const restored = await screen()
+  const loaded = /Загружено записей: (\d+)/.exec(restored.replace(/ /g, ' '))
+  check('копия загрузилась через «Восстановить из копии» — Р-72', loaded !== null, loaded?.[0] ?? restored.slice(0, 160))
+
+  const routes = ['/', '/health', '/health/summary', '/content', '/feed', '/settings', '/help']
+
+  // Экраны позиции и эпизода — первые попавшиеся, если они есть.
+  await go('/')
+  // По адресу, а не по классу: у карточки болезни на «Сейчас» тот же класс.
+  const item = await run(`document.querySelector('a[href^="#/cycle/"]')?.getAttribute('href') ?? ''`)
+  if (item) routes.push(item.replace(/^#/, ''))
+  await go('/health')
+  const episode = await run(`document.querySelector('a[href^="#/episode/"]')?.getAttribute('href') ?? ''`)
+  if (episode) routes.push(episode.replace(/^#/, ''))
+
+  for (const route of routes) {
+    await go(route)
+    await unfoldAll()
+    const text = await screen()
+    check(
+      `${route} — открылся на настоящих данных, всё развёрнуто`,
+      text.trim().length > 0 && !has(text, 'База не открылась') && !has(text, 'не найден'),
+      text.replace(/\s+/g, ' ').slice(0, 80),
+    )
+  }
+}
+
 // ─── Прогон ────────────────────────────────────────────────────────────────
 
 let server
@@ -992,6 +1068,7 @@ let browser
 let profile
 
 try {
+  if (DATA !== null && !existsSync(DATA)) throw new Error(`Файла копии нет: ${DATA}`)
   server = await startServer()
   profile = mkdtempSync(join(tmpdir(), 'dnevniki-smoke-'))
   browser = spawn(
@@ -1009,7 +1086,7 @@ try {
   )
 
   await connect(await pageSocket())
-  await scenario()
+  await (DATA === null ? scenario() : dataScenario(DATA))
 } catch (failure) {
   problems.push(failure instanceof Error ? failure.message : String(failure))
 } finally {
