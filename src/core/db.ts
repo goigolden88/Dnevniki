@@ -32,6 +32,8 @@ const DB_NAME = 'dnevniki'
 /** Индексы сверх `updatedAt`, который заводится на каждом хранилище. */
 const INDEXES: Record<SyncedStore, readonly string[]> = {
   items: [],
+  // Заводит миграция 2, а не `createStores`; индексов сверх `updatedAt` нет.
+  categories: [],
   tags: [],
   templates: [],
   cycleEvents: ['date', 'itemId'], // itemId — история позиции, Этап 1
@@ -156,8 +158,25 @@ function upgrade(database: IDBDatabase, tx: IDBTransaction, from: number): void 
   }
 }
 
+/**
+ * Раскладка версии 1 — заморожена. Хранилища, появившиеся позже, заводят
+ * только их миграции: свежая база строится как версия 1 и доезжает до
+ * текущей теми же шагами, что и база установленной копии. Иначе шаг
+ * миграции на свежей базе споткнулся бы о хранилище, которое уже есть.
+ */
+const V1_STORES: readonly SyncedStore[] = [
+  'items',
+  'tags',
+  'templates',
+  'cycleEvents',
+  'episodes',
+  'measures',
+  'sessions',
+  'content',
+]
+
 function createStores(database: IDBDatabase): void {
-  for (const store of SYNCED_STORES) {
+  for (const store of V1_STORES) {
     const created = database.createObjectStore(store, { keyPath: 'id' })
     created.createIndex('updatedAt', 'updatedAt') // нужен слиянию
     for (const field of INDEXES[store]) created.createIndex(field, field)

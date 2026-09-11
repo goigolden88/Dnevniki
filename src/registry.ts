@@ -50,7 +50,7 @@ export const KINDS: { readonly [K in EventKind]: KindEntry } = {
   cycle: {
     label: 'Циклы',
     feed: (data) => cycleFeed(data.items, data.cycleEvents),
-    markdown: (data, day) => cycleMarkdown(data.items, data.cycleEvents, day),
+    markdown: (data, day) => cycleMarkdown(data.items, data.cycleEvents, day, data.categories),
   },
   episode: {
     label: 'Болезни',

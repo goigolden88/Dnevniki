@@ -66,7 +66,7 @@ describe('cycleFeed', () => {
 })
 
 describe('cycleMarkdown', () => {
-  const text = flat(cycleMarkdown(items, events, '2026-09-10'))
+  const text = flat(cycleMarkdown(items, events, '2026-09-10', []))
 
   it('категория → позиция → даты с ценой', () => {
     expect(text).toContain('## Циклы')
@@ -102,6 +102,6 @@ describe('cycleMarkdown', () => {
   })
 
   it('пусто — так и сказано', () => {
-    expect(cycleMarkdown([], [], '2026-09-10')).toContain('Позиций нет.')
+    expect(cycleMarkdown([], [], '2026-09-10', [])).toContain('Позиций нет.')
   })
 })

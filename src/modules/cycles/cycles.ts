@@ -9,7 +9,7 @@
  * отдельного поля в позиции нет: порог общий на всё приложение.
  */
 
-import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
+import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../core/model.ts'
 import { addDays, daysBetween, isDateStr, today, type DateStr } from '../../core/dates.ts'
 
 /** Доля интервала, после которой позиция «подходит к сроку». Р-22. */
@@ -338,6 +338,187 @@ export function knownGroups(items: { group?: string }[]): string[] {
     if (group) names.add(group)
   }
   return [...names].sort((a, b) => a.localeCompare(b, 'ru'))
+}
+
+// ─── Категории (Р-59) ──────────────────────────────────────────────────────
+
+/**
+ * Штамп времени начального набора категорий — неподвижный, в прошлом.
+ *
+ * Два устройства, обновившись до синхронизации, заводят набор каждое своё,
+ * и позднее наполнение второго не должно затереть переименование, сделанное
+ * на первом: любая настоящая правка этот штамп побеждает. Тот же приём,
+ * что был у переноса (Р-31).
+ */
+export const SEED_STAMP = '2000-01-01T00:00:00.000Z'
+
+function norm(name: string): string {
+  return name.trim().toLocaleLowerCase('ru')
+}
+
+/** Одно ли это название: регистр и пробелы по краям не различаются. */
+export function sameName(a: string, b: string): boolean {
+  return norm(a) === norm(b)
+}
+
+/**
+ * Id категории по названию. Одинаков на всех устройствах, так что одна
+ * и та же категория, заведённая в двух местах до синхронизации,
+ * не раздваивается.
+ *
+ * Занят живой категорией — её переименовали, а id остался прежним, —
+ * к нему дописывается `suffix`. Занят надгробием — id берётся тот же,
+ * и категория оживает.
+ */
+export function categoryIdFor(
+  categories: readonly CycleCategory[],
+  name: string,
+  suffix: string,
+): string {
+  const base = `cat:${norm(name)}`
+  const taken = categories.find((category) => category.id === base)
+  return taken && !taken.deleted ? `${base}:${suffix}` : base
+}
+
+/**
+ * Начальный набор (Р-59): прежние категории по умолчанию в их порядке
+ * и все названия, найденные у позиций, — следом по алфавиту. Заводится
+ * один раз, когда хранилище категорий пусто.
+ *
+ * Названия по-русски расчёт не знает — они приходят снаружи, как и порядок
+ * у `groupByCategory` (Р-28).
+ */
+export function initialCategories(
+  items: readonly CycleItem[],
+  defaults: readonly string[],
+): CycleCategory[] {
+  const names: string[] = []
+  const add = (name: string) => {
+    const clean = name.trim()
+    if (clean && !names.some((each) => sameName(each, clean))) names.push(clean)
+  }
+
+  for (const name of defaults) add(name)
+  const found = items.filter((item) => !item.deleted).map((item) => item.cat.trim())
+  for (const name of [...new Set(found)].sort((a, b) => a.localeCompare(b, 'ru'))) add(name)
+
+  return names.map((name, order) => ({ id: `cat:${norm(name)}`, updatedAt: SEED_STAMP, name, order }))
+}
+
+/** Живые категории по порядку. */
+export function sortCategories(categories: readonly CycleCategory[]): CycleCategory[] {
+  return categories
+    .filter((category) => !category.deleted)
+    .sort((a, b) => a.order - b.order || a.name.localeCompare(b.name, 'ru'))
+}
+
+/** Названия по порядку: порядок групп на «Сейчас», в тратах и в выгрузке. */
+export function categoryNames(categories: readonly CycleCategory[]): string[] {
+  return sortCategories(categories).map((category) => category.name)
+}
+
+/** Живая категория с таким названием — без учёта регистра. */
+export function findCategory(
+  categories: readonly CycleCategory[],
+  name: string,
+): CycleCategory | null {
+  return categories.find((category) => !category.deleted && sameName(category.name, name)) ?? null
+}
+
+/** Место для новой категории — в конце. */
+export function nextCategoryOrder(categories: readonly CycleCategory[]): number {
+  return categories.reduce(
+    (next, category) => (category.deleted ? next : Math.max(next, category.order + 1)),
+    0,
+  )
+}
+
+/** Что записать: категории и позиции, которые правка затронула. */
+export type CategoryPlan = { categories: CycleCategory[]; items: CycleItem[] }
+
+/**
+ * Переименование (Р-59): правится запись категории и все позиции
+ * с прежним названием — они хранят его строкой.
+ *
+ * Новое название уже занято другой категорией — это слияние: позиции
+ * переезжают в неё, эта уходит надгробием. Null — переименовывать нечего.
+ */
+export function renamePlan(
+  categories: readonly CycleCategory[],
+  items: readonly CycleItem[],
+  id: string,
+  name: string,
+): (CategoryPlan & { merged: boolean }) | null {
+  const clean = name.trim()
+  const current = categories.find((category) => category.id === id && !category.deleted)
+  if (!current || !clean) return null
+
+  const other = categories.find(
+    (category) => !category.deleted && category.id !== id && sameName(category.name, clean),
+  )
+  if (!other && current.name === clean) return null
+
+  const target = other ? other.name : clean
+  const moved = items
+    .filter((item) => sameName(item.cat, current.name) && item.cat !== target)
+    .map((item) => ({ ...item, cat: target }))
+
+  return {
+    categories: [other ? { ...current, deleted: true } : { ...current, name: clean }],
+    items: moved,
+    merged: other !== undefined,
+  }
+}
+
+/**
+ * Удаление (Р-59): пустая категория уходит надгробием, с позициями —
+ * только вместе с переносом позиций в другую. Молча позиции не пропадают.
+ * Null — удалить нельзя: позиции есть, а переносить некуда.
+ */
+export function removePlan(
+  categories: readonly CycleCategory[],
+  items: readonly CycleItem[],
+  id: string,
+  moveTo: string | null,
+): CategoryPlan | null {
+  const current = categories.find((category) => category.id === id && !category.deleted)
+  if (!current) return null
+
+  const tomb = { ...current, deleted: true }
+  const inside = items.filter((item) => sameName(item.cat, current.name))
+  if (!inside.some((item) => !item.deleted)) return { categories: [tomb], items: [] }
+
+  const target = categories.find(
+    (category) => category.id === moveTo && category.id !== id && !category.deleted,
+  )
+  if (!target) return null
+  return { categories: [tomb], items: inside.map((item) => ({ ...item, cat: target.name })) }
+}
+
+/**
+ * Сдвиг на одно место вверх или вниз. Порядок перенумеровывается целиком —
+ * так он не зависит от старых дыр и совпадений. Отдаёт только те
+ * категории, у которых место изменилось.
+ */
+export function movePlan(
+  categories: readonly CycleCategory[],
+  id: string,
+  delta: -1 | 1,
+): CycleCategory[] {
+  const list = sortCategories(categories)
+  const from = list.findIndex((category) => category.id === id)
+  const moving = list[from]
+  const other = list[from + delta]
+  if (from === -1 || !moving || !other) return []
+
+  const reordered = [...list]
+  reordered[from] = other
+  reordered[from + delta] = moving
+
+  const before = new Map(list.map((category) => [category.id, category.order]))
+  return reordered
+    .map((category, order) => ({ ...category, order }))
+    .filter((category) => before.get(category.id) !== category.order)
 }
 
 // ─── Траты ─────────────────────────────────────────────────────────────────

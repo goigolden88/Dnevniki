@@ -565,4 +565,41 @@ describe('схема базы', () => {
       raw.close()
     }
   })
+
+  it('база версии 1 с данными переезжает на 2: категории появляются, записи на месте — Р-59', async () => {
+    // Раскладка версии 1 руками — ровно так она лежит на установленных копиях.
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('dnevniki', 1)
+      request.onupgradeneeded = () => {
+        const database = request.result
+        for (const store of ['items', 'tags', 'templates', 'cycleEvents', 'episodes', 'measures', 'sessions', 'content']) {
+          database.createObjectStore(store, { keyPath: 'id' }).createIndex('updatedAt', 'updatedAt')
+        }
+        database.createObjectStore('meta', { keyPath: 'key' })
+        database.createObjectStore('settings', { keyPath: 'key' })
+        database.createObjectStore('dirty', { keyPath: ['store', 'id'] })
+        request.transaction?.objectStore('items').put(item('i1'))
+        request.transaction?.objectStore('settings').put({ key: 'syncRepo', value: 'user/data' })
+      }
+      request.onsuccess = () => {
+        request.result.close()
+        resolve()
+      }
+      request.onerror = () => reject(request.error ?? new Error('не открылась'))
+    })
+
+    await db.ready()
+
+    expect(await db.get('items', 'i1')).toMatchObject({ name: 'Стрижка', cat: 'Гигиена' })
+    expect(await db.settings.get('syncRepo')).toBe('user/data')
+    expect(await db.getAll('categories')).toEqual([])
+
+    const raw = await openRaw()
+    try {
+      expect(raw.version).toBe(2)
+      expect([...raw.transaction('categories').objectStore('categories').indexNames]).toEqual(['updatedAt'])
+    } finally {
+      raw.close()
+    }
+  })
 })

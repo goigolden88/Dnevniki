@@ -12,7 +12,6 @@ import type { CycleEvent, CycleItem } from '../../core/model.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
 import {
   barPercent,
-  CATEGORIES,
   detailText,
   intervalText,
   MARKS_FOR_INTERVAL,
@@ -40,7 +39,7 @@ export function CycleList() {
   const rest = cycles.states.filter(
     (state) => state.status !== 'overdue' && state.status !== 'due',
   )
-  const groups = groupByCategory(rest, CATEGORIES)
+  const groups = groupByCategory(rest, cycles.catNames)
   const waiting = cycles.states.filter((state) => state.status === 'unset').length
 
   return (
@@ -51,7 +50,11 @@ export function CycleList() {
 
       {/* Наверху, а не под всем списком (Р-55): до низа экрана с десятком
           категорий иначе приходится листать ради каждой новой позиции. */}
-      <AddItem onAdd={cycles.addItem} groups={knownGroups(cycles.items)} />
+      <AddItem
+        onAdd={cycles.addItem}
+        groups={knownGroups(cycles.items)}
+        categories={cycles.catNames}
+      />
 
       {cycles.states.length === 0 && (
         <p className="stub">
@@ -86,7 +89,7 @@ export function CycleList() {
         </p>
       )}
 
-      <Spending items={cycles.items} events={cycles.events} />
+      <Spending items={cycles.items} events={cycles.events} order={cycles.catNames} />
 
       {archived.length > 0 && <Archived items={archived} />}
     </>
@@ -185,8 +188,17 @@ function CycleCard({
  * читается как «столько потрачено», хотя цена стоит у четырёх отметок
  * из тридцати трёх.
  */
-function Spending({ items, events }: { items: CycleItem[]; events: CycleEvent[] }) {
-  const tree = useMemo(() => spendTree(items, events, CATEGORIES), [items, events])
+function Spending({
+  items,
+  events,
+  order,
+}: {
+  items: CycleItem[]
+  events: CycleEvent[]
+  /** Порядок категорий (Р-59). */
+  order: string[]
+}) {
+  const tree = useMemo(() => spendTree(items, events, order), [items, events, order])
 
   // Ни одной цены — блок молчит целиком. Пустая таблица с нулями
   // не сообщает ничего, кроме того, что поле цены ещё не заполняли.
@@ -260,13 +272,16 @@ function Archived({ items }: { items: CycleItem[] }) {
 function AddItem({
   onAdd,
   groups,
+  categories,
 }: {
   onAdd: (draft: ItemDraft) => Promise<CycleItem | null>
   groups: string[]
+  /** Категории по порядку (Р-59). Первая — по умолчанию. */
+  categories: string[]
 }) {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [cat, setCat] = useState<string>(CATEGORIES[0])
+  const [cat, setCat] = useState<string>(categories[0] ?? '')
   const [group, setGroup] = useState('')
   const [interval, setInterval] = useState('')
 
@@ -301,7 +316,7 @@ function AddItem({
         <input value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       </label>
 
-      <CategoryField value={cat} onChange={setCat} />
+      <CategoryField value={cat} options={categories} onChange={setCat} />
 
       <GroupField value={group} options={groups} onChange={setGroup} />
 

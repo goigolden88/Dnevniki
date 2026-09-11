@@ -774,6 +774,30 @@ async function scenario() {
   )
   await go('/')
 
+  // ─ Категории своими записями (Р-59). Свежая база прогона прошла тот же
+  // путь, что и старая: раскладка версии 1 и миграция на 2. Стартовый
+  // набор завёлся сам; переименование в «Настройках» уводит за собой
+  // позиции, и «Сейчас» показывает новое название.
+  await go('/settings')
+  await unfold('Категории и названия')
+  const seeded = await run(`[...document.querySelectorAll('.category input')].map((el) => el.value).join(', ')`)
+  await act(`
+    const field = [...document.querySelectorAll('.category input')].find((el) => el.value === 'Гигиена')
+    field.focus()
+    set(field, 'Уход')
+    blur(field)
+  `)
+  await sleep(700)
+  await go('/')
+  const renamed = await run(`[...document.querySelectorAll('.fold__btn')].map((el) => el.textContent.trim()).join(', ')`)
+  check(
+    'категории заведены из прежних пяти и переименовываются целиком — Р-59',
+    seeded.startsWith('Гигиена, Дом, Техника, Авто, Дача') &&
+      renamed.includes('Уход') &&
+      !renamed.includes('Гигиена'),
+    `было: ${seeded}; на «Сейчас»: ${renamed}`,
+  )
+
   // ─ Без сети (Р-50). Ради этого работник и существует, а после перехода
   // на свой файл подмена навигации и кеш написаны руками. Проверяется и то,
   // что страницу отдал работник: иначе при непойманном офлайне проверка

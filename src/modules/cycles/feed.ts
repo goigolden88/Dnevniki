@@ -13,8 +13,8 @@
 
 import { escapeMarkdown as md, type FeedItem } from '../../core/feed.ts'
 import { formatDateLoose, type DateStr } from '../../core/dates.ts'
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
-import { cycleState, priceOf, spent } from './cycles.ts'
+import type { CycleCategory, CycleEvent, CycleItem } from '../../core/model.ts'
+import { categoryNames, cycleState, priceOf, spent } from './cycles.ts'
 import { CATEGORIES, formatMoney, intervalText, spentText } from './labels.ts'
 
 /** «Гигиена · Барьер» — категория и куст, если он есть. */
@@ -57,11 +57,15 @@ export function cycleFeed(items: readonly CycleItem[], events: readonly CycleEve
  *
  * Сумма идёт с числом отметок (Р-38). Архивные и удалённые позиции
  * подписаны, но не выброшены: выгрузка — это всё, что есть.
+ *
+ * Категории идут в своём порядке (Р-59). Записей категорий нет — слепок
+ * старше схемы 2 — порядок стартового набора.
  */
 export function cycleMarkdown(
   items: readonly CycleItem[],
   events: readonly CycleEvent[],
   day: DateStr,
+  categories: readonly CycleCategory[],
 ): string {
   const live = events.filter((event) => !event.deleted)
   const byItem = new Map<string, CycleEvent[]>()
@@ -76,9 +80,11 @@ export function cycleMarkdown(
   const lines = ['## Циклы', '']
   if (shown.length === 0 && live.length === 0) return [...lines, 'Позиций нет.'].join('\n')
 
+  const own = categoryNames(categories)
+  const order: readonly string[] = own.length > 0 ? own : CATEGORIES
   const rank = (cat: string) => {
-    const index = (CATEGORIES as readonly string[]).indexOf(cat)
-    return index === -1 ? CATEGORIES.length : index
+    const index = order.indexOf(cat)
+    return index === -1 ? order.length : index
   }
   const cats = [...new Set(shown.map((item) => item.cat))].sort(
     (a, b) => rank(a) - rank(b) || a.localeCompare(b, 'ru'),

@@ -13,21 +13,30 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  categoryIdFor,
   cyclePreset,
   cycleState,
   cycleStates,
   cycleTemplates,
+  findCategory,
+  initialCategories,
   lastPrice,
+  movePlan,
+  nextCategoryOrder,
   nextOrder,
+  removePlan,
+  renamePlan,
+  sortCategories,
   templateState,
   type CycleState,
   type TemplateMark,
   type TemplateState,
 } from './cycles.ts'
+import { CATEGORIES } from './labels.ts'
 import { db } from '../../core/db.ts'
 import { nowIso, today, type DateStr } from '../../core/dates.ts'
 import { ulid } from '../../core/id.ts'
-import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
+import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../core/model.ts'
 
 export type Status = 'loading' | 'ready' | 'failed'
 
@@ -74,16 +83,48 @@ export type Cycles = {
   addTemplate: (itemId: string) => Promise<void>
   updateTemplate: (id: string, patch: { label?: string; marks?: TemplateMark[] }) => Promise<void>
   removeTemplate: (id: string) => Promise<void>
+  /** Живые категории по порядку (Р-59). */
+  categories: CycleCategory[]
+  /** Их названия по порядку: группы на «Сейчас», траты, подсказки в форме. */
+  catNames: string[]
+  addCategory: (name: string) => Promise<void>
+  /** 'merged' — название было занято, категории слиты. null — менять нечего. */
+  renameCategory: (id: string, name: string) => Promise<'renamed' | 'merged' | null>
+  moveCategory: (id: string, delta: -1 | 1) => Promise<void>
+  /** С позициями — только с переносом в `moveTo`. false — не удалилась. */
+  removeCategory: (id: string, moveTo: string | null) => Promise<boolean>
 }
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : 'Неизвестная ошибка'
 }
 
+/** Заменить записи с теми же id, новые — дописать. */
+function upsert<T extends { id: string }>(list: readonly T[], changed: readonly T[]): T[] {
+  const byId = new Map(changed.map((each) => [each.id, each]))
+  const fresh = changed.filter((each) => !list.some((old) => old.id === each.id))
+  return [...list.map((each) => byId.get(each.id) ?? each), ...fresh]
+}
+
+/**
+ * Первый запуск на схеме 2 (Р-59): хранилище категорий пусто — наполнить
+ * стартовым набором и всем, что найдено у позиций.
+ *
+ * Слиянием, а не записью: штамп у набора неподвижный, и если категорию
+ * уже переименовали на соседнем устройстве, при встрече победит
+ * переименование.
+ */
+async function seedCategories(items: readonly CycleItem[]): Promise<CycleCategory[]> {
+  await db.merge('categories', initialCategories(items, CATEGORIES), 'imported')
+  return db.getAll('categories', { includeDeleted: true })
+}
+
 export function useCycles(): Cycles {
   const [items, setItems] = useState<CycleItem[]>([])
   const [events, setEvents] = useState<CycleEvent[]>([])
   const [templates, setTemplates] = useState<Template[]>([])
+  /** Все категории, с надгробиями: по ним видно, какие id заняты. */
+  const [categories, setCategories] = useState<CycleCategory[]>([])
   const [status, setStatus] = useState<Status>('loading')
   const [error, setError] = useState('')
   const [day, setDay] = useState<DateStr>(today())
@@ -94,15 +135,21 @@ export function useCycles(): Cycles {
     async function load() {
       try {
         await db.ready()
-        const [loadedItems, loadedEvents, loadedTemplates] = await Promise.all([
+        const [loadedItems, loadedEvents, loadedTemplates, storedCategories] = await Promise.all([
           db.getAll('items'),
           db.getAll('cycleEvents'),
           db.getAll('templates'),
+          db.getAll('categories', { includeDeleted: true }),
         ])
+        // Надгробия считаются: удалить все категории до одной — не повод
+        // заводить стартовый набор заново.
+        const loadedCategories =
+          storedCategories.length > 0 ? storedCategories : await seedCategories(loadedItems)
         if (cancelled) return
         setItems(loadedItems)
         setEvents(loadedEvents)
         setTemplates(loadedTemplates)
+        setCategories(loadedCategories)
         setStatus('ready')
       } catch (failure) {
         if (!cancelled) {
@@ -119,9 +166,8 @@ export function useCycles(): Cycles {
     // после перезапуска приложения — то есть «не появилась бы».
     const unsubscribe = db.onChange((event) => {
       if (event.origin !== 'remote') return
-      if (event.store !== 'items' && event.store !== 'cycleEvents' && event.store !== 'templates') {
-        return
-      }
+      const mine = ['items', 'cycleEvents', 'templates', 'categories']
+      if (!mine.includes(event.store)) return
       void load()
     })
 
@@ -256,36 +302,88 @@ export function useCycles(): Cycles {
     [events, day, addMark, removeMark],
   )
 
+  /**
+   * Категория, вписанная у позиции (Р-59). Знакомая — берётся её написание:
+   * «гигиена» не должна заводить вторую группу рядом с «Гигиеной».
+   * Незнакомая — заводится новой записью в конце списка.
+   */
+  const resolveCat = useCallback(
+    (typed: string): { name: string; created: CycleCategory | null } => {
+      const clean = typed.trim()
+      if (!clean) return { name: '', created: null }
+      const found = findCategory(categories, clean)
+      if (found) return { name: found.name, created: null }
+      return {
+        name: clean,
+        created: {
+          id: categoryIdFor(categories, clean, ulid()),
+          updatedAt: nowIso(),
+          name: clean,
+          order: nextCategoryOrder(categories),
+        },
+      }
+    },
+    [categories],
+  )
+
   const addItem = useCallback(
     async (draft: ItemDraft) => {
       const previous = items
-      const item: CycleItem = { id: ulid(), updatedAt: nowIso(), ...draft }
+      const previousCats = categories
+      const { name: cat, created } = resolveCat(draft.cat)
+      const item: CycleItem = { id: ulid(), updatedAt: nowIso(), ...draft, cat }
       const saved = await apply(
-        () => setItems([...previous, item]),
-        () => setItems(previous),
-        () => db.put('items', item),
+        () => {
+          setItems([...previous, item])
+          if (created) setCategories(upsert(previousCats, [created]))
+        },
+        () => {
+          setItems(previous)
+          setCategories(previousCats)
+        },
+        async () => {
+          if (created) await db.put('categories', created)
+          return db.put('items', item)
+        },
       )
       if (saved) setItems((current) => current.map((each) => (each.id === saved.id ? saved : each)))
       return saved
     },
-    [items, apply],
+    [items, categories, resolveCat, apply],
   )
 
   const updateItem = useCallback(
     async (id: string, patch: Partial<ItemDraft & { archived: boolean }>) => {
       const previous = items
+      const previousCats = categories
       const current = previous.find((each) => each.id === id)
       if (!current) return
 
-      const updated: CycleItem = { ...current, ...patch, updatedAt: nowIso() }
+      const resolved = patch.cat === undefined ? null : resolveCat(patch.cat)
+      const created = resolved?.created ?? null
+      const updated: CycleItem = {
+        ...current,
+        ...patch,
+        ...(resolved ? { cat: resolved.name } : {}),
+        updatedAt: nowIso(),
+      }
       const saved = await apply(
-        () => setItems(previous.map((each) => (each.id === id ? updated : each))),
-        () => setItems(previous),
-        () => db.put('items', updated),
+        () => {
+          setItems(previous.map((each) => (each.id === id ? updated : each)))
+          if (created) setCategories(upsert(previousCats, [created]))
+        },
+        () => {
+          setItems(previous)
+          setCategories(previousCats)
+        },
+        async () => {
+          if (created) await db.put('categories', created)
+          return db.put('items', updated)
+        },
       )
       if (saved) setItems((all) => all.map((each) => (each.id === saved.id ? saved : each)))
     },
-    [items, apply],
+    [items, categories, resolveCat, apply],
   )
 
   /**
@@ -433,6 +531,74 @@ export function useCycles(): Cycles {
     [templates, apply],
   )
 
+  // ─── Категории (Р-59) ────────────────────────────────────────────────────
+
+  /**
+   * Правка категорий вместе с их позициями. Позиции пишутся первыми:
+   * переименование, прерванное между двумя записями, оставит позиции
+   * с новым названием — на «Сейчас» они видны и без записи категории, —
+   * а не категорию, из которой позиции потерялись.
+   */
+  const writePlan = useCallback(
+    async (changedCats: CycleCategory[], changedItems: CycleItem[]) => {
+      const previousCats = categories
+      const previousItems = items
+      const written = await apply(
+        () => {
+          setCategories(upsert(previousCats, changedCats))
+          setItems(upsert(previousItems, changedItems))
+        },
+        () => {
+          setCategories(previousCats)
+          setItems(previousItems)
+        },
+        async () => {
+          if (changedItems.length > 0) await db.putMany('items', changedItems)
+          if (changedCats.length > 0) await db.putMany('categories', changedCats)
+          return true
+        },
+      )
+      return written === true
+    },
+    [categories, items, apply],
+  )
+
+  const addCategory = useCallback(
+    async (name: string) => {
+      const { created } = resolveCat(name)
+      if (created) await writePlan([created], [])
+    },
+    [resolveCat, writePlan],
+  )
+
+  const renameCategory = useCallback(
+    async (id: string, name: string) => {
+      const plan = renamePlan(categories, items, id, name)
+      if (!plan || !(await writePlan(plan.categories, plan.items))) return null
+      return plan.merged ? ('merged' as const) : ('renamed' as const)
+    },
+    [categories, items, writePlan],
+  )
+
+  const moveCategory = useCallback(
+    async (id: string, delta: -1 | 1) => {
+      const changed = movePlan(categories, id, delta)
+      if (changed.length > 0) await writePlan(changed, [])
+    },
+    [categories, writePlan],
+  )
+
+  const removeCategory = useCallback(
+    async (id: string, moveTo: string | null) => {
+      const plan = removePlan(categories, items, id, moveTo)
+      return plan !== null && (await writePlan(plan.categories, plan.items))
+    },
+    [categories, items, writePlan],
+  )
+
+  const liveCategories = useMemo(() => sortCategories(categories), [categories])
+  const catNames = useMemo(() => liveCategories.map((category) => category.name), [liveCategories])
+
   const live = useMemo(() => items.filter((item) => !item.deleted), [items])
   const liveEvents = useMemo(() => events.filter((event) => !event.deleted), [events])
 
@@ -457,5 +623,11 @@ export function useCycles(): Cycles {
     addTemplate,
     updateTemplate,
     removeTemplate,
+    categories: liveCategories,
+    catNames,
+    addCategory,
+    renameCategory,
+    moveCategory,
+    removeCategory,
   }
 }

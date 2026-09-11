@@ -1,5 +1,3 @@
-import { CATEGORIES } from './labels.ts'
-
 /**
  * Поле ввода с подсказками.
  *
@@ -42,11 +40,17 @@ export function SuggestField({
   )
 }
 
+/**
+ * Категория позиции. Подсказки — категории из базы по порядку (Р-59);
+ * незнакомая вписывается руками и при сохранении позиции заводится сама.
+ */
 export function CategoryField({
   value,
+  options,
   onChange,
 }: {
   value: string
+  options: readonly string[]
   onChange: (value: string) => void
 }) {
   return (
@@ -54,7 +58,7 @@ export function CategoryField({
       label="Категория"
       listId="cycle-categories"
       value={value}
-      options={CATEGORIES}
+      options={options}
       onChange={onChange}
     />
   )

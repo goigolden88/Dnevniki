@@ -6,8 +6,11 @@
  * сначала правится документ, потом этот файл, а не наоборот.
  */
 
-/** Версия схемы. Растёт при каждом несовместимом изменении модели. */
-export const SCHEMA_VERSION = 1
+/**
+ * Версия схемы. Растёт с каждым шагом в `migrations` — и с добавлением
+ * хранилища тоже: IndexedDB заводит хранилище только при смене версии.
+ */
+export const SCHEMA_VERSION = 2
 
 // ─── Общая часть ───────────────────────────────────────────────────────────
 
@@ -24,7 +27,11 @@ export type Base = {
 
 export type CycleItem = Base & {
   name: string
-  /** Гигиена | Дом | Техника | Авто | Дача */
+  /**
+   * Название категории — строкой, а не ссылкой на `CycleCategory` (Р-59):
+   * ссылка по id поменяла бы форму всех позиций и сделала нечитаемыми
+   * прежние выгрузки.
+   */
   cat: string
   /**
    * Куст внутри категории: одна вещь или один смысл, обслуживаемый
@@ -39,6 +46,17 @@ export type CycleItem = Base & {
   intervalDays: number | null
   archived?: boolean
   note?: string
+}
+
+/**
+ * Категория позиций циклов (Р-59). Своя запись, чтобы категории можно было
+ * заводить, убирать, переименовывать и расставлять — раньше пять названий
+ * жили константой в коде.
+ */
+export type CycleCategory = Base & {
+  name: string
+  /** Место на «Сейчас», в тратах и в выгрузке. */
+  order: number
 }
 
 export type Tag = Base & {
@@ -125,6 +143,7 @@ export type ContentEntry = Base & {
  */
 export const SYNCED_STORES = [
   'items',
+  'categories',
   'tags',
   'templates',
   'cycleEvents',
@@ -147,6 +166,7 @@ export type StoreName = SyncedStore | LocalStore
 /** Что лежит в каком хранилище. Позволяет db.get('tags') возвращать Tag. */
 export type StoreRecord = {
   items: CycleItem
+  categories: CycleCategory
   tags: Tag
   templates: Template
   cycleEvents: CycleEvent
@@ -191,4 +211,16 @@ export type Migration = {
   run: (db: IDBDatabase, tx: IDBTransaction) => void
 }
 
-export const migrations: Migration[] = []
+export const migrations: Migration[] = [
+  {
+    to: 2,
+    note: 'добавлено хранилище categories — категории циклов своими записями (Р-59)',
+    // Позиции по-прежнему хранят категорию названием: форма прежних записей
+    // не меняется, и выгрузки версии 1 читаются как были.
+    additive: true,
+    run: (database) => {
+      const store = database.createObjectStore('categories', { keyPath: 'id' })
+      store.createIndex('updatedAt', 'updatedAt') // нужен слиянию
+    },
+  },
+]

@@ -39,6 +39,7 @@ function pathsOf(files: { path: string }[]): string[] {
 describe('раскладка', () => {
   it('пустая база даёт файлы без нарезки и meta', () => {
     expect(pathsOf(buildFiles(empty()))).toEqual([
+      'categories.json',
       'health/episodes.json',
       'health/measures.json',
       'health/sessions.json',

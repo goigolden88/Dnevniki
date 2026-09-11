@@ -133,6 +133,7 @@ export function ItemScreen() {
           ...(state.item.note === undefined ? {} : { note: state.item.note }),
         }}
         groups={knownGroups(cycles.items)}
+        categories={cycles.catNames}
         archived={state.item.archived === true}
         onSave={(patch) => cycles.updateItem(id, patch)}
         onRemove={() => cycles.removeItem(id)}
@@ -341,6 +342,7 @@ function ItemForm({
   archived,
   name,
   groups,
+  categories,
   onSave,
   onRemove,
 }: {
@@ -348,6 +350,7 @@ function ItemForm({
   archived: boolean
   name: string
   groups: string[]
+  categories: string[]
   onSave: (patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
   onRemove: () => Promise<void>
 }) {
@@ -387,7 +390,11 @@ function ItemForm({
           <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
         </label>
 
-        <CategoryField value={form.cat} onChange={(cat) => setForm({ ...form, cat })} />
+        <CategoryField
+          value={form.cat}
+          options={categories}
+          onChange={(cat) => setForm({ ...form, cat })}
+        />
 
         <GroupField
           value={form.group}

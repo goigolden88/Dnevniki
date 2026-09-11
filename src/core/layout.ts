@@ -41,6 +41,7 @@ type Place<S extends SyncedStore> =
  */
 const PLACES: { [S in SyncedStore]: Place<S> } = {
   items: { split: 'none', path: 'items.json' },
+  categories: { split: 'none', path: 'categories.json' },
   tags: { split: 'none', path: 'tags.json' },
   templates: { split: 'none', path: 'templates.json' },
   cycleEvents: { split: 'year', dir: 'cycles', dateOf: (event) => event.date },

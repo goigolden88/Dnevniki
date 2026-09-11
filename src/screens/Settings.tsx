@@ -16,6 +16,7 @@ import {
   type RemindResult,
   type Wake,
 } from '../notify.ts'
+import { CategorySettings } from '../modules/cycles/Categories.tsx'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { markdownExport } from '../registry.ts'
 import { backupNote, backupSummary } from '../ui/backup.ts'
@@ -25,6 +26,7 @@ import { useSyncStatus } from '../ui/useSync.ts'
 
 const LABELS: Record<SyncedStore, string> = {
   items: 'Позиции циклов',
+  categories: 'Категории циклов',
   tags: 'Теги',
   templates: 'Шаблоны',
   cycleEvents: 'Отметки циклов',
@@ -87,6 +89,12 @@ export function Settings() {
       <SyncSettings onChanged={load} />
 
       <Reminders />
+
+      {/* Раздел общий на модули: сейчас в нём категории циклов, следом
+          придут симптомы, виды тренировок и свои метрики (Р-59). */}
+      <Fold id="settings:names" title="Категории и названия" folded>
+        <CategorySettings />
+      </Fold>
 
       <QuickSettings />
 
