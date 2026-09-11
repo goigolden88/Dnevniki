@@ -13,16 +13,27 @@ import { TodayButton } from '../../ui/TodayButton.tsx'
  * у симптомов. Длительность и дистанция необязательны: пробежка бывает
  * без секундомера, а зарядка без километров, и требовать их значило бы
  * не записать тренировку вовсе.
+ *
+ * Форма — за кнопкой, как у эпизода и записи контента (Р-73): раскрытая
+ * всегда, она занимала экран, а свод по видам уезжал под неё.
  */
 export function Sessions({ health }: { health: Health }) {
+  const [adding, setAdding] = useState(false)
   const totals = activityTotals(health.sessions)
   const recent = [...health.sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10)
   const names = new Map(health.tags.map((tag) => [tag.id, tag.name]))
 
   return (
     <Fold id="health:sessions" title="Тренировки" summary={health.sessions.length}>
-
-      <SessionForm health={health} />
+      {adding ? (
+        <SessionForm health={health} onDone={() => setAdding(false)} />
+      ) : (
+        <p>
+          <button type="button" className="btn btn--wide" onClick={() => setAdding(true)}>
+            Записать тренировку
+          </button>
+        </p>
+      )}
 
       {totals.length === 0 ? (
         <p className="muted">
@@ -45,9 +56,9 @@ export function Sessions({ health }: { health: Health }) {
         </table>
       )}
 
+      {/* Тем же сворачиванием, что блоки, а не ссылкой-треугольником (Р-73). */}
       {recent.length > 0 && (
-        <details>
-          <summary className="link-btn">Последние записи</summary>
+        <Fold id="health:sessions:recent" title="Последние записи" summary={recent.length} sub folded>
           <table className="stats">
             <tbody>
               {recent.map((session) => (
@@ -80,13 +91,13 @@ export function Sessions({ health }: { health: Health }) {
               ))}
             </tbody>
           </table>
-        </details>
+        </Fold>
       )}
     </Fold>
   )
 }
 
-function SessionForm({ health }: { health: Health }) {
+function SessionForm({ health, onDone }: { health: Health; onDone: () => void }) {
   const [activity, setActivity] = useState('')
   const [date, setDate] = useState(today())
   const [minutes, setMinutes] = useState('')
@@ -110,13 +121,11 @@ function SessionForm({ health }: { health: Health }) {
       ...(number(km) === null ? {} : { distanceKm: number(km) as number }),
       ...(note.trim() ? { note: note.trim() } : {}),
     })
-    setMinutes('')
-    setKm('')
-    setNote('')
+    onDone()
   }
 
   return (
-    <form className="form" onSubmit={(event) => void submit(event)}>
+    <form className="form block" onSubmit={(event) => void submit(event)}>
       <label className="field">
         <span>Вид</span>
         {/* Список подсказывает заведённые виды, но не запирает в них:
@@ -125,6 +134,7 @@ function SessionForm({ health }: { health: Health }) {
           value={activity}
           list="activity-kinds"
           placeholder="бег, зал, растяжка"
+          autoFocus
           onChange={(event) => setActivity(event.target.value)}
         />
         <datalist id="activity-kinds">
@@ -160,7 +170,10 @@ function SessionForm({ health }: { health: Health }) {
       </label>
 
       <div className="form__actions">
-        <button type="submit" className="btn">
+        <button type="button" className="btn" onClick={onDone}>
+          Отмена
+        </button>
+        <button type="submit" className="btn btn--primary">
           Записать
         </button>
       </div>

@@ -45,9 +45,11 @@ export function Fold({
   }, [reveal, known, folded, set])
 
   const Head = sub ? 'h3' : 'h2'
+  // Свёрнутый — строка оглавления: плотно, с линией до соседа (Р-73).
+  const classes = ['block', sub ? 'fold--sub' : '', known && folded ? 'fold--folded' : '']
 
   return (
-    <section className={sub ? 'block fold--sub' : 'block'}>
+    <section className={classes.filter(Boolean).join(' ')}>
       <Head className="fold__head">
         <button type="button" className="fold__btn" aria-expanded={!folded} onClick={toggle}>
           {title}

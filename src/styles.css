@@ -62,6 +62,11 @@ p {
   margin: 0 0 12px;
 }
 
+/* Цвет ссылок свой: иначе браузер красит посещённую фиолетовым (Р-73). */
+a {
+  color: var(--accent);
+}
+
 .layout {
   min-height: 100dvh;
   display: flex;
@@ -339,6 +344,12 @@ p {
 /* ─── Формы ──────────────────────────────────────────────────────────────── */
 
 .btn {
+  /* Кнопкой бывает и ссылка — «Сводка для врача», «Справка». Без этого
+     она строчная: подчёркнута и сплющена в рамке (Р-73). */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
   min-height: 44px;
   padding: 0 18px;
   border: 1px solid var(--line);
@@ -569,6 +580,30 @@ p {
 
 .spending__item a {
   color: var(--accent);
+}
+
+/* Сумма уходит под название, когда рядом не помещается (Р-73), а не
+   сжимает его в три строки: «700 ₽ за 1 отметку из 3» длиннее многих
+   названий. Помещается — стоит справа, как раньше. */
+.spending,
+.spending tbody {
+  display: block;
+}
+
+.spending tr {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 12px;
+}
+
+.spending td:first-child {
+  flex: 1 0 55%;
+}
+
+.spending td.num {
+  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* Поле заметки: высота задаётся строками, а не 44 пикселями. */
@@ -901,6 +936,61 @@ p {
   margin-bottom: 12px;
 }
 
+/* Свёрнутый блок — строка оглавления (Р-73): без отступа под собой,
+   с тонкой линией до соседа. С отступом развёрнутого пять свёрнутых
+   категорий занимали целый экран, а «Настройки» — два. */
+.block.fold--folded {
+  margin-bottom: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.block.fold--folded > .fold__head {
+  margin: 0;
+}
+
+.fold--folded + .block:not(.fold--folded) {
+  margin-top: 16px;
+}
+
+/* «Смотрю сейчас» на главном экране — строками, а не карточками (Р-73):
+   там это напоминание, а крупные карточки уводили просроченное под сгиб. */
+.watch {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+}
+
+.watch__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.watch__row:last-child {
+  border-bottom: 0;
+}
+
+.watch__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+}
+
+.watch__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: inherit;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .fold--sub > .fold__head {
   margin: 0;
   font-size: 13px;
@@ -944,11 +1034,18 @@ p {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  transition: opacity 200ms ease-out;
+}
+
+/* Экран не листают — кнопки прячутся и не закрывают текст под собой (Р-73). */
+.scroll-btns--idle {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .scroll-btn {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: var(--surface);

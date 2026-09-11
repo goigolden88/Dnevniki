@@ -12,6 +12,7 @@ import {
   MIN_INTERVALS,
   intervals,
   markDates,
+  marksOfItem,
   median,
   medianInterval,
   MEDIAN_WINDOW,
@@ -26,6 +27,25 @@ import {
   unitsOf,
 } from './cycles.ts'
 import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
+
+describe('marksOfItem — Р-74', () => {
+  const at = '2026-09-07T00:00:00.000Z'
+  const events: CycleEvent[] = [
+    { id: 'a', updatedAt: at, itemId: 'i1', date: '2026-01-10' },
+    { id: 'b', updatedAt: at, itemId: 'i1', date: '2026-03-10' },
+    { id: 'c', updatedAt: at, itemId: 'i1', date: '2026-02-10', deleted: true },
+    { id: 'd', updatedAt: at, itemId: 'i2', date: '2026-04-10' },
+  ]
+
+  it('живые отметки своей позиции, новые сверху', () => {
+    expect(marksOfItem(events, 'i1').map((event) => event.id)).toEqual(['b', 'a'])
+  })
+
+  it('надгробия и чужие позиции не попадают', () => {
+    expect(marksOfItem(events, 'i2').map((event) => event.id)).toEqual(['d'])
+    expect(marksOfItem(events, 'нет-такой')).toEqual([])
+  })
+})
 
 function item(over: Partial<CycleItem> = {}): CycleItem {
   return {

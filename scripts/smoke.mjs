@@ -554,6 +554,31 @@ async function scenario() {
   const cards = await run(`document.querySelectorAll('.cycles li').length`)
   check('просмотренное в брошенные не затесалось', cards === 0, `карточек ${cards}`)
 
+  // ─ Удаление позиции вместе с отметками (Р-74): пробная уходит и из ленты.
+  await go('/')
+  await act(`byText('button', 'Добавить позицию')?.click()`)
+  await sleep(300)
+  await act(`
+    set(document.querySelector('form input'), 'Пробная позиция')
+    byText('button', 'Добавить')?.click()
+  `)
+  await sleep(600)
+  // Строки начинаются с объявления, а не с «[»: иначе они склеиваются
+  // с концом помощников в одно выражение (Журнал, Этап 5).
+  await act(`const card = [...document.querySelectorAll('.cycle')]
+      .find((el) => el.querySelector('.cycle__name')?.textContent.trim() === 'Пробная позиция')
+    card?.querySelector('.mark')?.click()`)
+  await sleep(600)
+  await act(`const link = [...document.querySelectorAll('a.cycle__name')]
+      .find((el) => el.textContent.trim() === 'Пробная позиция')
+    link?.click()`)
+  await sleep(800)
+  await act(`byText('button', 'Удалить')?.click()`)
+  await sleep(300)
+  const asked = await screen()
+  await act(`byText('button', 'Удалить и отметки')?.click()`)
+  await sleep(800)
+
   // ─ Лента (Р-48, Р-52): записи всех трёх модулей одним списком.
   await go('/feed')
   const feedText = await screen()
@@ -561,6 +586,11 @@ async function scenario() {
     'лента собирает записи всех трёх модулей',
     has(feedText, 'Стрижка') && has(feedText, 'Пробный эпизод') && has(feedText, 'Мартовский фильм'),
     line(feedText, 'запис'),
+  )
+  check(
+    'позиция удалена вместе с отметкой — в ленте её нет — Р-74',
+    has(asked, 'Удалить и отметки') && !has(feedText, 'Пробная позиция'),
+    line(asked, 'отметк'),
   )
   const rows = () => run(`document.querySelectorAll('.feed li').length`)
   const allRows = await rows()
@@ -758,6 +788,9 @@ async function scenario() {
     secondPlan.replace(/\s+/g, ' ').slice(0, 160),
   )
   await act(`byText('button', 'Отмена')?.click()`)
+  // Промпт в свёрнутых подгруппах (Р-73): свёрнутое не рисуется.
+  await unfold('Как подготовить файл')
+  await unfold('Показать промпт')
   const prompt = await run(`document.querySelector('pre.prompt')?.textContent ?? ''`)
   check(
     'промпт для ИИ собран из разделов и знает формат — Р-60',

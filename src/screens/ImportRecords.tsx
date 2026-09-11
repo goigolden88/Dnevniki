@@ -5,6 +5,7 @@ import { ulid } from '../core/id.ts'
 import { planTotal, type ImportPlan, type Writes } from '../core/importing.ts'
 import type { SyncedStore } from '../core/model.ts'
 import { importPrompt, planImport } from '../registry.ts'
+import { Fold } from '../ui/Fold.tsx'
 
 /**
  * Справочники раньше событий, которые на них ссылаются: прерванная
@@ -197,8 +198,8 @@ function Prompt() {
   }
 
   return (
-    <details className="import__prompt">
-      <summary className="link-btn">Как подготовить файл</summary>
+    // Тем же сворачиванием, что блоки, а не ссылкой-треугольником (Р-73).
+    <Fold id="settings:import:how" title="Как подготовить файл" sub folded>
       <ol>
         <li>Скопируй промпт и вставь в чат с ИИ — ChatGPT, Claude, любой.</li>
         <li>Добавь в конце свои записи: текст заметок, таблицу или скриншоты.</li>
@@ -208,10 +209,9 @@ function Prompt() {
         Скопировать промпт
       </button>
       {copied && <p className="muted">{copied}</p>}
-      <details>
-        <summary className="link-btn">Показать промпт</summary>
+      <Fold id="settings:import:prompt" title="Показать промпт" sub folded>
         <pre className="prompt">{prompt}</pre>
-      </details>
-    </details>
+      </Fold>
+    </Fold>
   )
 }

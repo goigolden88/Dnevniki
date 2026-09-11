@@ -75,11 +75,9 @@ export function EntryCard({
   return (
     <li
       ref={card}
-      className={[
-        'cycle',
-        entry.status === 'active' ? 'cycle--due' : '',
-        focused ? 'cycle--focus' : '',
-      ]
+      // Без цвета «подходит к сроку» у «смотрю»: жёлтое читалось как
+      // предупреждение, а на «Сейчас» те же записи серые (Р-73).
+      className={['cycle', focused ? 'cycle--focus' : '']
         .filter(Boolean)
         .join(' ')}
     >
@@ -87,7 +85,8 @@ export function EntryCard({
         <button type="button" className="cycle__name plain-btn" onClick={() => setOpen(!open)}>
           {entry.title}
         </button>
-        <span className="cycle__cat muted">{statusLabel(entry.status)}</span>
+        {/* «Смотрю» стоят только в блоке «Смотрю сейчас» — метка там лишняя (Р-73). */}
+        {entry.status !== 'active' && <span className="cycle__cat muted">{statusLabel(entry.status)}</span>}
       </div>
 
       <div className="cycle__foot">

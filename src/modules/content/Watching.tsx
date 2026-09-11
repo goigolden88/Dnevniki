@@ -15,6 +15,10 @@ import { Fold } from '../../ui/Fold.tsx'
  * единственное, что делают с записью каждый день, и ради него не должно
  * приходиться никуда заходить — иначе запись зависает в «смотрю»
  * месяцами, ровно как незакрытый эпизод болезни.
+ *
+ * Строками, а не карточками (Р-73): здесь это напоминание, а пять крупных
+ * карточек занимали весь первый экран и уводили просроченное под сгиб.
+ * Карточки целиком — на вкладке «Контент».
  */
 export function Watching() {
   const content = useContent()
@@ -26,20 +30,19 @@ export function Watching() {
 
   return (
     <Fold id="today:watching" title="Смотрю сейчас" summary={active.length}>
-      <ul className="cycles">
-        {active.map((entry) => (
-          <li className="cycle cycle--due" key={entry.id}>
-            <div className="cycle__foot">
-              <div className="cycle__facts">
+      <ul className="watch">
+        {active.map((entry) => {
+          const stale = staleDays(entry, day)
+          return (
+            <li className="watch__row" key={entry.id}>
+              <div className="watch__main">
                 {/* Название ведёт к самой записи, а не просто на вкладку (Р-56).
                     У зависшей там же ответы на «Ещё смотришь?» (Р-58). */}
-                <Link className="cycle__name" to={`/content?open=${entry.id}`}>
+                <Link className="watch__title" to={`/content?open=${entry.id}`}>
                   {entry.title}
                 </Link>
                 <span className="muted">{entryText(entry)}</span>
-                {staleDays(entry, day) !== null && (
-                  <span className="error">{staleText(staleDays(entry, day) ?? 0)} — ещё смотришь?</span>
-                )}
+                {stale !== null && <span className="error">{staleText(stale)} — ещё смотришь?</span>}
               </div>
               <button
                 type="button"
@@ -48,9 +51,9 @@ export function Watching() {
               >
                 Досмотрел
               </button>
-            </div>
-          </li>
-        ))}
+            </li>
+          )
+        })}
       </ul>
     </Fold>
   )

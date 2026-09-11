@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { daysBetween, days, formatDateLoose, today } from '../../core/dates.ts'
+import { daysBetween, days, formatDateLoose, plural, today } from '../../core/dates.ts'
 import type { CycleEvent } from '../../core/model.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { CycleState } from './cycles.ts'
@@ -29,9 +29,29 @@ export function ItemScreen() {
 
   const state = cycles.stateOf(id)
   if (!state) {
+    // Удалённая позиция, от которой остались отметки (Р-74): сюда ведёт тап
+    // по такой отметке в ленте, и здесь же их можно убрать.
+    const orphans = cycles.marksOf(id)
     return (
       <>
-        <p className="stub">Позиция не найдена. Возможно, удалена.</p>
+        <p className="stub">
+          {orphans.length === 0
+            ? 'Позиция не найдена. Возможно, удалена.'
+            : `Позиция удалена, а отметки остались: ${orphans.length}. Они видны в ленте и в выгрузке.`}
+        </p>
+        {orphans.length > 0 && (
+          <p>
+            <button
+              type="button"
+              className="btn btn--danger btn--wide"
+              onClick={() => {
+                if (window.confirm('Удалить отметки удалённой позиции?')) void cycles.removeMarksOf(id)
+              }}
+            >
+              Удалить отметки
+            </button>
+          </p>
+        )}
         <Link className="btn btn--wide" to="/">
           К списку
         </Link>
@@ -136,8 +156,9 @@ export function ItemScreen() {
         categories={cycles.catNames}
         archived={state.item.archived === true}
         onSave={(patch) => cycles.updateItem(id, patch)}
-        onRemove={() => cycles.removeItem(id)}
+        onRemove={(withMarks) => cycles.removeItem(id, withMarks)}
         name={state.item.name}
+        marks={marks.length}
       />
     </>
   )
@@ -341,6 +362,7 @@ function ItemForm({
   draft,
   archived,
   name,
+  marks,
   groups,
   categories,
   onSave,
@@ -349,12 +371,15 @@ function ItemForm({
   draft: ItemDraft
   archived: boolean
   name: string
+  /** Сколько у позиции живых отметок: от этого зависит, о чём спросить при удалении. */
+  marks: number
   groups: string[]
   categories: string[]
   onSave: (patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
-  onRemove: () => Promise<void>
+  onRemove: (withMarks: boolean) => Promise<void>
 }) {
   const navigate = useNavigate()
+  const [asking, setAsking] = useState(false)
   const [form, setForm] = useState({
     name: draft.name,
     cat: draft.cat,
@@ -376,9 +401,17 @@ function ItemForm({
     void onSave({ name: trimmed, cat: form.cat.trim(), group: form.group.trim(), intervalDays })
   }
 
-  function remove() {
-    if (!window.confirm(`Удалить позицию «${name}»? Отметки останутся в данных.`)) return
-    void onRemove().then(() => navigate('/'))
+  function remove(withMarks: boolean) {
+    void onRemove(withMarks).then(() => navigate('/'))
+  }
+
+  function ask() {
+    // Без отметок спрашивать не о чем, кроме самого удаления.
+    if (marks === 0) {
+      if (window.confirm(`Удалить позицию «${name}»?`)) remove(false)
+      return
+    }
+    setAsking(true)
   }
 
   return (
@@ -423,10 +456,32 @@ function ItemForm({
         <button type="button" className="btn" onClick={() => void onSave({ archived: !archived })}>
           {archived ? 'Вернуть из архива' : 'В архив'}
         </button>
-        <button type="button" className="btn btn--danger" onClick={remove}>
+        <button type="button" className="btn btn--danger" onClick={ask}>
           Удалить
         </button>
       </div>
+
+      {/* Отметки — по выбору (Р-74): пробную позицию убирают целиком,
+          а у настоящей прошлое в ленте стоит сохранить. */}
+      {asking && (
+        <div className="form block">
+          <p>
+            Удалить «{name}». У неё {marks} {plural(marks, ['отметка', 'отметки', 'отметок'])}.
+          </p>
+          <div className="row row--wrap">
+            <button type="button" className="btn btn--danger" onClick={() => remove(true)}>
+              Удалить и отметки
+            </button>
+            <button type="button" className="btn" onClick={() => remove(false)}>
+              Отметки оставить
+            </button>
+            <button type="button" className="btn" onClick={() => setAsking(false)}>
+              Отмена
+            </button>
+          </div>
+          <p className="muted">Оставленные видны в ленте и в выгрузке с пометкой «позиция удалена».</p>
+        </div>
+      )}
     </section>
   )
 }

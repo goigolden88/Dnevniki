@@ -109,6 +109,16 @@ export function markDates(events: CycleEvent[]): DateStr[] {
   return [...new Set(clean)].sort()
 }
 
+/**
+ * Живые отметки позиции, новые сверху. У удалённой позиции — тоже: её
+ * отметки убираются с её же экрана, куда ведёт тап в ленте (Р-74).
+ */
+export function marksOfItem(events: readonly CycleEvent[], itemId: string): CycleEvent[] {
+  return events
+    .filter((event) => event.itemId === itemId && !event.deleted)
+    .sort((a, b) => b.date.localeCompare(a.date))
+}
+
 /** Промежутки между соседними отметками в днях. На входе — выход `markDates`. */
 export function intervals(dates: DateStr[]): number[] {
   const result: number[] = []

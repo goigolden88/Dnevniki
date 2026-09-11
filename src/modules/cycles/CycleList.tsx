@@ -8,6 +8,7 @@ import {
   type CycleState,
   type CycleUnit,
 } from './cycles.ts'
+import { plural } from '../../core/dates.ts'
 import type { CycleEvent, CycleItem } from '../../core/model.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
 import {
@@ -81,11 +82,13 @@ export function CycleList() {
         </Fold>
       ))}
 
+      {/* Одной строкой (Р-73): абзац, одинаковый каждый день, после первого
+          прочтения становится шумом. Подробно — в справке и на экране позиции. */}
       {waiting > 0 && (
         <p className="muted">
-          У {waiting} {waiting === 1 ? 'позиции' : 'позиций'} срок ещё не посчитан: для этого нужно{' '}
-          {MARKS_FOR_INTERVAL} отметки. Если интервал известен заранее — открой позицию и задай его
-          руками.
+          Срок не посчитан у {waiting} {plural(waiting, ['позиции', 'позиций', 'позиций'])}: нужно{' '}
+          {MARKS_FOR_INTERVAL} {plural(MARKS_FOR_INTERVAL, ['отметка', 'отметки', 'отметок'])} или
+          интервал руками.
         </p>
       )}
 

@@ -675,8 +675,7 @@ function WakeLog({ wakes }: { wakes: Wake[] | null }) {
         Фоновая проверка последний раз: {wakeTime(last.at)} — {WAKE_TEXT[last.result]}.
       </p>
       {wakes.length > 1 && (
-        <details>
-          <summary className="link-btn">Все пробуждения · {wakes.length}</summary>
+        <Fold id="settings:reminders:wakes" title="Все пробуждения" summary={wakes.length} sub folded>
           <table className="stats">
             <tbody>
               {wakes.map((wake) => (
@@ -687,7 +686,7 @@ function WakeLog({ wakes }: { wakes: Wake[] | null }) {
               ))}
             </tbody>
           </table>
-        </details>
+        </Fold>
       )}
     </>
   )

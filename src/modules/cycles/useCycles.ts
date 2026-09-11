@@ -25,6 +25,7 @@ import {
   movePlan,
   nextCategoryOrder,
   nextOrder,
+  marksOfItem,
   removePlan,
   renamePlan,
   sortCategories,
@@ -75,7 +76,10 @@ export type Cycles = {
   setMarkPrice: (id: string, price: number | null) => Promise<void>
   addItem: (draft: ItemDraft) => Promise<CycleItem | null>
   updateItem: (id: string, patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
-  removeItem: (id: string) => Promise<void>
+  /** `withMarks` — и все её отметки надгробиями (Р-74). */
+  removeItem: (id: string, withMarks?: boolean) => Promise<void>
+  /** Все живые отметки позиции, в том числе уже удалённой (Р-74). */
+  removeMarksOf: (itemId: string) => Promise<void>
   /** Быстрые кнопки по порядку, с состоянием на сегодня (Р-49). */
   quick: TemplateState[]
   /** Тап по кнопке: отметить все её позиции, а если уже отмечены — снять. */
@@ -203,13 +207,7 @@ export function useCycles(): Cycles {
     [items, events, day],
   )
 
-  const marksOf = useCallback(
-    (itemId: string) =>
-      events
-        .filter((event) => event.itemId === itemId && !event.deleted)
-        .sort((a, b) => b.date.localeCompare(a.date)),
-    [events],
-  )
+  const marksOf = useCallback((itemId: string) => marksOfItem(events, itemId), [events])
 
   /**
    * Общий путь оптимистичной записи: сначала состояние, потом база.
@@ -390,19 +388,42 @@ export function useCycles(): Cycles {
   )
 
   /**
-   * Позиция удаляется мягко, отметки остаются как есть: они привязаны к id,
-   * который не переиспользуется, и в ленте прошлое должно сохраниться.
+   * Все живые отметки позиции — надгробиями, одной пачкой (Р-74): по одной
+   * через `removeMark` каждая взяла бы список того же кадра, и вторая
+   * затёрла бы в состоянии первую. Та же причина, что у быстрой кнопки.
+   */
+  const removeMarksOf = useCallback(
+    async (itemId: string) => {
+      const previous = events
+      const removed = marksOfItem(previous, itemId).map((event) => ({ ...event, deleted: true }))
+      if (removed.length === 0) return
+      const byId = new Map(removed.map((event) => [event.id, event]))
+      await apply(
+        () => setEvents(previous.map((event) => byId.get(event.id) ?? event)),
+        () => setEvents(previous),
+        () => db.putMany('cycleEvents', removed),
+      )
+    },
+    [events, apply],
+  )
+
+  /**
+   * Позиция удаляется мягко. Отметки — по выбору (Р-74): остаются, и прошлое
+   * в ленте сохраняется, — или уходят надгробиями вместе с ней; так убирается
+   * пробная позиция. Отметки привязаны к id, который не переиспользуется.
    */
   const removeItem = useCallback(
-    async (id: string) => {
+    async (id: string, withMarks = false) => {
       const previous = items
-      await apply(
+      const done = await apply(
         () => setItems(previous.map((each) => (each.id === id ? { ...each, deleted: true } : each))),
         () => setItems(previous),
         () => db.remove('items', id),
       )
+      // Позиция не удалилась — отметки не трогаем: без неё они осиротели бы зря.
+      if (done !== null && withMarks) await removeMarksOf(id)
     },
-    [items, apply],
+    [items, apply, removeMarksOf],
   )
 
   // ─── Быстрые кнопки (Р-49) ───────────────────────────────────────────────
@@ -629,6 +650,7 @@ export function useCycles(): Cycles {
     addItem,
     updateItem,
     removeItem,
+    removeMarksOf,
     quick,
     pressTemplate,
     addTemplate,
