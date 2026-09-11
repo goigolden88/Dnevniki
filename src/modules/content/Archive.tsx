@@ -16,6 +16,7 @@ import { entriesText, monthHeading, periodText, statusLabel, TYPES } from './lab
 import { EntryCard } from './EntryCard.tsx'
 import type { Content } from './useContent.ts'
 import type { ContentEntry } from '../../core/model.ts'
+import { Fold } from '../../ui/Fold.tsx'
 
 /** Все годы разом. */
 const ALL_YEARS = 'всё время'
@@ -156,8 +157,12 @@ export function Archive({
   const adjustable = periods.length > 2 || months.length > 1
 
   return (
-    <section className="block">
-      <h2>Записи</h2>
+    <Fold
+      id="content:archive"
+      title="Записи"
+      summary={entries.filter((entry) => entry.status !== 'active').length}
+      reveal={target !== null}
+    >
 
       <div className="chips">
         {TABS.map((each) => (
@@ -315,6 +320,6 @@ export function Archive({
           ))}
         </>
       )}
-    </section>
+    </Fold>
   )
 }

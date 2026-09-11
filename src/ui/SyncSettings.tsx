@@ -6,8 +6,8 @@
  * заполнив, получает прежнюю работу — данные в браузере и никакой сети.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { daysBetween, formatDate, isDateStr, today } from '../core/dates.ts'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { days, daysBetween, formatDate, isDateStr, today } from '../core/dates.ts'
 import {
   checkAccess,
   expiryDay,
@@ -17,7 +17,8 @@ import {
   saveConfig,
   syncNow,
 } from '../core/sync.ts'
-import type { SyncConfig } from '../core/sync.ts'
+import type { SyncConfig, SyncStatus } from '../core/sync.ts'
+import { Fold } from './Fold.tsx'
 import { useSyncStatus } from './useSync.ts'
 
 /** За сколько дней до конца жизни токена начинать предупреждать. */
@@ -25,6 +26,36 @@ const WARN_DAYS = 30
 
 function describe(error: unknown): string {
   return error instanceof Error ? error.message : 'Неизвестная ошибка'
+}
+
+/**
+ * Итог у свёрнутого раздела (Р-61). Беда видна и без разворачивания:
+ * ошибка прохода и токен, который вот-вот истечёт, — красным.
+ */
+function summaryOf(status: SyncStatus, config: SyncConfig | null): ReactNode {
+  const alarm = tokenAlarm(config)
+  if (alarm) return <span className="error">{alarm}</span>
+  if (status.state === 'off') return 'выключена'
+  if (status.state === 'error') return <span className="error">ошибка</span>
+  if (status.state === 'syncing') return 'идёт обмен'
+  if (status.pending > 0) return `ждут отправки ${status.pending}`
+  if (!status.lastAt) return 'обмена не было'
+  return new Date(status.lastAt).toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+/** Токен истёк или истекает в пределах предупреждения. Null — всё в порядке. */
+function tokenAlarm(config: SyncConfig | null): string | null {
+  if (!config?.enabled || config.token === '') return null
+  const day = expiryDay(config.tokenExpires)
+  if (day === null) return null
+  const left = daysBetween(today(), day)
+  if (left < 0) return 'токен истёк'
+  return left <= WARN_DAYS ? `токен истекает через ${days(left)}` : null
 }
 
 export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) {
@@ -67,10 +98,9 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
 
   if (!config) {
     return (
-      <section className="block">
-        <h2>Синхронизация</h2>
+      <Fold id="settings:sync" title="Синхронизация" summary={summaryOf(status, config)} folded>
         <p className="muted">Читаю настройки…</p>
-      </section>
+      </Fold>
     )
   }
 
@@ -133,9 +163,7 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
   }
 
   return (
-    <section className="block">
-      <h2>Синхронизация</h2>
-
+    <Fold id="settings:sync" title="Синхронизация" summary={summaryOf(status, config)} folded>
       <StatusLine />
 
       <label className="check">
@@ -204,7 +232,7 @@ export function SyncSettings({ onChanged }: { onChanged: () => Promise<void> }) 
             'Репозиторий должен быть приватным: в нём лежит всё, включая здоровье.'
           : 'Пока выключено, данные живут только в этом браузере и никуда не уходят.'}
       </p>
-    </section>
+    </Fold>
   )
 }
 

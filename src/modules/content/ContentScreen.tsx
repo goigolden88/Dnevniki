@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { Fold } from '../../ui/Fold.tsx'
 import { watching } from './content.ts'
 import { Archive } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'
@@ -46,8 +47,12 @@ export function ContentScreen() {
       {content.error && <p className="error">Не сохранилось: {content.error}</p>}
 
       {active.length > 0 && (
-        <section className="block">
-          <h2>Смотрю сейчас</h2>
+        <Fold
+          id="content:watching"
+          title="Смотрю сейчас"
+          summary={active.length}
+          reveal={focus?.status === 'active'}
+        >
           <ul className="cycles">
             {active.map((entry) => (
               <EntryCard
@@ -58,7 +63,7 @@ export function ContentScreen() {
               />
             ))}
           </ul>
-        </section>
+        </Fold>
       )}
 
       <NewEntry content={content} />

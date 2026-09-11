@@ -89,3 +89,26 @@ export function backupNote(
       (stale ? ' С тех пор всё новое живёт только здесь.' : ''),
   }
 }
+
+/**
+ * То же в два-три слова — для заголовка свёрнутого раздела (Р-61).
+ *
+ * Тон берётся у `backupNote`, чтобы правило было одно: свёрнутый раздел
+ * не должен молчать о том, что копии нет, и не должен тревожить, когда
+ * она лежит в репозитории.
+ */
+export function backupSummary(
+  lastExportAt: string | null,
+  sync: SyncFacts,
+  now: DateStr,
+): BackupNote {
+  const { tone } = backupNote(lastExportAt, sync, now)
+  if (sync.state !== 'off' && sync.state !== 'error' && sync.lastAt !== null) {
+    return { tone, text: 'копия в репозитории' }
+  }
+  if (lastExportAt === null) return { tone, text: 'копии нет' }
+
+  const ago = agoDays(lastExportAt, now)
+  const text = ago === 0 ? 'сегодня' : ago === 1 ? 'вчера' : `${days(ago)} назад`
+  return { tone, text: `файлом ${text}` }
+}

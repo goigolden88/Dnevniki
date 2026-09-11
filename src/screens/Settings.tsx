@@ -13,7 +13,8 @@ import {
 } from '../notify.ts'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { markdownExport } from '../registry.ts'
-import { backupNote } from '../ui/backup.ts'
+import { backupNote, backupSummary } from '../ui/backup.ts'
+import { Fold } from '../ui/Fold.tsx'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
 
@@ -39,6 +40,14 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : 'Неизвестная ошибка'
 }
 
+/**
+ * Настройки разделами (Р-61).
+ *
+ * Разделы свёрнуты, пока их не открыли: в настройки заходят за чем-то
+ * одним, и экран читается как оглавление. Итог у заголовка говорит,
+ * стоит ли разворачивать, — ошибка синхронизации и отсутствие копии
+ * видны и у свёрнутого.
+ */
 export function Settings() {
   const [state, setState] = useState<State>({ status: 'loading' })
 
@@ -70,35 +79,6 @@ export function Settings() {
         <h1>Настройки</h1>
       </header>
 
-      <section className="block">
-        <h2>Хранилище</h2>
-
-        {state.status === 'loading' && <p className="muted">Открываю базу…</p>}
-
-        {state.status === 'failed' && (
-          <p className="error">База не открылась: {state.message}</p>
-        )}
-
-        {state.status === 'ready' && (
-          <>
-            <table className="stats">
-              <tbody>
-                {state.rows.map((row) => (
-                  <tr key={row.store}>
-                    <td>{LABELS[row.store]}</td>
-                    <td className="num">{row.live}</td>
-                    <td className="num muted">
-                      {row.total > row.live ? `+${row.total - row.live} удал.` : ''}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <p className="muted">Ждут отправки: {state.dirty}</p>
-          </>
-        )}
-      </section>
-
       <SyncSettings onChanged={load} />
 
       <Reminders />
@@ -107,16 +87,76 @@ export function Settings() {
 
       <DataTransfer onChanged={load} />
 
-      <section className="block">
-        <h2>О приложении</h2>
-        <dl className="facts">
-          <dt>Версия схемы</dt>
-          <dd>{SCHEMA_VERSION}</dd>
-          <dt>Сборка</dt>
-          <dd>{new Date(__BUILD_TIME__).toLocaleString('ru-RU')}</dd>
-        </dl>
-      </section>
+      <About state={state} />
     </>
+  )
+}
+
+/**
+ * Версия, сборка и что лежит в базе. Сюда смотрят, когда что-то не так,
+ * а не каждый раз, — поэтому бывшее «Хранилище» живёт здесь же.
+ */
+function About({ state }: { state: State }) {
+  const [persistent, setPersistent] = useState<boolean | null | undefined>(undefined)
+
+  useEffect(() => {
+    void db.persisted().then(setPersistent)
+  }, [])
+
+  // Дата сборки — в итоге у заголовка: по ней проверяют, доехало ли
+  // обновление, и разворачивать ради этого раздел незачем.
+  const built = new Date(__BUILD_TIME__)
+  const short = built.toLocaleString('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+
+  return (
+    <Fold id="settings:about" title="О приложении" summary={`сборка ${short}`} folded>
+      <dl className="facts">
+        <dt>Версия схемы</dt>
+        <dd>{SCHEMA_VERSION}</dd>
+        <dt>Сборка</dt>
+        <dd>{built.toLocaleString('ru-RU')}</dd>
+        {persistent !== undefined && (
+          <>
+            <dt>Хранилище</dt>
+            <dd>
+              {persistent === true
+                ? 'постоянное'
+                : persistent === false
+                  ? 'браузер может очистить при нехватке места'
+                  : 'браузер не сообщает'}
+            </dd>
+          </>
+        )}
+      </dl>
+
+      {state.status === 'loading' && <p className="muted">Открываю базу…</p>}
+
+      {state.status === 'failed' && <p className="error">База не открылась: {state.message}</p>}
+
+      {state.status === 'ready' && (
+        <>
+          <table className="stats">
+            <tbody>
+              {state.rows.map((row) => (
+                <tr key={row.store}>
+                  <td>{LABELS[row.store]}</td>
+                  <td className="num">{row.live}</td>
+                  <td className="num muted">
+                    {row.total > row.live ? `+${row.total - row.live} удал.` : ''}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="muted">Ждут отправки: {state.dirty}</p>
+        </>
+      )}
+    </Fold>
   )
 }
 
@@ -127,6 +167,7 @@ export function Settings() {
  */
 function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
   const input = useRef<HTMLInputElement>(null)
+  const sync = useSyncStatus()
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
@@ -200,10 +241,17 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
     }
   }
 
-  return (
-    <section className="block">
-      <h2>Данные</h2>
+  const summary = lastSaved === undefined ? undefined : backupSummary(lastSaved, sync, today())
 
+  return (
+    <Fold
+      id="settings:transfer"
+      title="Экспорт и импорт"
+      summary={
+        summary && (summary.tone === 'error' ? <span className="error">{summary.text}</span> : summary.text)
+      }
+      folded
+    >
       <div className="row">
         <button type="button" className="btn" onClick={() => void save()} disabled={busy}>
           Сохранить в файл
@@ -244,7 +292,7 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
         Загрузка не стирает то, что уже есть: записи сливаются по времени правки, побеждает
         более поздняя.
       </p>
-    </section>
+    </Fold>
   )
 }
 
@@ -273,6 +321,15 @@ const REMINDER_TEXT: Record<ReminderStatus, string> = {
     'Уведомления разрешены, но фоновую проверку браузер не дал. Так бывает, когда приложение ' +
     'открыто во вкладке, а не установлено иконкой.',
   on: 'Включено. Браузер проверяет примерно раз в сутки, точное время выбирает сам.',
+}
+
+/** Итог у свёрнутого раздела: включены ли. */
+const REMINDER_SUMMARY: Record<ReminderStatus, string> = {
+  unsupported: 'браузер не умеет',
+  denied: 'запрещены',
+  off: 'выключены',
+  'not-installed': 'выключены',
+  on: 'включены',
 }
 
 const CHECK_TEXT: Record<RemindResult | 'denied' | 'unsupported', string> = {
@@ -314,54 +371,61 @@ function Reminders() {
     }
   }
 
-  // Состояние ещё читается — мигать «не поддерживается» на полсекунды незачем.
-  if (status === null) return null
-
+  // Пока состояние читается, раздел без итога и без содержимого: мигать
+  // «не поддерживается» на полсекунды незачем.
   return (
-    <section className="block">
-      <h2>Напоминания</h2>
-      <p className="muted">{REMINDER_TEXT[status]}</p>
+    <Fold
+      id="settings:reminders"
+      title="Напоминания"
+      summary={status === null ? undefined : REMINDER_SUMMARY[status]}
+      folded
+    >
+      {status !== null && (
+        <>
+          <p className="muted">{REMINDER_TEXT[status]}</p>
 
-      <div className="row row--wrap">
-        {(status === 'off' || status === 'not-installed') && (
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={() => void act(async () => setStatus(await enableReminders()))}
-          >
-            Напоминать о просроченном
-          </button>
-        )}
-        {status === 'on' && (
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={() =>
-              void act(async () => {
-                await disableReminders()
-                setStatus('off')
-              })
-            }
-          >
-            Выключить
-          </button>
-        )}
-        {status !== 'unsupported' && status !== 'denied' && (
-          <button
-            type="button"
-            className="btn"
-            disabled={busy}
-            onClick={() => void act(async () => setNote(CHECK_TEXT[await checkReminder()]))}
-          >
-            Проверить сейчас
-          </button>
-        )}
-      </div>
+          <div className="row row--wrap">
+            {(status === 'off' || status === 'not-installed') && (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => void act(async () => setStatus(await enableReminders()))}
+              >
+                Напоминать о просроченном
+              </button>
+            )}
+            {status === 'on' && (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() =>
+                  void act(async () => {
+                    await disableReminders()
+                    setStatus('off')
+                  })
+                }
+              >
+                Выключить
+              </button>
+            )}
+            {status !== 'unsupported' && status !== 'denied' && (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy}
+                onClick={() => void act(async () => setNote(CHECK_TEXT[await checkReminder()]))}
+              >
+                Проверить сейчас
+              </button>
+            )}
+          </div>
 
-      {note && <p className="muted">{note}</p>}
-    </section>
+          {note && <p className="muted">{note}</p>}
+        </>
+      )}
+    </Fold>
   )
 }
 

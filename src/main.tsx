@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { registerSW } from 'virtual:pwa-register'
 import { App } from './app.tsx'
+import { db } from './core/db.ts'
 import './styles.css'
 
 const root = document.getElementById('root')
@@ -12,6 +13,10 @@ createRoot(root).render(
     <App />
   </StrictMode>,
 )
+
+// Постоянное хранилище (Р-61): без него браузер вправе стереть базу при
+// нехватке места. Отказ — не ошибка, работать можно и так.
+void db.persist()
 
 registerSW({
   immediate: true,

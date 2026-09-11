@@ -528,6 +528,13 @@ describe('настройки и служебное', () => {
   })
 })
 
+describe('постоянное хранилище', () => {
+  it('без API браузера отвечает «нет», а не падает', async () => {
+    expect(await db.persist()).toBe(false)
+    expect(await db.persisted()).toBeNull()
+  })
+})
+
 describe('схема базы', () => {
   it('заводит все хранилища и индексы, на которых держится остальное', async () => {
     await db.ready()

@@ -1,8 +1,8 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useFold } from './useFold.ts'
 
 /**
- * Блок экрана, который сворачивается тапом по заголовку (Р-55).
+ * Блок экрана, который сворачивается тапом по заголовку (Р-55, Р-61).
  *
  * Рядом с заголовком всегда стоит итог — число записей или сумма, — и
  * у свёрнутого тоже: «Гигиена · 5», «Требует внимания · 2». Свёрнутое
@@ -16,6 +16,7 @@ export function Fold({
   title,
   summary,
   folded: byDefault = false,
+  reveal = false,
   children,
 }: {
   /** Постоянный ключ блока: по нему устройство помнит, что свёрнуто. */
@@ -24,9 +25,18 @@ export function Fold({
   summary?: ReactNode
   /** Свёрнут ли блок, пока его ни разу не трогали. */
   folded?: boolean
+  /** Внутри — цель перехода: развернуть, даже если свёрнут. */
+  reveal?: boolean
   children: ReactNode
 }) {
-  const [folded, toggle] = useFold(id, byDefault)
+  const { folded, known, toggle, set } = useFold(id, byDefault)
+
+  // Пришли к записи, которая лежит в свёрнутом блоке (Р-56): блок
+  // разворачивается и остаётся развёрнутым. Спрятанная цель перехода хуже
+  // лишнего раскрытого блока.
+  useEffect(() => {
+    if (reveal && known && folded) set(false)
+  }, [reveal, known, folded, set])
 
   return (
     <section className="block">
@@ -36,7 +46,9 @@ export function Fold({
         </button>
         {summary !== undefined && summary !== '' && <span className="fold__summary">· {summary}</span>}
       </h2>
-      {!folded && children}
+      {/* Пока не прочитано, что свёрнуто, содержимого нет: иначе свёрнутый
+          блок на мгновение раскрывался бы и схлопывался, и экран прыгал. */}
+      {known && !folded && children}
     </section>
   )
 }

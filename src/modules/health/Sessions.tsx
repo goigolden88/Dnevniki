@@ -3,6 +3,7 @@ import { formatDateLoose, plural, today } from '../../core/dates.ts'
 import { activityTotals } from './health.ts'
 import { sessionText } from './labels.ts'
 import type { Health } from './useHealth.ts'
+import { Fold } from '../../ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 
 /**
@@ -19,8 +20,7 @@ export function Sessions({ health }: { health: Health }) {
   const names = new Map(health.tags.map((tag) => [tag.id, tag.name]))
 
   return (
-    <section className="block">
-      <h2>Тренировки</h2>
+    <Fold id="health:sessions" title="Тренировки" summary={health.sessions.length}>
 
       <SessionForm health={health} />
 
@@ -70,7 +70,7 @@ export function Sessions({ health }: { health: Health }) {
           </table>
         </details>
       )}
-    </section>
+    </Fold>
   )
 }
 

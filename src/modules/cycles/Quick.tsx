@@ -135,8 +135,7 @@ export function QuickSettings() {
   if (cycles.status !== 'ready') return null
 
   return (
-    <section className="block">
-      <h2>Быстрые кнопки</h2>
+    <Fold id="settings:quick" title="Быстрые кнопки" summary={cycles.quick.length} folded>
       <p className="muted">
         Кнопка на «Сейчас» отмечает сразу все свои позиции, вместе с ценой. Новая заводится
         с экрана позиции — «Сделать быстрой кнопкой»; там же позиция добавляется в уже
@@ -151,7 +150,7 @@ export function QuickSettings() {
           onRemove={cycles.removeTemplate}
         />
       ))}
-    </section>
+    </Fold>
   )
 }
 

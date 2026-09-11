@@ -232,6 +232,16 @@ async function go(hash) {
   await sleep(700)
 }
 
+/** Разворачивает блок по заголовку, если он свёрнут (Р-55, Р-61). */
+async function unfold(title) {
+  await act(`
+    const button = [...document.querySelectorAll('.fold__btn')]
+      .find((el) => el.textContent.trim() === ${JSON.stringify(title)})
+    if (button?.getAttribute('aria-expanded') === 'false') button.click()
+  `)
+  await sleep(400)
+}
+
 // ─── Сценарий ──────────────────────────────────────────────────────────────
 
 /**
@@ -571,12 +581,22 @@ async function scenario() {
   await go('/')
   await act(`document.querySelector('.gear')?.click()`)
   await sleep(700)
-  check('настройки открываются шестерёнкой', has(await screen(), 'Версия схемы'))
+  // Разделы свёрнуты оглавлением (Р-61): заголовки видны, содержимого нет.
+  const settings = await screen()
+  check(
+    'настройки открываются шестерёнкой, разделы свёрнуты — Р-43, Р-61',
+    has(settings, 'О приложении') && has(settings, 'Экспорт и импорт') && !has(settings, 'Версия схемы'),
+    settings.replace(/\s+/g, ' ').slice(0, 160),
+  )
+  await unfold('О приложении')
+  check('в «О приложении» — версия схемы', has(await screen(), 'Версия схемы'))
 
+  await unfold('Экспорт и импорт')
   await act(`byText('button', 'Сохранить в markdown')?.click()`)
   await sleep(700)
   check('выгрузка в markdown собирается без ошибок', has(await screen(), 'Markdown сохранён'))
 
+  await unfold('Быстрые кнопки')
   const listed = await run(`[...document.querySelectorAll('.quick__item')].map((el) => el.textContent).join(', ')`)
   check('все быстрые кнопки видны в настройках — Р-56', listed.includes('Стрижка'), listed)
 
@@ -610,6 +630,7 @@ async function scenario() {
     granted && seenPermission === 'granted',
     `страница видит ${seenPermission}`,
   )
+  await unfold('Напоминания')
   await act(`byText('button', 'Проверить сейчас')?.click()`)
   await sleep(1500)
   const shown = await run(`navigator.serviceWorker.ready
@@ -618,7 +639,7 @@ async function scenario() {
   // Раздел целиком — в отчёт: по нему видно, чем кончилась проверка,
   // если уведомления не нашлось.
   const reminders = await run(`[...document.querySelectorAll('section')]
-    .find((each) => each.querySelector('h2')?.textContent === 'Напоминания')
+    .find((each) => each.querySelector('.fold__btn')?.textContent === 'Напоминания')
     ?.innerText.replace(/\\s+/g, ' ') ?? 'раздела нет'`)
   check(
     'напоминание называет просроченную позицию',
@@ -663,14 +684,34 @@ async function scenario() {
   await go('/feed')
   await go('/')
   const remembered = await cutCards()
+  // Перезапуск — не переход: память страницы пропадает, остаётся только
+  // база. С телефона пришло, что свёрнутое после выхода раскрывается.
+  await send('Page.reload')
+  await sleep(2000)
+  const restarted = await cutCards()
   await act(`byText('button', 'Гигиена')?.click()`)
   await sleep(400)
   const unfolded = await cutCards()
   check(
-    'блок сворачивается заголовком, помнит это и показывает число — Р-55',
-    folded === 0 && remembered === 0 && unfolded === 1 && /·\s*\d/.test(foldedHead),
-    `«${foldedHead}»: свёрнут ${folded}, после перехода ${remembered}, развёрнут ${unfolded}`,
+    'блок сворачивается заголовком, помнит это после перезапуска и показывает число — Р-55',
+    folded === 0 && remembered === 0 && restarted === 0 && unfolded === 1 && /·\s*\d/.test(foldedHead),
+    `«${foldedHead}»: свёрнут ${folded}, после перехода ${remembered}, после перезапуска ${restarted}, развёрнут ${unfolded}`,
   )
+
+  // Здоровье и контент сворачиваются так же (Р-61).
+  const foldTitles = () =>
+    run(`[...document.querySelectorAll('.fold__btn')].map((el) => el.textContent.trim()).join(', ')`)
+  await go('/health')
+  const healthFolds = await foldTitles()
+  await go('/content')
+  const contentFolds = await foldTitles()
+  check(
+    'здоровье и контент сворачиваются — Р-61',
+    ['Итоги', 'Измерения', 'Тренировки', 'История'].every((title) => healthFolds.includes(title)) &&
+      ['Итоги', 'Записи'].every((title) => contentFolds.includes(title)),
+    `здоровье: ${healthFolds}; контент: ${contentFolds}`,
+  )
+  await go('/')
 
   // ─ Без сети (Р-50). Ради этого работник и существует, а после перехода
   // на свой файл подмена навигации и кеш написаны руками. Проверяется и то,

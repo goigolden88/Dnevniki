@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { today } from '../../core/dates.ts'
 import type { Episode } from '../../core/model.ts'
+import { Fold } from '../../ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { EpisodeState } from './health.ts'
 import { episodeText, sourceText, symptomNames } from './labels.ts'
@@ -35,8 +36,7 @@ export function HealthScreen() {
       {health.error && <p className="error">Не сохранилось: {health.error}</p>}
 
       {health.open.length > 0 && (
-        <section className="block">
-          <h2>Болею сейчас</h2>
+        <Fold id="health:open" title="Болею сейчас" summary={health.open.length}>
           <ul className="cycles">
             {health.open.map((state) => (
               <EpisodeCard
@@ -47,7 +47,7 @@ export function HealthScreen() {
               />
             ))}
           </ul>
-        </section>
+        </Fold>
       )}
 
       <NewEpisode health={health} />
@@ -58,8 +58,7 @@ export function HealthScreen() {
 
       <Sessions health={health} />
 
-      <section className="block">
-        <h2>История</h2>
+      <Fold id="health:history" title="История" summary={closed.length}>
         {closed.length === 0 ? (
           <p className="muted">Закрытых эпизодов пока нет.</p>
         ) : (
@@ -69,7 +68,7 @@ export function HealthScreen() {
             ))}
           </ul>
         )}
-      </section>
+      </Fold>
 
       {health.episodes.length > 0 && (
         <Link className="btn btn--wide" to="/health/summary">

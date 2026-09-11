@@ -10,6 +10,7 @@ import {
   typeLabel,
 } from './labels.ts'
 import type { ContentEntry } from '../../core/model.ts'
+import { Fold } from '../../ui/Fold.tsx'
 
 /** Что показывается, когда год не выбран. */
 const ALL = 'всё время'
@@ -34,8 +35,7 @@ export function ContentStats({ entries }: { entries: ContentEntry[] }) {
   if (entries.length === 0) return null
 
   return (
-    <section className="block">
-      <h2>Итоги</h2>
+    <Fold id="content:stats" title="Итоги">
 
       {years.length > 1 && (
         <div className="chips">
@@ -124,6 +124,6 @@ export function ContentStats({ entries }: { entries: ContentEntry[] }) {
           )}
         </>
       )}
-    </section>
+    </Fold>
   )
 }

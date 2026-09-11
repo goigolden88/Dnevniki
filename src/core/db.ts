@@ -521,6 +521,37 @@ async function importAll(snapshot: Snapshot): Promise<number> {
   return applied
 }
 
+// ─── Постоянное хранилище ──────────────────────────────────────────────────
+
+/**
+ * Просит у браузера постоянное хранилище (Р-61). Без него браузер вправе
+ * стереть базу при нехватке места, а Safari на iPhone — и за долгое
+ * неиспользование. Отказ не ошибка: работать можно и так.
+ */
+async function persist(): Promise<boolean> {
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.storage?.persist !== 'function') {
+      return false
+    }
+    if (await navigator.storage.persisted()) return true
+    return await navigator.storage.persist()
+  } catch {
+    return false
+  }
+}
+
+/** Дал ли браузер постоянное хранилище. Null — браузер об этом не сообщает. */
+async function persisted(): Promise<boolean | null> {
+  try {
+    if (typeof navigator === 'undefined' || typeof navigator.storage?.persisted !== 'function') {
+      return null
+    }
+    return await navigator.storage.persisted()
+  } catch {
+    return null
+  }
+}
+
 // ─── Публичный интерфейс ───────────────────────────────────────────────────
 
 export const db = {
@@ -541,6 +572,8 @@ export const db = {
   checkSnapshotVersion,
   settings,
   meta,
+  persist,
+  persisted,
 
   /** Открывает базу и отмечает версию схемы. Вызывается на старте. */
   async ready(): Promise<void> {

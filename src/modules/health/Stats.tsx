@@ -3,6 +3,7 @@ import { days, MONTHS_SHORT } from '../../core/dates.ts'
 import { healthStats } from './health.ts'
 import { gapText, healthyText, statsText } from './labels.ts'
 import type { Health } from './useHealth.ts'
+import { Fold } from '../../ui/Fold.tsx'
 
 /** Что показывается, когда год не выбран. */
 const ALL = 'всё время'
@@ -37,8 +38,7 @@ export function Stats({ health }: { health: Health }) {
   const peak = Math.max(...stats.byMonth, 1)
 
   return (
-    <section className="block">
-      <h2>Итоги</h2>
+    <Fold id="health:stats" title="Итоги">
 
       {healthyText(now) && <p className="lead">{healthyText(now)}</p>}
 
@@ -97,6 +97,6 @@ export function Stats({ health }: { health: Health }) {
           )}
         </>
       )}
-    </section>
+    </Fold>
   )
 }

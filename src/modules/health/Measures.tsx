@@ -3,6 +3,7 @@ import { formatDate, formatDateLoose, today } from '../../core/dates.ts'
 import { metricsOf, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
+import { Fold } from '../../ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { Health } from './useHealth.ts'
 
@@ -27,8 +28,7 @@ export function Measures({ health }: { health: Health }) {
     .slice(0, 10)
 
   return (
-    <section className="block">
-      <h2>Измерения</h2>
+    <Fold id="health:measures" title="Измерения" summary={health.measures.length}>
 
       <div className="chips">
         {all.map((each) => (
@@ -86,7 +86,7 @@ export function Measures({ health }: { health: Health }) {
           </tbody>
         </table>
       )}
-    </section>
+    </Fold>
   )
 }
 
