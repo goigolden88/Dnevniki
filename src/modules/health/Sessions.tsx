@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 import { formatDateLoose, plural, today } from '../../core/dates.ts'
 import { activityTotals } from './health.ts'
 import { sessionText } from './labels.ts'
@@ -48,23 +48,32 @@ export function Sessions({ health }: { health: Health }) {
           <table className="stats">
             <tbody>
               {recent.map((session) => (
-                <tr key={session.id}>
-                  <td>{formatDateLoose(session.date)}</td>
-                  <td>{names.get(session.activity) ?? '?'}</td>
-                  <td className="num muted">
-                    {sessionText(session.durationMin ?? 0, session.distanceKm ?? 0)}
-                  </td>
-                  <td className="num">
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={() => void health.removeSession(session.id)}
-                      aria-label={`Удалить тренировку ${formatDateLoose(session.date)}`}
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={session.id}>
+                  <tr>
+                    <td>{formatDateLoose(session.date)}</td>
+                    <td>{names.get(session.activity) ?? '?'}</td>
+                    <td className="num muted">
+                      {sessionText(session.durationMin ?? 0, session.distanceKm ?? 0)}
+                    </td>
+                    <td className="num">
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={() => void health.removeSession(session.id)}
+                        aria-label={`Удалить тренировку ${formatDateLoose(session.date)}`}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                  {session.note && (
+                    <tr>
+                      <td colSpan={4} className="muted">
+                        {session.note}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -79,6 +88,7 @@ function SessionForm({ health }: { health: Health }) {
   const [date, setDate] = useState(today())
   const [minutes, setMinutes] = useState('')
   const [km, setKm] = useState('')
+  const [note, setNote] = useState('')
 
   const kinds = health.tags.filter((tag) => tag.scope === 'activity')
 
@@ -95,9 +105,11 @@ function SessionForm({ health }: { health: Health }) {
       date,
       ...(number(minutes) === null ? {} : { durationMin: number(minutes) as number }),
       ...(number(km) === null ? {} : { distanceKm: number(km) as number }),
+      ...(note.trim() ? { note: note.trim() } : {}),
     })
     setMinutes('')
     setKm('')
+    setNote('')
   }
 
   return (
@@ -136,6 +148,15 @@ function SessionForm({ health }: { health: Health }) {
           placeholder="км"
           onChange={(event) => setKm(event.target.value)}
         />
+      </div>
+
+      {/* Заметка, как у эпизода и контента: самочувствие, темп, где бегал. */}
+      <label className="field">
+        <span>Заметка</span>
+        <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+
+      <div className="form__actions">
         <button type="submit" className="btn">
           Записать
         </button>
