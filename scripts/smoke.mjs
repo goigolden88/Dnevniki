@@ -615,7 +615,15 @@ async function scenario() {
     settings.replace(/\s+/g, ' ').slice(0, 160),
   )
   await unfold('О приложении')
-  check('в «О приложении» — версия схемы', has(await screen(), 'Версия схемы'))
+  const about = await screen()
+  check('в «О приложении» — версия схемы', has(about, 'Версия схемы'))
+  // Установка (Р-69): безголовый Chrome не iPhone и не установлен — кнопка
+  // или совет через меню, смотря прислал ли он событие.
+  check(
+    'в «О приложении» — как установить — Р-69',
+    has(about, 'Установка') && (has(about, 'Установить') || has(about, 'меню браузера')),
+    about.replace(/\s+/g, ' ').slice(0, 200),
+  )
 
   await unfold('Экспорт и импорт')
   await act(`byText('button', 'Сохранить в markdown')?.click()`)

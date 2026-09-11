@@ -3,10 +3,13 @@ import { formatDateLong, today } from '../core/dates.ts'
 import { CycleList } from '../modules/cycles/CycleList.tsx'
 import { OpenEpisodes } from '../modules/health/OpenEpisodes.tsx'
 import { Watching } from '../modules/content/Watching.tsx'
+import { IosNote } from '../ui/Install.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
+import { useFirstRun } from './useFirstRun.ts'
 
 export function Today() {
   const status = useSyncStatus()
+  const first = useFirstRun()
 
   // Синхронизация живёт в фоне, и единственное место, где о ней можно
   // узнать, — «Настройки». Точка на шестерёнке говорит, что туда стоит
@@ -34,6 +37,16 @@ export function Today() {
         </div>
         <p className="muted">{formatDateLong(today())}</p>
       </header>
+
+      {/* iPhone во вкладке Safari (Р-69): у установленного своё хранилище. */}
+      {first.iosNote && (
+        <section className="stub block">
+          <IosNote empty={first.iosNote === 'before'} />
+          <button type="button" className="link-btn" onClick={first.hideIosNote}>
+            Скрыть
+          </button>
+        </section>
+      )}
 
       {/* Экран — единственное место, где модули встречаются: сами они
           друг про друга не знают (02-Архитектура, «Правила»).

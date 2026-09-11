@@ -25,6 +25,8 @@ import { HealthNames } from '../modules/health/Names.tsx'
 import { KIND_ORDER, KINDS, markdownExport } from '../registry.ts'
 import { backupNote, backupSummary } from '../ui/backup.ts'
 import { Fold } from '../ui/Fold.tsx'
+import { InstallNote } from '../ui/Install.tsx'
+import { isEmptyBase } from './firstRun.ts'
 import { ImportRecords } from './ImportRecords.tsx'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
@@ -167,6 +169,15 @@ function About({ state }: { state: State }) {
           </>
         )}
       </dl>
+
+      {/* Установка (Р-69): сюда за ней возвращаются, когда приветствие закрыто. */}
+      <h3 className="unit__name">Установка</h3>
+      <InstallNote
+        empty={
+          state.status !== 'ready' ||
+          isEmptyBase(Object.fromEntries(state.rows.map((row) => [row.store, row.live])))
+        }
+      />
 
       {state.status === 'loading' && <p className="muted">Открываю базу…</p>}
 
