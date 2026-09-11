@@ -26,6 +26,19 @@ function empty(): Data {
   }
 }
 
+describe('markdown по выбранным разделам — Р-61', () => {
+  it('только выбранные разделы, в порядке таблицы', () => {
+    const data = empty()
+    data.items.push({ id: 'i1', updatedAt: at, name: 'Стрижка', cat: 'Гигиена', intervalDays: null })
+    const all = markdownExport(data, '2026-09-10')
+    const some = markdownExport(data, '2026-09-10', ['content', 'cycle'])
+    expect(all).toContain('## Циклы')
+    expect(some).toContain('## Циклы')
+    expect(some).not.toContain(KINDS.episode.markdown(data, '2026-09-10'))
+    expect(markdownExport(data, '2026-09-10', ['content'])).not.toContain('## Циклы')
+  })
+})
+
 describe('импорт записей — Р-60', () => {
   let counter = 0
   const ctx = () => ({ newId: () => `n${++counter}`, now: at })

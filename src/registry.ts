@@ -113,14 +113,21 @@ export function feedItems(data: Data, day: DateStr): FeedItem[] {
  * Читать глазами, а не переносить: обратно файл не загружается (Р-11),
  * для переноса — слепок JSON из тех же «Настроек».
  */
-export function markdownExport(data: Data, day: DateStr): string {
+export function markdownExport(
+  data: Data,
+  day: DateStr,
+  /** Какие разделы выгружать (Р-61). Порядок всё равно — порядок таблицы. */
+  kinds: readonly EventKind[] = KIND_ORDER,
+): string {
   const head = [
     '# Дневники',
     '',
     `Выгрузка от ${formatDate(day)}. Для чтения: обратно в приложение этот файл не загружается,`,
     'для переноса данных есть выгрузка в JSON.',
   ].join('\n')
-  const sections = KIND_ORDER.map((kind) => KINDS[kind].markdown(data, day))
+  const sections = KIND_ORDER.filter((kind) => kinds.includes(kind)).map((kind) =>
+    KINDS[kind].markdown(data, day),
+  )
   return `${[head, ...sections].join('\n\n')}\n`
 }
 

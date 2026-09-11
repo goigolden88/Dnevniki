@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { db } from '../core/db.ts'
 import { today } from '../core/dates.ts'
 import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
-import type { SyncedStore } from '../core/model.ts'
+import type { EventKind, SyncedStore } from '../core/model.ts'
 import {
   checkReminder,
   disableReminders,
@@ -19,7 +20,7 @@ import {
 import { CategorySettings } from '../modules/cycles/Categories.tsx'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { HealthNames } from '../modules/health/Names.tsx'
-import { markdownExport } from '../registry.ts'
+import { KIND_ORDER, KINDS, markdownExport } from '../registry.ts'
 import { backupNote, backupSummary } from '../ui/backup.ts'
 import { Fold } from '../ui/Fold.tsx'
 import { ImportRecords } from './ImportRecords.tsx'
@@ -86,6 +87,9 @@ export function Settings() {
     <>
       <header className="screen-head">
         <h1>Настройки</h1>
+        <p className="muted">
+          <Link to="/help">Справка</Link> — как всё устроено: синхронизация, импорт, напоминания.
+        </p>
       </header>
 
       <SyncSettings onChanged={load} />
@@ -99,8 +103,10 @@ export function Settings() {
           Каждое название ниже — поле. Тапни, поправь и убери палец или нажми Enter — сохранится.
           Впишешь название, которое уже есть, — два сольются в одно, записи перейдут к оставшемуся.
         </p>
-        <h3>Категории циклов</h3>
+        {/* Подсписок на модуль: так видно, что к чему относится. */}
+        <h3>Циклы</h3>
         <CategorySettings />
+        <h3>Здоровье</h3>
         <HealthNames />
       </Fold>
 
@@ -195,6 +201,9 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
   const [note, setNote] = useState('')
   const [error, setError] = useState('')
   const [lastSaved, setLastSaved] = useState<string | null | undefined>(undefined)
+  /** Какие разделы идут в markdown (Р-61). По умолчанию все. */
+  const [kinds, setKinds] = useState<EventKind[]>([...KIND_ORDER])
+  const [sharable] = useState(canShareFiles)
 
   // Дата последней выгрузки лежит в настройках: они не синхронизируются,
   // и это правильно — «когда я забирал копию» у каждого устройства своё.
@@ -202,18 +211,20 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
     void db.settings.get<string>(LAST_EXPORT).then((value) => setLastSaved(value ?? null))
   }, [])
 
-  async function save() {
+  async function save(via: Via) {
     setBusy(true)
+    setNote('')
     setError('')
     try {
       const snapshot = await db.exportAll()
-      download(`dnevniki-${today()}.json`, JSON.stringify(snapshot, null, 2), 'application/json')
+      const sent = await deliver(via, `dnevniki-${today()}.json`, JSON.stringify(snapshot, null, 2), 'application/json')
+      if (!sent) return
       // Браузер не сообщает, дошёл ли файл до диска: диалог мог быть отменён.
       // Отметка означает «выгрузку запускали», а не «копия точно есть».
       const at = new Date().toISOString()
       await db.settings.set(LAST_EXPORT, at)
       setLastSaved(at)
-      setNote('Файл сохранён')
+      setNote(via === 'share' ? 'Копия отправлена' : 'Файл сохранён')
     } catch (failure) {
       setError(describe(failure))
     } finally {
@@ -226,14 +237,17 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
    * дневники остаются текстом, открываемым где угодно. Отметку о выгрузке
    * не ставит — это не копия, из которой можно восстановиться.
    */
-  async function saveMarkdown() {
+  async function saveMarkdown(via: Via) {
     setBusy(true)
     setNote('')
     setError('')
     try {
       const snapshot = await db.exportAll()
-      download(`dnevniki-${today()}.md`, markdownExport(snapshot.data, today()), 'text/markdown')
-      setNote('Markdown сохранён. Он для чтения: обратно в приложение загружается только JSON.')
+      const text = markdownExport(snapshot.data, today(), kinds)
+      if (!(await deliver(via, `dnevniki-${today()}.md`, text, 'text/markdown'))) return
+      setNote(
+        `Markdown ${via === 'share' ? 'отправлен' : 'сохранён'}. Он для чтения: обратно в приложение загружается только JSON.`,
+      )
     } catch (failure) {
       setError(describe(failure))
     } finally {
@@ -277,9 +291,16 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
     >
       <h3>Копия всех данных</h3>
       <div className="row row--wrap">
-        <button type="button" className="btn" onClick={() => void save()} disabled={busy}>
+        <button type="button" className="btn" onClick={() => void save('file')} disabled={busy}>
           Сохранить в файл
         </button>
+        {/* На телефоне файл уходит сразу в мессенджер или на диск, а не
+            ищется потом в «Загрузках» (Р-61). Не умеет браузер — кнопки нет. */}
+        {sharable && (
+          <button type="button" className="btn" onClick={() => void save('share')} disabled={busy}>
+            Поделиться
+          </button>
+        )}
         <button
           type="button"
           className="btn"
@@ -290,10 +311,41 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
         </button>
       </div>
 
-      <div className="row row--end">
-        <button type="button" className="btn" onClick={() => void saveMarkdown()} disabled={busy}>
+      <h3>Markdown — для чтения</h3>
+      <div className="chips">
+        {KIND_ORDER.map((kind) => (
+          <button
+            key={kind}
+            type="button"
+            className={kinds.includes(kind) ? 'chip chip--on' : 'chip'}
+            aria-pressed={kinds.includes(kind)}
+            onClick={() =>
+              setKinds(kinds.includes(kind) ? kinds.filter((each) => each !== kind) : [...kinds, kind])
+            }
+          >
+            {KINDS[kind].label}
+          </button>
+        ))}
+      </div>
+      <div className="row row--wrap">
+        <button
+          type="button"
+          className="btn"
+          onClick={() => void saveMarkdown('file')}
+          disabled={busy || kinds.length === 0}
+        >
           Сохранить в markdown
         </button>
+        {sharable && (
+          <button
+            type="button"
+            className="btn"
+            onClick={() => void saveMarkdown('share')}
+            disabled={busy || kinds.length === 0}
+          >
+            Поделиться markdown
+          </button>
+        )}
       </div>
 
       <input
@@ -326,6 +378,39 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
 }
 
 const LAST_EXPORT = 'lastExportAt'
+
+/** Куда отдать файл: скачать или в меню «Поделиться». */
+type Via = 'file' | 'share'
+
+/** Умеет ли браузер делиться файлами — на телефоне это меню «Поделиться». */
+function canShareFiles(): boolean {
+  try {
+    return (
+      typeof navigator.canShare === 'function' &&
+      navigator.canShare({ files: [new File([''], 'x.json', { type: 'application/json' })] })
+    )
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Отдать текст файлом. false — человек закрыл меню «Поделиться»: это не
+ * ошибка, и отметку о выгрузке ставить незачем.
+ */
+async function deliver(via: Via, name: string, text: string, type: string): Promise<boolean> {
+  if (via === 'file') {
+    download(name, text, type)
+    return true
+  }
+  try {
+    await navigator.share({ files: [new File([text], name, { type })], title: name })
+    return true
+  } catch (failure) {
+    if (failure instanceof DOMException && failure.name === 'AbortError') return false
+    throw failure
+  }
+}
 
 /** Отдать текст файлом через ссылку со скачиванием. */
 function download(name: string, text: string, type: string): void {
