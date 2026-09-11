@@ -148,3 +148,5 @@ vite.config.ts.timestamp-*
 /seed/
 *.seed.json
 dnevniki-*.json
+# Копия через «Поделиться» уходит .txt (Р-61) — содержимое то же.
+dnevniki-*.txt
