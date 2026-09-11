@@ -25,6 +25,8 @@ import { HealthNames } from '../modules/health/Names.tsx'
 import { KIND_ORDER, KINDS, markdownExport } from '../registry.ts'
 import { backupNote, backupSummary } from '../ui/backup.ts'
 import { Fold } from '../ui/Fold.tsx'
+import { CHANGES } from '../changes.ts'
+import { ChangeList } from './WhatsNew.tsx'
 import { InstallNote } from '../ui/Install.tsx'
 import { isEmptyBase } from './firstRun.ts'
 import { ImportRecords } from './ImportRecords.tsx'
@@ -178,6 +180,12 @@ function About({ state }: { state: State }) {
           isEmptyBase(Object.fromEntries(state.rows.map((row) => [row.store, row.live])))
         }
       />
+
+      {/* Весь список изменений (Р-71): блок на «Сейчас» закрыли, а спросить
+          «что тогда поменялось» можно и потом. */}
+      <Fold id="settings:about:changes" title="Что нового" sub>
+        <ChangeList changes={CHANGES} />
+      </Fold>
 
       {state.status === 'loading' && <p className="muted">Открываю базу…</p>}
 

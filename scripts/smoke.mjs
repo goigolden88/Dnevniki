@@ -592,6 +592,39 @@ async function scenario() {
 
   // Настройки открываются шестерёнкой, а не вкладкой (Р-43).
   await go('/')
+
+  // «Что нового» (Р-71). Свежая установка отметила всё прочитанным ещё на
+  // пустой базе и блока не видит. Копия, обновившаяся со старой версии,
+  // помнит своё последнее прочитанное — подставляем ноль и перезапускаем,
+  // как это делает автообновление.
+  check('свежая установка «Что нового» не показывает — Р-71', !has(await screen(), 'Что нового'))
+  await run(`new Promise((resolve, reject) => {
+    const request = indexedDB.open('dnevniki')
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const tx = request.result.transaction('settings', 'readwrite')
+      tx.objectStore('settings').put({ key: 'seenChanges', value: 0 })
+      tx.oncomplete = () => {
+        request.result.close()
+        resolve(true)
+      }
+      tx.onerror = () => reject(tx.error)
+    }
+  })`)
+  await send('Page.reload')
+  await sleep(2000)
+  const news = await screen()
+  check(
+    'после обновления на «Сейчас» — «Что нового» — Р-71',
+    has(news, 'Что нового') && has(news, 'Справка сверена'),
+    news.replace(/\s+/g, ' ').slice(0, 160),
+  )
+  await act(`byText('button', 'Понятно')?.click()`)
+  await sleep(400)
+  await send('Page.reload')
+  await sleep(2000)
+  check('«Понятно» закрывает «Что нового» до следующего обновления — Р-71', !has(await screen(), 'Что нового'))
+
   // Справка (Р-63): «?» рядом с шестерёнкой, вопросы свёрнуты.
   await act(`document.querySelector('[aria-label="Справка"]')?.click()`)
   await sleep(700)
@@ -637,6 +670,7 @@ async function scenario() {
     has(about, 'Установка') && (has(about, 'Установить') || has(about, 'меню браузера')),
     about.replace(/\s+/g, ' ').slice(0, 200),
   )
+  check('в «О приложении» — весь список «Что нового» — Р-71', has(about, 'Что нового'))
 
   await unfold('Экспорт и импорт')
   await act(`byText('button', 'Сохранить в markdown')?.click()`)

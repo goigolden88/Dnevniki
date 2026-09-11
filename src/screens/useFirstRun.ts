@@ -25,6 +25,8 @@ const IOS_NOTE_HIDDEN = 'installNoteHidden'
 let hiddenNow = false
 
 export type FirstRun = {
+  /** Посчитано ли, пуста ли база. */
+  counted: boolean
   empty: boolean
   welcome: boolean
   dismissWelcome: () => void
@@ -89,6 +91,7 @@ export function useFirstRun(): FirstRun {
   const welcome = known && showWelcome({ empty, done })
 
   return {
+    counted: counts !== null,
     empty,
     welcome,
     dismissWelcome: () => {

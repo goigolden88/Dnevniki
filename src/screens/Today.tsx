@@ -6,11 +6,14 @@ import { Watching } from '../modules/content/Watching.tsx'
 import { IosNote } from '../ui/Install.tsx'
 import { useSyncStatus } from '../ui/useSync.ts'
 import { useFirstRun } from './useFirstRun.ts'
+import { useWhatsNew } from './useWhatsNew.ts'
 import { Welcome } from './Welcome.tsx'
+import { WhatsNew } from './WhatsNew.tsx'
 
 export function Today() {
   const status = useSyncStatus()
   const first = useFirstRun()
+  const news = useWhatsNew(first)
 
   // Синхронизация живёт в фоне, и единственное место, где о ней можно
   // узнать, — «Настройки». Точка на шестерёнке говорит, что туда стоит
@@ -41,6 +44,9 @@ export function Today() {
 
       {/* Первый запуск (Р-70): пока база пуста и приветствие не закрыли. */}
       {first.welcome && <Welcome onDone={first.dismissWelcome} />}
+
+      {/* После обновления (Р-71): что поменялось. */}
+      {news.show.length > 0 && <WhatsNew changes={news.show} onDone={news.dismiss} />}
 
       {/* iPhone во вкладке Safari (Р-69): у установленного своё хранилище. */}
       {first.iosNote && (
