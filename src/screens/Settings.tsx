@@ -18,6 +18,7 @@ import {
 } from '../notify.ts'
 import { CategorySettings } from '../modules/cycles/Categories.tsx'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
+import { HealthNames } from '../modules/health/Names.tsx'
 import { markdownExport } from '../registry.ts'
 import { backupNote, backupSummary } from '../ui/backup.ts'
 import { Fold } from '../ui/Fold.tsx'
@@ -90,10 +91,12 @@ export function Settings() {
 
       <Reminders />
 
-      {/* Раздел общий на модули: сейчас в нём категории циклов, следом
-          придут симптомы, виды тренировок и свои метрики (Р-59). */}
+      {/* Раздел общий на модули (Р-59): каждый отдаёт свою часть,
+          экран только ставит их рядом. */}
       <Fold id="settings:names" title="Категории и названия" folded>
+        <h3>Категории циклов</h3>
         <CategorySettings />
+        <HealthNames />
       </Fold>
 
       <QuickSettings />

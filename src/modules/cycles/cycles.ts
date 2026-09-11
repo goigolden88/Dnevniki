@@ -433,6 +433,52 @@ export function nextCategoryOrder(categories: readonly CycleCategory[]): number 
   )
 }
 
+/**
+ * Группы (кусты) категории с числом позиций — для раздела в «Настройках».
+ * «Барьер» и «барьер » — одна группа: переименование и так считает их
+ * одной, и две строки в списке соврали бы. Показывается первое написание.
+ */
+export function categoryGroups(
+  items: readonly CycleItem[],
+  cat: string,
+): { name: string; count: number }[] {
+  const groups = new Map<string, { name: string; count: number }>()
+  for (const item of items) {
+    const group = item.group?.trim()
+    if (item.deleted || !group || !sameName(item.cat, cat)) continue
+    const known = groups.get(norm(group))
+    if (known) known.count += 1
+    else groups.set(norm(group), { name: group, count: 1 })
+  }
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'))
+}
+
+/**
+ * Переименование группы целиком, по всем её позициям в категории (Р-59).
+ * Группа — строка у позиции, отдельной записи у неё нет (Р-30), так что
+ * правятся только позиции. Название уже есть у другой группы этой
+ * категории — позиции переходят в неё, с её написанием.
+ */
+export function renameGroupPlan(
+  items: readonly CycleItem[],
+  cat: string,
+  from: string,
+  to: string,
+): CycleItem[] {
+  const clean = to.trim()
+  if (!clean) return []
+
+  const inCat = items.filter((item) => !item.deleted && sameName(item.cat, cat))
+  const existing = inCat.find(
+    (item) => item.group && sameName(item.group, clean) && !sameName(item.group, from),
+  )?.group
+  const target = existing?.trim() ?? clean
+
+  return inCat
+    .filter((item) => item.group !== undefined && sameName(item.group, from) && item.group !== target)
+    .map((item) => ({ ...item, group: target }))
+}
+
 /** Что записать: категории и позиции, которые правка затронула. */
 export type CategoryPlan = { categories: CycleCategory[]; items: CycleItem[] }
 

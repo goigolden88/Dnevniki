@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  categoryGroups,
   categoryIdFor,
   categoryNames,
+  renameGroupPlan,
   findCategory,
   initialCategories,
   movePlan,
@@ -130,6 +132,40 @@ describe('удаление', () => {
     const plan = removePlan(list, [item('cut', 'Гигиена'), item('filter', 'Дом')], 'cat:гигиена', 'cat:дом')
     expect(plan?.categories).toEqual([{ ...list[0], deleted: true }])
     expect(plan?.items).toEqual([{ ...item('cut', 'Гигиена'), cat: 'Дом' }])
+  })
+})
+
+describe('группы', () => {
+  const items = [
+    item('a', 'Дом', { group: 'Барьер' }),
+    item('b', 'Дом', { group: 'барьер ' }),
+    item('c', 'Дом', { group: 'Зарядки' }),
+    item('d', 'Техника', { group: 'Барьер' }),
+    item('e', 'Дом'),
+  ]
+
+  it('группы категории с числом позиций, без пустых; регистр не делит группу', () => {
+    expect(categoryGroups(items, 'Дом')).toEqual([
+      { name: 'Барьер', count: 2 },
+      { name: 'Зарядки', count: 1 },
+    ])
+  })
+
+  it('переименование — все позиции группы в этой категории, в любом регистре', () => {
+    const changed = renameGroupPlan(items, 'Дом', 'Барьер', 'Фильтр')
+    expect(changed.map((each) => [each.id, each.group])).toEqual([
+      ['a', 'Фильтр'],
+      ['b', 'Фильтр'],
+    ])
+  })
+
+  it('в название другой группы — позиции переходят в неё, с её написанием', () => {
+    const changed = renameGroupPlan(items, 'Дом', 'Зарядки', 'БАРЬЕР')
+    expect(changed.map((each) => [each.id, each.group])).toEqual([['c', 'Барьер']])
+  })
+
+  it('пустое название ничего не делает', () => {
+    expect(renameGroupPlan(items, 'Дом', 'Барьер', ' ')).toEqual([])
   })
 })
 

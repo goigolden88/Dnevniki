@@ -11,7 +11,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { episodeStates, openEpisodes, type EpisodeState } from './health.ts'
+import {
+  episodeStates,
+  openEpisodes,
+  renameMetricPlan,
+  renameTagPlan,
+  type EpisodeState,
+} from './health.ts'
+import { METRICS } from './labels.ts'
 import { db } from '../../core/db.ts'
 import { nowIso, today, type DateStr } from '../../core/dates.ts'
 import { ulid } from '../../core/id.ts'
@@ -71,6 +78,10 @@ export type Health = {
   removeSession: (id: string) => Promise<void>
   /** Id тега по имени. Заводит новый, если такого ещё нет. */
   ensureTag: (name: string, scope: Tag['scope']) => Promise<string | null>
+  /** Переименовать симптом или вид тренировки; в занятое название — слить (Р-59). */
+  renameTag: (id: string, name: string) => Promise<void>
+  /** Переименовать свою метрику по всем её измерениям (Р-59). */
+  renameMetric: (from: string, to: string) => Promise<void>
 }
 
 function describe(error: unknown): string {
@@ -310,6 +321,55 @@ export function useHealth(): Health {
     [tags, apply],
   )
 
+  /** Заменить записи с теми же id. */
+  function replaced<T extends { id: string }>(list: readonly T[], changed: readonly T[]): T[] {
+    const byId = new Map(changed.map((each) => [each.id, each]))
+    return list.map((each) => byId.get(each.id) ?? each)
+  }
+
+  const renameTag = useCallback(
+    async (id: string, name: string) => {
+      const plan = renameTagPlan(tags, episodes, sessions, id, name)
+      if (!plan) return
+      const before = { tags, episodes, sessions }
+      await apply(
+        () => {
+          setTags(replaced(before.tags, plan.tags))
+          setEpisodes(replaced(before.episodes, plan.episodes))
+          setSessions(replaced(before.sessions, plan.sessions))
+        },
+        () => {
+          setTags(before.tags)
+          setEpisodes(before.episodes)
+          setSessions(before.sessions)
+        },
+        // Ссылки первыми: слияние, прерванное посередине, оставит эпизоды
+        // на живом теге, а не на надгробии.
+        async () => {
+          if (plan.episodes.length > 0) await db.putMany('episodes', plan.episodes)
+          if (plan.sessions.length > 0) await db.putMany('sessions', plan.sessions)
+          await db.putMany('tags', plan.tags)
+          return true
+        },
+      )
+    },
+    [tags, episodes, sessions, apply],
+  )
+
+  const renameMetric = useCallback(
+    async (from: string, to: string) => {
+      const changed = renameMetricPlan(measures, from, to, METRICS)
+      if (!changed || changed.length === 0) return
+      const before = measures
+      await apply(
+        () => setMeasures(replaced(before, changed)),
+        () => setMeasures(before),
+        () => db.putMany('measures', changed),
+      )
+    },
+    [measures, apply],
+  )
+
   const liveTags = useMemo(() => tags.filter((tag) => !tag.deleted), [tags])
   const liveMeasures = useMemo(() => measures.filter((each) => !each.deleted), [measures])
   const liveSessions = useMemo(() => sessions.filter((each) => !each.deleted), [sessions])
@@ -334,5 +394,7 @@ export function useHealth(): Health {
     addSession,
     removeSession,
     ensureTag,
+    renameTag,
+    renameMetric,
   }
 }

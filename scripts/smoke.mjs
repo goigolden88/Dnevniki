@@ -780,6 +780,11 @@ async function scenario() {
   // позиции, и «Сейчас» показывает новое название.
   await go('/settings')
   await unfold('Категории и названия')
+  const names = await screen()
+  check(
+    'в «Категориях и названиях» есть здоровье: симптомы и виды тренировок — Р-59',
+    has(names, 'Симптомы') && has(names, 'Виды тренировок'),
+  )
   const seeded = await run(`[...document.querySelectorAll('.category input')].map((el) => el.value).join(', ')`)
   await act(`
     const field = [...document.querySelectorAll('.category input')].find((el) => el.value === 'Гигиена')

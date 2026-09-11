@@ -6,9 +6,11 @@ import {
   healthStats,
   metricsOf,
   openEpisodes,
+  renameMetricPlan,
+  renameTagPlan,
   series,
 } from './health.ts'
-import type { Episode, Measure, Session } from '../../core/model.ts'
+import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
 
 const T = '2026-09-07T00:00:00.000Z'
 const NOW = '2026-09-09'
@@ -33,6 +35,63 @@ function measure(over: Partial<Measure> = {}): Measure {
 function session(over: Partial<Session> = {}): Session {
   return { id: 's1', updatedAt: T, activity: 'бег', date: '2026-09-01', ...over }
 }
+
+describe('названия — Р-59', () => {
+  const tag = (id: string, name: string, scope: Tag['scope'] = 'symptom'): Tag => ({ id, updatedAt: T, name, scope })
+  const tags = [tag('runny', 'насморк'), tag('stuffy', 'Заложенность носа'), tag('run', 'бег', 'activity')]
+
+  it('переименование правит только тег — ссылки идут по id', () => {
+    const plan = renameTagPlan(tags, [episode({ symptoms: ['runny'] })], [], 'runny', 'Насморк')
+    expect(plan).toEqual({ tags: [{ ...tags[0], name: 'Насморк' }], episodes: [], sessions: [], merged: false })
+  })
+
+  it('в занятое название — слияние: эпизоды переходят на оставшийся, без повторов', () => {
+    const episodes = [
+      episode({ id: 'e1', symptoms: ['runny'] }),
+      episode({ id: 'e2', symptoms: ['stuffy', 'runny'] }),
+      episode({ id: 'e3', symptoms: ['other'] }),
+    ]
+    const plan = renameTagPlan(tags, episodes, [], 'runny', ' заложенность НОСА')
+    expect(plan?.merged).toBe(true)
+    expect(plan?.tags).toEqual([{ ...tags[0], deleted: true }])
+    expect(plan?.episodes.map((each) => [each.id, each.symptoms])).toEqual([
+      ['e1', ['stuffy']],
+      ['e2', ['stuffy']],
+    ])
+  })
+
+  it('слияние только внутри своего вида: симптом не сливается с тренировкой', () => {
+    const plan = renameTagPlan(tags, [], [], 'runny', 'бег')
+    expect(plan?.merged).toBe(false)
+  })
+
+  it('вид тренировки сливается, и тренировки переходят', () => {
+    const all = [...tags, tag('jog', 'пробежка', 'activity')]
+    const plan = renameTagPlan(all, [], [session({ id: 's1', activity: 'jog' })], 'jog', 'Бег')
+    expect(plan?.sessions).toEqual([session({ id: 's1', activity: 'run' })])
+  })
+
+  const presets = [
+    { key: 'weight', label: 'Вес' },
+    { key: 'bp', label: 'Давление' },
+  ]
+
+  it('своя метрика переименовывается по всем измерениям', () => {
+    const measures = [measure({ id: 'm1', metric: 'пульс' }), measure({ id: 'm2', metric: 'weight' })]
+    expect(renameMetricPlan(measures, 'пульс', 'Пульс покоя', presets)).toEqual([
+      measure({ id: 'm1', metric: 'Пульс покоя' }),
+    ])
+  })
+
+  it('«вес», вписанный руками, становится встроенным весом', () => {
+    const measures = [measure({ id: 'm1', metric: 'масса' })]
+    expect(renameMetricPlan(measures, 'масса', 'вес', presets)?.[0]?.metric).toBe('weight')
+  })
+
+  it('встроенные не переименовываются', () => {
+    expect(renameMetricPlan([measure()], 'weight', 'Масса', presets)).toBeNull()
+  })
+})
 
 describe('episodeState', () => {
   it('считает длительность включительно: заболел и выздоровел в один день — это день', () => {

@@ -11,7 +11,97 @@
  */
 
 import { daysBetween, isDateStr, today, type DateStr } from '../../core/dates.ts'
-import type { Episode, Measure, Session } from '../../core/model.ts'
+import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+
+// ─── Названия (Р-59) ───────────────────────────────────────────────────────
+
+/** Одно ли это название: регистр и пробелы по краям не различаются. */
+function sameText(a: string, b: string): boolean {
+  return a.trim().toLocaleLowerCase('ru') === b.trim().toLocaleLowerCase('ru')
+}
+
+export type TagPlan = {
+  tags: Tag[]
+  episodes: Episode[]
+  sessions: Session[]
+  /** Название было занято другим тегом того же вида — теги слиты. */
+  merged: boolean
+}
+
+/**
+ * Переименование симптома или вида тренировки (Р-59).
+ *
+ * Эпизоды и тренировки ссылаются на тег по id, так что обычное
+ * переименование правит одну запись тега. Название уже занято другим
+ * тегом того же вида — это слияние: ссылки переводятся на оставшийся,
+ * этот уходит надгробием. Так «насморк» и «заложенность носа» становятся
+ * одним симптомом, и повторяющиеся симптомы перестают рассыпаться на
+ * синонимы. Null — переименовывать нечего.
+ */
+export function renameTagPlan(
+  tags: readonly Tag[],
+  episodes: readonly Episode[],
+  sessions: readonly Session[],
+  id: string,
+  name: string,
+): TagPlan | null {
+  const clean = name.trim()
+  const current = tags.find((tag) => tag.id === id && !tag.deleted)
+  if (!current || !clean) return null
+
+  const other = tags.find(
+    (tag) => !tag.deleted && tag.id !== id && tag.scope === current.scope && sameText(tag.name, clean),
+  )
+  if (!other) {
+    if (current.name === clean) return null
+    return { tags: [{ ...current, name: clean }], episodes: [], sessions: [], merged: false }
+  }
+
+  return {
+    tags: [{ ...current, deleted: true }],
+    episodes: episodes
+      .filter((episode) => episode.symptoms.includes(id))
+      .map((episode) => ({
+        ...episode,
+        // Симптом мог стоять у эпизода под обоими именами — второй раз не нужен.
+        symptoms: [...new Set(episode.symptoms.map((each) => (each === id ? other.id : each)))],
+      })),
+    sessions: sessions
+      .filter((session) => session.activity === id)
+      .map((session) => ({ ...session, activity: other.id })),
+    merged: true,
+  }
+}
+
+/**
+ * Переименование своей метрики по всем её измерениям (Р-59).
+ *
+ * Метрика — строка у измерения, отдельной записи нет. Встроенные — вес,
+ * рост, давление — не переименовываются: их подписи в коде. Новое
+ * название совпало со встроенной или с другой своей — измерения переходят
+ * в неё: «Вес», вписанный руками, должен стать весом, а не второй метрикой.
+ * Null — переименовывать нечего.
+ */
+export function renameMetricPlan(
+  measures: readonly Measure[],
+  from: string,
+  to: string,
+  presets: readonly { key: string; label: string }[],
+): Measure[] | null {
+  const clean = to.trim()
+  if (!clean || presets.some((preset) => preset.key === from)) return null
+
+  const preset = presets.find((each) => each.key === clean || sameText(each.label, clean))
+  const known = measures.find(
+    (measure) => !measure.deleted && measure.metric !== from && sameText(measure.metric, clean),
+  )?.metric
+  const target = preset?.key ?? known ?? clean
+  if (target === from) return null
+
+  return measures
+    .filter((measure) => !measure.deleted && measure.metric === from)
+    .map((measure) => ({ ...measure, metric: target }))
+}
 
 // ─── Эпизоды ───────────────────────────────────────────────────────────────
 

@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
 import { plural } from '../../core/dates.ts'
 import type { CycleCategory } from '../../core/model.ts'
-import { sameName } from './cycles.ts'
+import { RenameField } from '../../ui/RenameField.tsx'
+import { categoryGroups, sameName } from './cycles.ts'
 import { useCycles, type Cycles } from './useCycles.ts'
 
 /**
@@ -69,6 +70,7 @@ function CategoryRow({
   const [moving, setMoving] = useState(false)
   const [target, setTarget] = useState(others[0]?.id ?? '')
   const positions = `${count} ${plural(count, ['позиция', 'позиции', 'позиций'])}`
+  const groups = categoryGroups(cycles.items, category.name)
 
   function commit() {
     const clean = name.trim()
@@ -133,6 +135,31 @@ function CategoryRow({
           Удалить
         </button>
       </div>
+
+      {/* Группы — строки у позиций (Р-30): переименование правит все
+          позиции группы разом, в название соседней — сливает. */}
+      {groups.length > 0 && (
+        <div className="field">
+          <span>Группы</span>
+          {groups.map((group) => (
+            <div className="row row--wrap" key={group.name}>
+              <RenameField
+                value={group.name}
+                label={`Название группы «${group.name}»`}
+                onCommit={(next) => {
+                  const other = groups.find((each) => each.name !== group.name && sameName(each.name, next))
+                  if (other && !window.confirm(`Слить группу «${group.name}» с «${other.name}»?`)) return false
+                  void cycles.renameGroup(category.name, group.name, next)
+                  return true
+                }}
+              />
+              <span className="muted">
+                {group.count} {plural(group.count, ['позиция', 'позиции', 'позиций'])}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {moving &&
         (others.length === 0 ? (

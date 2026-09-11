@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   categoryIdFor,
+  renameGroupPlan,
   cyclePreset,
   cycleState,
   cycleStates,
@@ -93,6 +94,8 @@ export type Cycles = {
   moveCategory: (id: string, delta: -1 | 1) => Promise<void>
   /** С позициями — только с переносом в `moveTo`. false — не удалилась. */
   removeCategory: (id: string, moveTo: string | null) => Promise<boolean>
+  /** Группа целиком, по всем её позициям в категории. */
+  renameGroup: (cat: string, from: string, to: string) => Promise<void>
 }
 
 function describe(error: unknown): string {
@@ -596,6 +599,14 @@ export function useCycles(): Cycles {
     [categories, items, writePlan],
   )
 
+  const renameGroup = useCallback(
+    async (cat: string, from: string, to: string) => {
+      const changed = renameGroupPlan(items, cat, from, to)
+      if (changed.length > 0) await writePlan([], changed)
+    },
+    [items, writePlan],
+  )
+
   const liveCategories = useMemo(() => sortCategories(categories), [categories])
   const catNames = useMemo(() => liveCategories.map((category) => category.name), [liveCategories])
 
@@ -629,5 +640,6 @@ export function useCycles(): Cycles {
     renameCategory,
     moveCategory,
     removeCategory,
+    renameGroup,
   }
 }
