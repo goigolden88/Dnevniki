@@ -4,10 +4,14 @@ import { registerSW } from 'virtual:pwa-register'
 import { App } from './app.tsx'
 import { db } from './core/db.ts'
 import { listenInstall } from './ui/install.ts'
+import { listenErrors } from './ui/report.ts'
 import './styles.css'
 
 // До первого экрана: Chrome присылает событие установки рано и один раз (Р-69).
 listenInstall()
+
+// Тоже до первого экрана: ошибка при отрисовке должна попасть в журнал (Р-78).
+listenErrors()
 
 const root = document.getElementById('root')
 if (!root) throw new Error('Не найден #root')

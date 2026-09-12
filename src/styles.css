@@ -67,10 +67,18 @@ a {
   color: var(--accent);
 }
 
+/* Установленное на iPhone рисуется под строкой состояния и вырезом камеры:
+   black-translucent и viewport-fit=cover в index.html. Зону, которую занял
+   телефон, отдаёт внешний контейнер целиком, а поля экрана внутри остаются
+   своими. Размер выреза сообщает сам телефон — чисел здесь нет; вне iPhone
+   и во вкладке это ноль. Нижнюю зону держит панель вкладок. */
 .layout {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
 }
 
 .content {
@@ -83,6 +91,18 @@ a {
 
 .screen-head {
   margin-bottom: 24px;
+}
+
+/* Отчёт об ошибке (Р-78): виден целиком, длинные строки браузера переносятся. */
+.report {
+  margin: 12px 0;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* Заголовок с шестерёнкой справа. Настройки ушли из нижней панели

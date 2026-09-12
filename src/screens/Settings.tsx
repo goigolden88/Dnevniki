@@ -28,6 +28,7 @@ import { Fold } from '../ui/Fold.tsx'
 import { CHANGES } from '../changes.ts'
 import { ChangeList } from './WhatsNew.tsx'
 import { InstallNote } from '../ui/Install.tsx'
+import { ReportBug } from '../ui/Report.tsx'
 import { isEmptyBase } from './firstRun.ts'
 import { ImportRecords } from './ImportRecords.tsx'
 import { SyncSettings } from '../ui/SyncSettings.tsx'
@@ -185,6 +186,11 @@ function About({ state }: { state: State }) {
           «что тогда поменялось» можно и потом. */}
       <Fold id="settings:about:changes" title="Что нового" sub>
         <ChangeList changes={CHANGES} />
+      </Fold>
+
+      {/* Отзыв доходит до кода, а не теряется в переписке (Р-78). */}
+      <Fold id="settings:about:report" title="Сообщить об ошибке" sub folded>
+        <ReportBug />
       </Fold>
 
       {state.status === 'loading' && <p className="muted">Открываю базу…</p>}

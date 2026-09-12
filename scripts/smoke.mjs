@@ -714,6 +714,32 @@ async function scenario() {
   )
   check('в «О приложении» — весь список «Что нового» — Р-71', has(about, 'Что нового'))
 
+  // «Сообщить об ошибке» (Р-78): ошибка страницы ложится в журнал, журнал —
+  // в отчёт. Событие ошибки — не исключение: консоль прогона оно не трогает.
+  await act(`window.dispatchEvent(new ErrorEvent('error', { message: 'проверка журнала ошибок' }))`)
+  await sleep(500)
+  await go('/')
+  await go('/settings')
+  await unfold('О приложении')
+  await unfold('Сообщить об ошибке')
+  const report = await screen()
+  check(
+    'отчёт об ошибке собран, ошибка страницы в нём — Р-78',
+    has(report, 'Схема данных') && has(report, 'проверка журнала ошибок'),
+    line(report, 'проверка журнала'),
+  )
+  // Кнопки — элементами, а не текстом экрана: «открыть на GitHub» стоит
+  // и в строке «Что нового» рядом.
+  const buttons = await act(`return {
+    github: Boolean(byText('a', 'Открыть на GitHub')),
+    copy: Boolean(byText('button', 'Скопировать')),
+  }`)
+  check(
+    'на локальном адресе кнопки GitHub нет, «Скопировать» есть — Р-78',
+    buttons?.github === false && buttons?.copy === true,
+    JSON.stringify(buttons),
+  )
+
   await unfold('Экспорт и импорт')
   await act(`byText('button', 'Сохранить в markdown')?.click()`)
   await sleep(700)
