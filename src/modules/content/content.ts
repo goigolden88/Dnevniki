@@ -27,8 +27,8 @@ import {
   lastDayOf,
   toDateStr,
   type DateStr,
-} from '../../core/dates.ts'
-import type { ContentEntry } from '../../core/model.ts'
+} from '../../shared/core/dates.ts'
+import type { ContentEntry } from '../../app/model.ts'
 
 export type EntryType = ContentEntry['type']
 export type EntryStatus = ContentEntry['status']

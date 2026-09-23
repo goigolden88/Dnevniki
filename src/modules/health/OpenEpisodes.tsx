@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { episodeText } from './labels.ts'
 import { useHealth } from './useHealth.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 
 /**
  * Открытые эпизоды на главном экране.

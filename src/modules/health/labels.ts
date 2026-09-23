@@ -6,8 +6,8 @@
  * не содержит.
  */
 
-import { days, formatDate, formatDateLoose, plural } from '../../core/dates.ts'
-import type { Episode, Tag } from '../../core/model.ts'
+import { days, formatDate, formatDateLoose, plural } from '../../shared/core/dates.ts'
+import type { Episode, Tag } from '../../app/model.ts'
 import type { EpisodeState, HealthStats } from './health.ts'
 
 /** Метрики, которые предлагаются в форме. Поле в модели — свободная строка. */

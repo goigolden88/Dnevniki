@@ -10,10 +10,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { db } from '../../core/db.ts'
-import { nowIso, today } from '../../core/dates.ts'
-import { ulid } from '../../core/id.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import { db } from '../../app/core.ts'
+import { nowIso, today } from '../../shared/core/dates.ts'
+import { ulid } from '../../shared/core/id.ts'
+import type { ContentEntry } from '../../app/model.ts'
 
 export type Status = 'loading' | 'ready' | 'failed'
 

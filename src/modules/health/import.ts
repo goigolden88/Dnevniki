@@ -20,8 +20,8 @@ import {
   type ImportContext,
   type ImportPlan,
   type ImportSpec,
-} from '../../core/importing.ts'
-import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+} from '../../shared/core/importing.ts'
+import type { Episode, Measure, Session, Tag, StoreRecord } from '../../app/model.ts'
 import { resolveMetric } from './health.ts'
 import { METRICS } from './labels.ts'
 
@@ -76,7 +76,7 @@ export function importEpisodes(
   raw: unknown,
   data: { episodes: readonly Episode[]; tags: readonly Tag[] },
   ctx: ImportContext,
-): ImportPlan {
+): ImportPlan<StoreRecord> {
   const section = episodeImportSpec.section
   const { records, issues } = recordsOf(section, raw)
   const issue = (title: string, reason: string) => issues.push({ section, title, reason })
@@ -173,7 +173,7 @@ export function importMeasures(
   raw: unknown,
   data: { measures: readonly Measure[] },
   ctx: ImportContext,
-): ImportPlan {
+): ImportPlan<StoreRecord> {
   const section = measureImportSpec.section
   const { records, issues } = recordsOf(section, raw)
   const issue = (title: string, reason: string) => issues.push({ section, title, reason })
@@ -248,7 +248,7 @@ export function importSessions(
   raw: unknown,
   data: { sessions: readonly Session[]; tags: readonly Tag[] },
   ctx: ImportContext,
-): ImportPlan {
+): ImportPlan<StoreRecord> {
   const section = sessionImportSpec.section
   const { records, issues } = recordsOf(section, raw)
   const issue = (title: string, reason: string) => issues.push({ section, title, reason })

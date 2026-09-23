@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { planTotal, type ImportPlan } from './core/importing.ts'
+import { planTotal, type ImportPlan } from './shared/core/importing.ts'
 import {
   feedItems,
   importPrompt,

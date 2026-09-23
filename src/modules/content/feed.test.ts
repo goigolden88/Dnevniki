@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { contentFeed, contentMarkdown } from './feed.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import type { ContentEntry } from '../../app/model.ts'
 
 function entry(id: string, over: Partial<ContentEntry> = {}): ContentEntry {
   return {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cyclePreset, cycleState, templateState } from './cycles.ts'
-import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
+import type { CycleEvent, CycleItem, Template } from '../../app/model.ts'
 import {
   divergence,
   formatMoney,

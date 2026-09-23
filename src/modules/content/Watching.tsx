@@ -1,9 +1,9 @@
 import { Link } from 'react-router-dom'
-import { today } from '../../core/dates.ts'
+import { today } from '../../shared/core/dates.ts'
 import { staleDays, watching } from './content.ts'
 import { entryText, staleText } from './labels.ts'
 import { useContent } from './useContent.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 
 /**
  * «Смотрю сейчас» на главном экране.

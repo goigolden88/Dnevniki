@@ -7,7 +7,7 @@ import {
   sessionFeed,
   sessionMarkdown,
 } from './feed.ts'
-import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
 const at = '2026-09-07T00:00:00.000Z'
 const day = '2026-09-10'

@@ -2,7 +2,7 @@
  * Логика здоровья: длительности, промежутки, частота, ряды измерений.
  *
  * Чистые функции. Ни React, ни `db` — на вход массивы записей, на выход
- * числа. Модуль знает только про свои три сущности из `core/model.ts`
+ * числа. Модуль знает только про свои три сущности из `app/model.ts`
  * и ничего про экраны (Р-24).
  *
  * Главное отличие от циклов: там события повторяются и вопрос «когда
@@ -10,8 +10,8 @@
  * Общего расчёта у них нет, и сводить их в одну механику незачем.
  */
 
-import { daysBetween, isDateStr, today, type DateStr } from '../../core/dates.ts'
-import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+import { daysBetween, isDateStr, today, type DateStr } from '../../shared/core/dates.ts'
+import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
 // ─── Названия (Р-59) ───────────────────────────────────────────────────────
 

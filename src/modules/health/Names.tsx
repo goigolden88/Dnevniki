@@ -1,5 +1,5 @@
-import { plural } from '../../core/dates.ts'
-import type { Tag } from '../../core/model.ts'
+import { plural } from '../../shared/core/dates.ts'
+import type { Tag } from '../../app/model.ts'
 import { RenameField } from '../../ui/RenameField.tsx'
 import { metricsOf } from './health.ts'
 import { METRICS } from './labels.ts'

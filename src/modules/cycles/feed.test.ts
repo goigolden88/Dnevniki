@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { cycleFeed, cycleMarkdown } from './feed.ts'
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
+import type { CycleEvent, CycleItem } from '../../app/model.ts'
 
 /** Суммы пишутся с неразрывным пробелом; к смыслу проверок он отношения не имеет. */
 const flat = (text: string) => text.split(String.fromCharCode(0xa0)).join(' ')

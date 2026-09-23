@@ -1,4 +1,4 @@
-import { today, type DateStr } from '../core/dates.ts'
+import { today, type DateStr } from '../shared/core/dates.ts'
 
 /**
  * Чип «сегодня» рядом с полем даты (Р-51).

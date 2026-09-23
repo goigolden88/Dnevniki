@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
-import { plural } from '../core/dates.ts'
+import { plural } from '../shared/core/dates.ts'
 import { MARKS_FOR_INTERVAL } from '../modules/cycles/labels.ts'
-import { InstallNote } from '../ui/Install.tsx'
+import { InstallNote } from '../shared/ui/Install.tsx'
 
 /**
  * Приветствие на «Сейчас» при первом запуске (Р-70): что это, с чего начать

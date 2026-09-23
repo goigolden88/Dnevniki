@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { importCycles } from './import.ts'
-import type { CycleCategory, CycleEvent, CycleItem } from '../../core/model.ts'
+import type { CycleCategory, CycleEvent, CycleItem } from '../../app/model.ts'
 
 /** Раздел «cycles» импорта записей — Р-60. */
 

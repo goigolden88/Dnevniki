@@ -1,22 +1,23 @@
 /**
- * Напоминания (Р-50, Р-54, Р-57): о просроченном в циклах и о незакрытой
- * болезни.
+ * Напоминания (Р-50, Р-54, Р-57, Р-58): о просроченном в циклах, о незакрытой
+ * болезни и «Ещё смотришь?».
  *
- * Одна функция на два вызова: service worker зовёт её, когда браузер будит
- * его фоновой синхронизацией, а «Настройки» — по кнопке «Проверить сейчас».
- * Считают они одинаково, и разойтись это не должно.
+ * Механика — окно со звуком, тихое вне окна, со звуком не чаще раза в день,
+ * журнал пробуждений, разрешение и фоновая проверка — ядра (`shared/notify.ts`,
+ * Р-81). Своё здесь — о чём напоминать, куда ведёт тап и «раз в неделю»
+ * у «Ещё смотришь?».
  *
- * Живёт на уровне приложения, рядом с `app.tsx`, а не в `core`: она знает
- * модули циклов и здоровья, а ядру это запрещено.
+ * Тем три, и у каждой свои дни громкого и тихого (Р-85): громкое одной
+ * не глушит другую. Тот же объект зовут работник (`remind`) и «Настройки»
+ * (остальное): считают они одинаково, и разойтись это не должно.
  *
- * Без сервера веб-пуш невозможен — пуш по определению присылает сервер.
- * Отсюда и ограничения: только Chrome на Android, только установленное
- * приложение, частоту и время решает браузер (примерно раз в сутки, без
- * гарантий). Выбрать время нельзя, но можно не шуметь ночью (Р-57).
+ * Живёт на уровне приложения, рядом с `app.tsx`, а не в модуле: оно знает
+ * модули циклов, здоровья и контента.
  */
 
-import { db } from './core/db.ts'
-import { daysBetween, toDateStr } from './core/dates.ts'
+import { db } from './app/core.ts'
+import { daysBetween } from './shared/core/dates.ts'
+import { createReminders, DAY_KEYS, type ReminderStatus } from './shared/notify.ts'
 import { staleWatching } from './modules/content/content.ts'
 import { staleNotice } from './modules/content/labels.ts'
 import { cycleStates } from './modules/cycles/cycles.ts'
@@ -24,93 +25,29 @@ import { overdueNotice } from './modules/cycles/labels.ts'
 import { openEpisodes } from './modules/health/health.ts'
 import { illnessNotice } from './modules/health/labels.ts'
 
-/**
- * Имя фоновой проверки. Им же она выключается. Осталось от времени, когда
- * напоминание было одно: на установленных копиях проверка заведена под этим
- * именем, и переименование выключило бы её молча.
- */
-export const REMINDER_TAG = 'overdue'
-
-// Ключи в `settings`: у каждого устройства свои — напоминание на телефоне
-// не отменяет напоминания на компьютере.
+export { DEFAULT_WINDOW } from './shared/notify.ts'
+export type { ReminderStatus, ReminderWindow, RemindResult, Wake } from './shared/notify.ts'
 
 /**
- * В какой день уже приходило напоминание со звуком. Имя прежнее, с тех пор
- * как тихих не было: на установленных копиях день уже записан под ним.
+ * Дни напоминания о незакрытой болезни (Р-85): свои, а не общие
+ * с просроченным — иначе громкое о просроченном закрыло бы день и болезни.
+ * Имена лежат в настройках устройств и не меняются никогда.
  */
-const LOUD_DAY = 'reminderLastDay'
-/** В какой день уже приходило тихое, вне окна. Второй раз за ночь незачем. */
-const QUIET_DAY = 'reminderQuietDay'
-/** В какой день уже спрашивали «Ещё смотришь?». Не чаще раза в неделю (Р-58). */
-const CONTENT_DAY = 'reminderContentDay'
-/** Часы со звуком. */
-const WINDOW = 'reminderWindow'
-/** Последние фоновые пробуждения. */
-const LOG = 'reminderLog'
-
-/** Чаще раза в полсуток браузер будить не станет, и просить незачем. */
-const MIN_INTERVAL = 12 * 60 * 60 * 1000
-
-export type RemindResult = 'shown' | 'quiet' | 'nothing' | 'already' | 'failed'
-
-type Notice = {
-  title: string
-  body: string
-  /** Уведомление одной темы заменяет прежнее, а не копится стопкой. */
-  tag: string
-  /** Куда ведёт тап — путь хеш-роутинга. */
-  target: string
-}
-
-// ─── Тихие часы (Р-57) ─────────────────────────────────────────────────────
-
-/** Часы со звуком: с `from` включительно до `to` исключительно, 0..23. */
-export type ReminderWindow = { from: number; to: number }
-
-export const DEFAULT_WINDOW: ReminderWindow = { from: 12, to: 20 }
-
-function isHour(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 23
-}
-
-/** Окно из настроек. Кривое или отсутствующее — умолчание, а не падение. */
-export function parseWindow(value: unknown): ReminderWindow {
-  if (typeof value !== 'object' || value === null) return DEFAULT_WINDOW
-  const { from, to } = value as { from?: unknown; to?: unknown }
-  return isHour(from) && isHour(to) ? { from, to } : DEFAULT_WINDOW
-}
+export const ILLNESS_KEYS = { loud: 'reminderIllnessDay', quiet: 'reminderIllnessQuietDay' } as const
 
 /**
- * Попадает ли час в окно. Окно через полночь — «с 22 до 8» — допустимо:
- * кто-то работает ночью. Равные концы — круглые сутки.
+ * Дни «Ещё смотришь?» (Р-58, Р-85). Громкий — прежний `reminderContentDay`:
+ * в нём лежит день прошлого вопроса, и отсчёт недели не сбрасывается
+ * обновлением.
  */
-export function inWindow(hour: number, window: ReminderWindow): boolean {
-  if (window.from === window.to) return true
-  if (window.from < window.to) return hour >= window.from && hour < window.to
-  return hour >= window.from || hour < window.to
-}
+export const CONTENT_KEYS = { loud: 'reminderContentDay', quiet: 'reminderContentQuietDay' } as const
 
 /**
- * Что делать, когда браузер разбудил проверку.
- *
- * Вне окна — без звука, а не никогда: браузер может будить проверку раз
- * в сутки и как раз ночью, и пропуск означал бы, что напоминание не приходит
- * вовсе. Тихое не закрывает день: если браузер разбудит проверку ещё раз
- * уже в окне, то же уведомление повторится со звуком.
+ * Имя фоновой проверки до перевода на ядро (Р-54). Ядро проверяет под своим
+ * `remind` (Р-85); прежняя регистрация снимается при включении напоминаний,
+ * чтобы браузер не будил работника впустую.
  */
-export function planWake(state: {
-  day: string
-  hour: number
-  window: ReminderWindow
-  /** День последнего напоминания со звуком. */
-  loudDay: string | null
-  /** День последнего тихого. */
-  quietDay: string | null
-}): 'loud' | 'quiet' | 'already' {
-  if (state.loudDay === state.day) return 'already'
-  if (inWindow(state.hour, state.window)) return 'loud'
-  return state.quietDay === state.day ? 'already' : 'quiet'
-}
+export const LEGACY_REMINDER_TAG = 'overdue'
 
 // ─── «Ещё смотришь?» (Р-58) ────────────────────────────────────────────────
 
@@ -120,225 +57,87 @@ export const CONTENT_EVERY_DAYS = 7
 /**
  * Пора ли спросить о зависшем в «смотрю». Вопрос масштаба месяцев
  * ежедневного уведомления не стоит — раз в неделю. В тот же день можно:
- * ночное тихое повторяется днём со звуком целиком, вместе с этим вопросом.
+ * ночное тихое повторяется днём со звуком — это решает механика ядра.
  */
 export function contentDue(lastDay: string | null, day: string): boolean {
   return lastDay === null || lastDay === day || daysBetween(lastDay, day) >= CONTENT_EVERY_DAYS
 }
 
-// ─── Журнал пробуждений (Р-57) ─────────────────────────────────────────────
-
-/** Одно пробуждение фоновой проверки: когда и чем кончилось. */
-export type Wake = { at: string; result: RemindResult }
-
-/** Сколько пробуждений помнить. Раз в сутки — это три недели. */
-export const LOG_SIZE = 20
-
-const RESULTS: readonly RemindResult[] = ['shown', 'quiet', 'nothing', 'already', 'failed']
-
-function isWake(value: unknown): value is Wake {
-  if (typeof value !== 'object' || value === null) return false
-  const { at, result } = value as { at?: unknown; result?: unknown }
-  return typeof at === 'string' && RESULTS.includes(result as RemindResult)
+/** День последнего вопроса — поздний из громкого и тихого. */
+function lastAsked(loud: string | undefined, quiet: string | undefined): string | null {
+  const days = [loud, quiet].filter((day): day is string => typeof day === 'string')
+  return days.length === 0 ? null : days.reduce((a, b) => (a > b ? a : b))
 }
 
-/** Новое пробуждение — первым, старые обрезаются. Мусор в настройках отбрасывается. */
-export function appendWake(stored: unknown, wake: Wake, size: number = LOG_SIZE): Wake[] {
-  const previous = Array.isArray(stored) ? stored.filter(isWake) : []
-  return [wake, ...previous].slice(0, size)
-}
+// ─── Напоминания приложения ────────────────────────────────────────────────
 
-// ─── Показ ─────────────────────────────────────────────────────────────────
-
-/**
- * Показывает напоминания — со звуком не чаще раза в день.
- *
- * Два уведомления, а не одно: у просроченного и у болезни разные действия,
- * и тап по каждому ведёт к своему.
- *
- * `force` — проверка руками: показывает всегда и со звуком, даже когда
- * напоминать не о чем, иначе не понять, дошло уведомление или сломалось.
- * День не отмечает и в журнал не пишется: проверка не должна отменять
- * настоящее напоминание, а журнал заведён ради фоновых пробуждений.
- */
-export async function remind(
-  registration: ServiceWorkerRegistration,
-  options: { force?: boolean; now?: Date } = {},
-): Promise<RemindResult> {
-  const force = options.force === true
-  const now = options.now ?? new Date()
-  const result = await decide(registration, force, now)
-  if (!force) await record({ at: now.toISOString(), result })
-  return result
-}
-
-async function decide(
-  registration: ServiceWorkerRegistration,
-  force: boolean,
-  now: Date,
-): Promise<RemindResult> {
-  const day = toDateStr(now)
-  let loud = true
-  let contentDay: string | null = null
-
-  if (!force) {
-    const [loudDay, quietDay, window, asked] = await Promise.all([
-      db.settings.get<string>(LOUD_DAY),
-      db.settings.get<string>(QUIET_DAY),
-      db.settings.get<unknown>(WINDOW),
-      db.settings.get<string>(CONTENT_DAY),
+export const reminders = createReminders(db.settings, {
+  async topics(day) {
+    const [items, events, episodes, entries, contentLoud, contentQuiet] = await Promise.all([
+      db.getAll('items'),
+      db.getAll('cycleEvents'),
+      db.getAll('episodes'),
+      db.getAll('content'),
+      db.settings.get<string>(CONTENT_KEYS.loud),
+      db.settings.get<string>(CONTENT_KEYS.quiet),
     ])
-    contentDay = asked ?? null
-    const plan = planWake({
-      day,
-      hour: now.getHours(),
-      window: parseWindow(window),
-      loudDay: loudDay ?? null,
-      quietDay: quietDay ?? null,
-    })
-    if (plan === 'already') return 'already'
-    loud = plan === 'loud'
-  }
 
-  const [items, events, episodes, entries] = await Promise.all([
-    db.getAll('items'),
-    db.getAll('cycleEvents'),
-    db.getAll('episodes'),
-    db.getAll('content'),
-  ])
+    const illness = illnessNotice(openEpisodes(episodes, day))
+    const stale = staleNotice(staleWatching(entries, day))
+    const askContent = stale !== null && contentDue(lastAsked(contentLoud, contentQuiet), day)
 
-  const notices: Notice[] = []
-  const overdue = overdueNotice(cycleStates(items, events, day))
-  if (overdue) notices.push({ ...overdue, tag: 'overdue', target: '/' })
-  const illness = illnessNotice(openEpisodes(episodes, day))
-  if (illness) notices.push({ ...illness, tag: 'illness' })
-  // Проверка руками спрашивает всегда: иначе не увидеть, работает ли вопрос.
-  const stale = staleNotice(staleWatching(entries, day))
-  const askContent = stale !== null && (force || contentDue(contentDay, day))
-  if (stale && askContent) notices.push({ ...stale, tag: 'content' })
-
-  try {
-    if (notices.length === 0) {
-      if (force) {
-        await show(
-          registration,
-          {
-            title: 'Напоминать не о чем',
-            body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло.',
-            tag: 'overdue',
-            target: '/',
-          },
-          true,
-        )
-      }
-      return 'nothing'
-    }
-
-    for (const notice of notices) await show(registration, notice, loud)
-  } catch {
-    return 'failed'
-  }
-
-  if (!force) {
-    await db.settings.set(loud ? LOUD_DAY : QUIET_DAY, day)
-    if (askContent) await db.settings.set(CONTENT_DAY, day)
-  }
-  return loud ? 'shown' : 'quiet'
-}
-
-function show(registration: ServiceWorkerRegistration, notice: Notice, loud: boolean): Promise<void> {
-  // `renotify`: ночное тихое уже лежит в шторке под той же темой, и без
-  // этого флага замена его громким прошла бы молча. В типах DOM флага нет.
-  const options = {
-    body: notice.body,
-    tag: notice.tag,
-    icon: `${import.meta.env.BASE_URL}pwa-192x192.png`,
-    lang: 'ru',
-    silent: !loud,
-    renotify: loud,
-    // Адрес целиком: тап обрабатывает service worker, а у него нет роутера.
-    data: { url: `${registration.scope}#${notice.target}` },
-  } as NotificationOptions
-  return registration.showNotification(notice.title, options)
-}
-
-/** Журнал не повод ронять напоминание: не записалось — и ладно. */
-async function record(wake: Wake): Promise<void> {
-  try {
-    await db.settings.set(LOG, appendWake(await db.settings.get<unknown>(LOG), wake))
-  } catch {
-    // Уведомление уже показано, а без строки в журнале жить можно.
-  }
-}
+    return [
+      {
+        notice: overdueNotice(cycleStates(items, events, day)),
+        tag: 'overdue',
+        target: '/',
+        loudKey: DAY_KEYS.loud,
+        quietKey: DAY_KEYS.quiet,
+      },
+      {
+        // О болезни — на экран эпизода, при нескольких — на «Здоровье» (Р-54).
+        notice: illness,
+        tag: 'illness',
+        target: illness?.target ?? '/health',
+        loudKey: ILLNESS_KEYS.loud,
+        quietKey: ILLNESS_KEYS.quiet,
+      },
+      {
+        notice: askContent ? stale : null,
+        tag: 'content',
+        target: stale?.target ?? '/content',
+        loudKey: CONTENT_KEYS.loud,
+        quietKey: CONTENT_KEYS.quiet,
+      },
+    ]
+  },
+  idle: {
+    title: 'Напоминать не о чем',
+    body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло.',
+    tag: 'overdue',
+    target: '/',
+  },
+})
 
 // ─── Для экрана настроек ───────────────────────────────────────────────────
 
+export const { checkReminder, disableReminders, readWakes, readWindow, reminderStatus, saveWindow } = reminders
+
 /**
- * Где мы: браузер не умеет, человек запретил, выключено, включено.
- * `not-installed` — уведомления разрешены, но фоновую проверку браузер не
- * дал: так бывает у приложения, открытого во вкладке, а не установленного.
+ * Включить напоминания — и снять регистрацию прежнего имени (Р-85): её
+ * работник ядра не слушает, а браузер будил бы его впустую.
  */
-export type ReminderStatus = 'unsupported' | 'denied' | 'off' | 'not-installed' | 'on'
-
-async function registration(): Promise<ServiceWorkerRegistration | null> {
-  if (!('serviceWorker' in navigator)) return null
-  return (await navigator.serviceWorker.getRegistration()) ?? null
-}
-
-function notifications(): boolean {
-  return typeof Notification !== 'undefined'
-}
-
-export async function reminderStatus(): Promise<ReminderStatus> {
-  const reg = await registration()
-  if (!reg?.periodicSync || !notifications()) return 'unsupported'
-  if (Notification.permission === 'denied') return 'denied'
-  if (Notification.permission !== 'granted') return 'off'
-  const tags = await reg.periodicSync.getTags()
-  return tags.includes(REMINDER_TAG) ? 'on' : 'off'
-}
-
-/** Разрешение браузер спрашивает только по действию человека — отсюда кнопка. */
 export async function enableReminders(): Promise<ReminderStatus> {
-  const reg = await registration()
-  if (!reg?.periodicSync || !notifications()) return 'unsupported'
+  const status = await reminders.enableReminders()
+  if (status === 'on') await forgetLegacyCheck()
+  return status
+}
 
-  const permission = await Notification.requestPermission()
-  if (permission === 'denied') return 'denied'
-  if (permission !== 'granted') return 'off'
-
+async function forgetLegacyCheck(): Promise<void> {
   try {
-    await reg.periodicSync.register(REMINDER_TAG, { minInterval: MIN_INTERVAL })
+    const registration = await navigator.serviceWorker.getRegistration()
+    await registration?.periodicSync?.unregister(LEGACY_REMINDER_TAG)
   } catch {
-    return 'not-installed'
+    // Не снялась — проверка под прежним именем разбудит работника вхолостую.
   }
-  return 'on'
-}
-
-export async function disableReminders(): Promise<void> {
-  const reg = await registration()
-  await reg?.periodicSync?.unregister(REMINDER_TAG)
-}
-
-/** «Проверить сейчас»: не ждать сутки, чтобы узнать, работает ли. */
-export async function checkReminder(): Promise<RemindResult | 'denied' | 'unsupported'> {
-  const reg = await registration()
-  if (!reg || !notifications()) return 'unsupported'
-  const permission = await Notification.requestPermission()
-  if (permission !== 'granted') return 'denied'
-  return remind(reg, { force: true })
-}
-
-export async function readWindow(): Promise<ReminderWindow> {
-  return parseWindow(await db.settings.get<unknown>(WINDOW))
-}
-
-export async function saveWindow(window: ReminderWindow): Promise<void> {
-  await db.settings.set(WINDOW, window)
-}
-
-/** Журнал пробуждений, свежие сверху. */
-export async function readWakes(): Promise<Wake[]> {
-  const stored = await db.settings.get<unknown>(LOG)
-  return Array.isArray(stored) ? stored.filter(isWake) : []
 }

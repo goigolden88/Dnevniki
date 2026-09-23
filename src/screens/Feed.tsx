@@ -1,9 +1,29 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { feedDateText, feedHeading, filterFeed, groupFeed, recordsText } from '../core/feed.ts'
-import type { EventKind } from '../core/model.ts'
-import { KIND_ORDER, KINDS } from '../registry.ts'
-import { useFeed } from './useFeed.ts'
+import { feedDateText, feedHeading, filterFeed, groupFeed, recordsText, type FeedGroup } from '../shared/core/feed.ts'
+import type { EventKind } from '../app/model.ts'
+import { feedItems, KIND_ORDER, KINDS, kindLabel } from '../registry.ts'
+import { useFeed } from '../shared/screens/useFeed.ts'
+
+/**
+ * Группа без даты — первой (Р-84). Ядро ставит её последней: у соседей
+ * запись без даты законна. Здесь списка «к просмотру» нет, и запись без
+ * даты — всегда поломка, которую надо увидеть (Р-52); внизу длинной ленты
+ * её не увидит никто.
+ */
+function brokenFirst(groups: FeedGroup[]): FeedGroup[] {
+  return [...groups.filter((group) => group.month === null), ...groups.filter((group) => group.month !== null)]
+}
+
+/** Заголовок группы: у поломки — прежний, предупреждением (Р-84). */
+function heading(month: string | null): string {
+  return month === null ? 'Дата не читается' : feedHeading(month)
+}
+
+/** Дата строки: пустая — словами, а не прочерком (Р-84). */
+function dateText(date: string): string {
+  return date === '' ? 'нет даты' : feedDateText(date)
+}
 
 /**
  * Лента: все записи всех дневников, новые сверху (Р-48, Р-52).
@@ -17,7 +37,7 @@ import { useFeed } from './useFeed.ts'
  * под лентой словами, чтобы его отсутствие не читалось как потеря.
  */
 export function Feed() {
-  const feed = useFeed()
+  const feed = useFeed(feedItems)
   const [kind, setKind] = useState<EventKind | null>(null)
   const [query, setQuery] = useState('')
 
@@ -29,7 +49,7 @@ export function Feed() {
   // к «ничего не нашлось» (то же правило, что у месяцев в контенте, Р-45).
   const present = KIND_ORDER.filter((each) => feed.items.some((item) => item.kind === each))
   const shown = filterFeed(feed.items, { kind, query })
-  const groups = groupFeed(shown)
+  const groups = brokenFirst(groupFeed(shown))
 
   return (
     <>
@@ -86,20 +106,20 @@ export function Feed() {
                   group.month === null ? 'month-group__head month-group__head--warn' : 'month-group__head'
                 }
               >
-                {feedHeading(group.month)}
+                {heading(group.month)}
                 <span className="muted"> · {group.items.length}</span>
               </h3>
 
               <ul className="feed">
                 {group.items.map((item) => (
                   <li key={`${item.kind}:${item.id}`}>
-                    <Link className="feed__row" to={item.link}>
-                      <span className="feed__date">{feedDateText(item.date)}</span>
+                    <Link className="feed__row" to={item.link ?? '/feed'}>
+                      <span className="feed__date">{dateText(item.date)}</span>
                       <span className="feed__main">
                         <span className="feed__title">{item.title}</span>
                         {item.detail && <span className="feed__detail muted">{item.detail}</span>}
                       </span>
-                      {kind === null && <span className="feed__kind muted">{KINDS[item.kind].label}</span>}
+                      {kind === null && <span className="feed__kind muted">{kindLabel(item.kind)}</span>}
                     </Link>
                   </li>
                 ))}

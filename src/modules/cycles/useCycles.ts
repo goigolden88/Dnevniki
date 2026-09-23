@@ -35,10 +35,10 @@ import {
   type TemplateState,
 } from './cycles.ts'
 import { CATEGORIES } from './labels.ts'
-import { db } from '../../core/db.ts'
-import { nowIso, today, type DateStr } from '../../core/dates.ts'
-import { ulid } from '../../core/id.ts'
-import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../core/model.ts'
+import { db } from '../../app/core.ts'
+import { nowIso, today, type DateStr } from '../../shared/core/dates.ts'
+import { ulid } from '../../shared/core/id.ts'
+import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../app/model.ts'
 
 export type Status = 'loading' | 'ready' | 'failed'
 

@@ -8,7 +8,7 @@
  * Ключ — вид события, а не модуль: лента и выгрузка работают с событиями,
  * а у здоровья их три вида. Тип `{ [K in EventKind]: … }` проверяется
  * компилятором на полноту — новый вид в модели не соберётся, пока здесь
- * нет его строки. Та же манера, что `PLACES` в `core/layout.ts`.
+ * нет его строки. Та же манера, что `places` в `app/config.ts`.
  *
  * Чего здесь нет намеренно: маршрутов, вкладок и блоков «Сейчас». Порядок
  * на «Сейчас» — продуктовое решение, из списка он не выводится.
@@ -17,18 +17,17 @@
  * с `app.tsx`, `notify.ts` и `screens/`. Модули друг про друга не знают.
  */
 
-import type { Snapshot } from './core/db.ts'
-import { formatDate, type DateStr } from './core/dates.ts'
-import type { FeedItem } from './core/feed.ts'
+import type { Snapshot } from './shared/core/db.ts'
+import { formatDate, type DateStr } from './shared/core/dates.ts'
+import type { FeedItem } from './shared/core/feed.ts'
 import {
-  buildPrompt,
   mergeResults,
-  readImportFile,
   type ImportContext,
   type ImportPlan,
   type ImportSpec,
-} from './core/importing.ts'
-import type { EventKind } from './core/model.ts'
+} from './shared/core/importing.ts'
+import { importing } from './app/core.ts'
+import type { EventKind, StoreRecord } from './app/model.ts'
 import { contentFeed, contentMarkdown } from './modules/content/feed.ts'
 import { contentImportSpec, importContent } from './modules/content/import.ts'
 import { cycleFeed, cycleMarkdown } from './modules/cycles/feed.ts'
@@ -55,7 +54,7 @@ import {
  * справочникам: у отметки удалённой позиции должно остаться имя. Сами
  * события без надгробий отбирают модули.
  */
-export type Data = Snapshot['data']
+export type Data = Snapshot<StoreRecord>['data']
 
 type KindEntry = {
   /** Подпись чипа в ленте и строки вида. */
@@ -63,7 +62,7 @@ type KindEntry = {
   feed: (data: Data, day: DateStr) => FeedItem[]
   markdown: (data: Data, day: DateStr) => string
   /** Раздел импорта записей (Р-60): описание для промпта и разбор. */
-  import: { spec: ImportSpec; run: (raw: unknown, data: Data, ctx: ImportContext) => ImportPlan }
+  import: { spec: ImportSpec; run: (raw: unknown, data: Data, ctx: ImportContext) => ImportPlan<StoreRecord> }
 }
 
 export const KINDS: { readonly [K in EventKind]: KindEntry } = {
@@ -99,10 +98,18 @@ export const KINDS: { readonly [K in EventKind]: KindEntry } = {
   },
 }
 
+/**
+ * Подпись вида строки ленты. Вид у ядра — строка (Я-03 «FamilyCore»):
+ * незнакомый подписывается как есть.
+ */
+export function kindLabel(kind: string): string {
+  return kind in KINDS ? KINDS[kind as EventKind].label : kind
+}
+
 /** Порядок видов на экране и в выгрузке — порядок строк таблицы. */
 export const KIND_ORDER = Object.keys(KINDS) as EventKind[]
 
-/** Все строки ленты, без порядка: порядок — дело `core/feed.ts`. */
+/** Все строки ленты, без порядка: порядок — дело `shared/core/feed.ts`. */
 export function feedItems(data: Data, day: DateStr): FeedItem[] {
   return KIND_ORDER.flatMap((kind) => KINDS[kind].feed(data, day))
 }
@@ -136,11 +143,11 @@ export function markdownExport(
  * разобрано. В базу не пишет — сначала сводка, запись только по кнопке.
  * Кидает, если файл не тот вовсе.
  */
-export function planImport(text: string, data: Data, ctx: ImportContext): ImportPlan {
-  const sections = readImportFile(text)
+export function planImport(text: string, data: Data, ctx: ImportContext): ImportPlan<StoreRecord> {
+  const sections = importing.readImportFile(text)
   const bySection = new Map(KIND_ORDER.map((kind) => [KINDS[kind].import.spec.section, KINDS[kind].import]))
 
-  const results = Object.entries(sections).map(([section, raw]): ImportPlan => {
+  const results = Object.entries(sections).map(([section, raw]): ImportPlan<StoreRecord> => {
     const entry = bySection.get(section)
     if (entry) return entry.run(raw, data, ctx)
     return {
@@ -155,7 +162,7 @@ export function planImport(text: string, data: Data, ctx: ImportContext): Import
 
 /** Промпт для ИИ — из описаний всех разделов, в порядке таблицы. */
 export function importPrompt(day: DateStr): string {
-  return buildPrompt(
+  return importing.buildPrompt(
     KIND_ORDER.map((kind) => KINDS[kind].import.spec),
     day,
   )

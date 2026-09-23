@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { importContent } from './import.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import type { ContentEntry } from '../../app/model.ts'
 
 /** Раздел «content» импорта записей — Р-60. */
 

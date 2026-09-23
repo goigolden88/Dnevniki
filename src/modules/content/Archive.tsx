@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MONTHS_SHORT, today } from '../../core/dates.ts'
+import { MONTHS_SHORT, today } from '../../shared/core/dates.ts'
 import {
   filterEntries,
   groupByMonth,
@@ -15,8 +15,8 @@ import {
 import { entriesText, monthHeading, periodText, statusLabel, TYPES } from './labels.ts'
 import { EntryCard } from './EntryCard.tsx'
 import type { Content } from './useContent.ts'
-import type { ContentEntry } from '../../core/model.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import type { ContentEntry } from '../../app/model.ts'
+import { Fold } from '../../shared/ui/Fold.tsx'
 
 /** Все годы разом. */
 const ALL_YEARS = 'всё время'

@@ -1,11 +1,11 @@
-import { days, plural, timeSpan } from '../core/dates.ts'
-import { QUIET_MS, RETRY_MS } from '../core/sync.ts'
+import { days, plural, timeSpan } from '../shared/core/dates.ts'
+import { QUIET_MS, RETRY_MS } from '../shared/core/sync.ts'
 import { STALE_AFTER_DAYS } from '../modules/content/content.ts'
 import { DUE_PERCENT, MARKS_FOR_INTERVAL } from '../modules/cycles/labels.ts'
 import { CONTENT_EVERY_DAYS, DEFAULT_WINDOW } from '../notify.ts'
-import { STALE_DAYS } from '../ui/backup.ts'
-import { Fold } from '../ui/Fold.tsx'
-import { WARN_DAYS } from '../ui/SyncSettings.tsx'
+import { STALE_DAYS } from '../shared/ui/backup.ts'
+import { Fold } from '../shared/ui/Fold.tsx'
+import { WARN_DAYS } from '../shared/ui/SyncSettings.tsx'
 
 /**
  * Справка (Р-63): как устроено приложение и что делать, если непонятно.

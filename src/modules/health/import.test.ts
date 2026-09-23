@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { importEpisodes, importMeasures, importSessions } from './import.ts'
-import type { Tag } from '../../core/model.ts'
+import type { Tag } from '../../app/model.ts'
 
 /** Разделы здоровья в импорте записей — Р-60. */
 

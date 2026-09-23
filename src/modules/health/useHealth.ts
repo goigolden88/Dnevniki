@@ -19,10 +19,10 @@ import {
   type EpisodeState,
 } from './health.ts'
 import { METRICS } from './labels.ts'
-import { db } from '../../core/db.ts'
-import { nowIso, today, type DateStr } from '../../core/dates.ts'
-import { ulid } from '../../core/id.ts'
-import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+import { db } from '../../app/core.ts'
+import { nowIso, today, type DateStr } from '../../shared/core/dates.ts'
+import { ulid } from '../../shared/core/id.ts'
+import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
 export type Status = 'loading' | 'ready' | 'failed'
 

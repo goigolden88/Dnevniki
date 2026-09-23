@@ -6,8 +6,8 @@
  * и русских строк не содержит.
  */
 
-import { days, formatDateOrMonth, formatMonth, MONTHS_SHORT, monthName, plural } from '../../core/dates.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import { days, formatDateOrMonth, formatMonth, MONTHS_SHORT, monthName, plural } from '../../shared/core/dates.ts'
+import type { ContentEntry } from '../../app/model.ts'
 import {
   monthRanges,
   scoreOf,

@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { plural } from '../../core/dates.ts'
-import type { CycleCategory } from '../../core/model.ts'
+import { plural } from '../../shared/core/dates.ts'
+import type { CycleCategory } from '../../app/model.ts'
 import { RenameField } from '../../ui/RenameField.tsx'
 import { categoryGroups, sameName } from './cycles.ts'
 import { useCycles, type Cycles } from './useCycles.ts'

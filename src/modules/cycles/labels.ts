@@ -13,7 +13,7 @@ import {
   type Spent,
   type TemplateState,
 } from './cycles.ts'
-import { days, formatDate, plural } from '../../core/dates.ts'
+import { days, formatDate, plural } from '../../shared/core/dates.ts'
 
 /**
  * Стартовый набор категорий из 01-Проект. С Р-59 категории — записи в базе;

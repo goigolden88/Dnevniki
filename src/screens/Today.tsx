@@ -1,19 +1,21 @@
 import { Link } from 'react-router-dom'
-import { formatDateLong, today } from '../core/dates.ts'
+import { OWN_STORES } from '../app/model.ts'
+import { CHANGES } from '../changes.ts'
+import { formatDateLong, today } from '../shared/core/dates.ts'
 import { CycleList } from '../modules/cycles/CycleList.tsx'
 import { OpenEpisodes } from '../modules/health/OpenEpisodes.tsx'
 import { Watching } from '../modules/content/Watching.tsx'
-import { IosNote } from '../ui/Install.tsx'
-import { useSyncStatus } from '../ui/useSync.ts'
-import { useFirstRun } from './useFirstRun.ts'
-import { useWhatsNew } from './useWhatsNew.ts'
+import { IosNote } from '../shared/ui/Install.tsx'
+import { useSyncStatus } from '../shared/ui/useSync.ts'
+import { useFirstRun } from '../shared/screens/useFirstRun.ts'
+import { useWhatsNew } from '../shared/screens/useWhatsNew.ts'
 import { Welcome } from './Welcome.tsx'
-import { WhatsNew } from './WhatsNew.tsx'
+import { WhatsNew } from '../shared/screens/WhatsNew.tsx'
 
 export function Today() {
   const status = useSyncStatus()
-  const first = useFirstRun()
-  const news = useWhatsNew(first)
+  const first = useFirstRun(OWN_STORES)
+  const news = useWhatsNew(first, CHANGES)
 
   // Синхронизация живёт в фоне, и единственное место, где о ней можно
   // узнать, — «Настройки». Точка на шестерёнке говорит, что туда стоит

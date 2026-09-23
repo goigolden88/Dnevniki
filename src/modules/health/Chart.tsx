@@ -1,4 +1,4 @@
-import { formatDate } from '../../core/dates.ts'
+import { formatDate } from '../../shared/core/dates.ts'
 import { chart, type Box } from './chart.ts'
 import type { Series } from './health.ts'
 

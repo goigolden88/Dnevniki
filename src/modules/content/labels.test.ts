@@ -16,7 +16,7 @@ import {
   typeLabel,
 } from './labels.ts'
 import { contentStats } from './content.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import type { ContentEntry } from '../../app/model.ts'
 
 const T = '2026-09-07T00:00:00.000Z'
 

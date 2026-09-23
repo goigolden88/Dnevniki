@@ -832,12 +832,22 @@ async function scenario() {
 
   // Кнопки прокрутки (Р-55): настройки длинные, есть куда ехать.
   const canDown = await run(`!!document.querySelector('[aria-label="В конец"]')`)
+  // Прокрутка плавная, и её длительность растёт с длиной страницы: ждём,
+  // пока она встанет, а не фиксированную секунду.
+  async function settledScroll() {
+    let last = -1
+    for (let waited = 0; waited < 4000; waited += 250) {
+      await sleep(250)
+      const now = await run('Math.round(window.scrollY)')
+      if (now === last) return now
+      last = now
+    }
+    return last
+  }
   await act(`document.querySelector('[aria-label="В конец"]')?.click()`)
-  await sleep(1000)
-  const down = await run('Math.round(window.scrollY)')
+  const down = await settledScroll()
   await act(`document.querySelector('[aria-label="В начало"]')?.click()`)
-  await sleep(1000)
-  const up = await run('Math.round(window.scrollY)')
+  const up = await settledScroll()
   check(
     'кнопки прокрутки везут в конец и в начало — Р-55',
     canDown && down > 0 && up < 5,

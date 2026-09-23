@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent } from 'react'
 import { recentSymptoms } from './health.ts'
-import type { Episode, Tag } from '../../core/model.ts'
+import type { Episode, Tag } from '../../app/model.ts'
 
 /**
  * Выбор симптомов: недавние в один тап, новый — словом.

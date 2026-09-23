@@ -10,7 +10,7 @@
  * как три точки слева и одна справа, иначе кривая врёт про скорость.
  */
 
-import { daysBetween, type DateStr } from '../../core/dates.ts'
+import { daysBetween, type DateStr } from '../../shared/core/dates.ts'
 import type { Point } from './health.ts'
 
 export type Box = {

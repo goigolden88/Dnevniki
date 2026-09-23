@@ -1,9 +1,9 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
-import { today } from './core/dates.ts'
-import { createLegacyBase, db } from './core/db.ts'
-import { buildFiles, parseFile, storeOf } from './core/layout.ts'
-import { migrations, SCHEMA_VERSION, SYNCED_STORES } from './core/model.ts'
+import { today } from './shared/core/dates.ts'
+import { db, layout } from './app/core.ts'
+import { parseFile } from './shared/core/layout.ts'
+import { migrations, SCHEMA_VERSION, SYNCED_STORES } from './app/model.ts'
 import { contentStats, staleWatching } from './modules/content/content.ts'
 import { cycleStates, spendTree } from './modules/cycles/cycles.ts'
 import { healthStats, openEpisodes } from './modules/health/health.ts'
@@ -50,7 +50,7 @@ describe.skipIf(!FILE)('копия настоящих данных — Р-72', (
     const day = today()
 
     // База как у человека до обновления.
-    const skipped = await createLegacyBase(snapshot.schemaVersion, snapshot.data)
+    const skipped = await db.createLegacyBase(snapshot.schemaVersion, snapshot.data)
     expect(skipped, 'в копии есть хранилища, которых в её схеме не было').toEqual([])
 
     // Текущий код открывает её — здесь идут миграции.
@@ -82,10 +82,10 @@ describe.skipIf(!FILE)('копия настоящих данных — Р-72', (
 
     // Раскладка по файлам синхронизации: каждая запись — ровно в одном файле.
     const data = after.data
-    const files = buildFiles(data)
+    const files = layout.buildFiles(data)
     for (const store of SYNCED_STORES) {
       const laid = files
-        .filter((file) => storeOf(file.path) === store)
+        .filter((file) => layout.storeOf(file.path) === store)
         .flatMap((file) => parseFile(file.path, file.content))
       expect(laid.length, `${store}: записей в файлах`).toBe(data[store].length)
     }

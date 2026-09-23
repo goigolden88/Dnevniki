@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MONTHS_SHORT } from '../../core/dates.ts'
+import { MONTHS_SHORT } from '../../shared/core/dates.ts'
 import { contentStats, scoreOf, SCORE_MIN, yearsOf } from './content.ts'
 import {
   averageText,
@@ -9,8 +9,8 @@ import {
   typeCountText,
   typeLabel,
 } from './labels.ts'
-import type { ContentEntry } from '../../core/model.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import type { ContentEntry } from '../../app/model.ts'
+import { Fold } from '../../shared/ui/Fold.tsx'
 
 /** Что показывается, когда год не выбран. */
 const ALL = 'всё время'

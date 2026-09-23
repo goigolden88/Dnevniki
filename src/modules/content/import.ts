@@ -18,8 +18,8 @@ import {
   type ImportContext,
   type ImportPlan,
   type ImportSpec,
-} from '../../core/importing.ts'
-import type { ContentEntry } from '../../core/model.ts'
+} from '../../shared/core/importing.ts'
+import type { ContentEntry, StoreRecord } from '../../app/model.ts'
 import { SCORE_MAX, SCORE_MIN } from './content.ts'
 
 const SECTION = 'content'
@@ -66,7 +66,7 @@ export function importContent(
   raw: unknown,
   data: { content: readonly ContentEntry[] },
   ctx: ImportContext,
-): ImportPlan {
+): ImportPlan<StoreRecord> {
   const { records, issues } = recordsOf(SECTION, raw)
   const issue = (title: string, reason: string) => issues.push({ section: SECTION, title, reason })
   const known = data.content.filter((entry) => !entry.deleted)

@@ -1,9 +1,9 @@
 import { Fragment, useState, type FormEvent } from 'react'
-import { formatDateLoose, plural, today } from '../../core/dates.ts'
+import { formatDateLoose, plural, today } from '../../shared/core/dates.ts'
 import { activityTotals } from './health.ts'
 import { sessionText } from './labels.ts'
 import type { Health } from './useHealth.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 
 /**

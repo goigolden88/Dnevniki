@@ -9,8 +9,8 @@
  * отдельного поля в позиции нет: порог общий на всё приложение.
  */
 
-import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../core/model.ts'
-import { addDays, daysBetween, isDateStr, today, type DateStr } from '../../core/dates.ts'
+import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../app/model.ts'
+import { addDays, daysBetween, isDateStr, today, type DateStr } from '../../shared/core/dates.ts'
 
 /** Доля интервала, после которой позиция «подходит к сроку». Р-22. */
 export const DUE_RATIO = 0.8

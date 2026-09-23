@@ -10,9 +10,9 @@
  * она встанет в группу «дата не читается», а не пропадёт (Р-34).
  */
 
-import { escapeMarkdown as md, type FeedItem } from '../../core/feed.ts'
-import { formatDate, isDateOrMonth, isDateStr } from '../../core/dates.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import { escapeMarkdown as md, type FeedItem } from '../../shared/core/feed.ts'
+import { formatDate, isDateOrMonth, isDateStr } from '../../shared/core/dates.ts'
+import type { ContentEntry } from '../../app/model.ts'
 import { groupByMonth, scoreOf, sortEntries } from './content.ts'
 import { formatScore, monthHeading, statusLabel, typeLabel } from './labels.ts'
 

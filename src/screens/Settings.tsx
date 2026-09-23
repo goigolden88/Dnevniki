@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { db } from '../core/db.ts'
-import { days, today } from '../core/dates.ts'
-import { SCHEMA_VERSION, SYNCED_STORES } from '../core/model.ts'
-import type { EventKind, SyncedStore } from '../core/model.ts'
+import { db } from '../app/core.ts'
+import { days, today } from '../shared/core/dates.ts'
+import { OWN_STORES, SCHEMA_VERSION, SYNCED_STORES } from '../app/model.ts'
+import type { EventKind, SyncedStore } from '../app/model.ts'
 import {
   checkReminder,
   CONTENT_EVERY_DAYS,
@@ -22,17 +22,17 @@ import { CategorySettings } from '../modules/cycles/Categories.tsx'
 import { STALE_AFTER_DAYS } from '../modules/content/content.ts'
 import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { HealthNames } from '../modules/health/Names.tsx'
-import { KIND_ORDER, KINDS, markdownExport } from '../registry.ts'
-import { backupNote, backupSummary } from '../ui/backup.ts'
-import { Fold } from '../ui/Fold.tsx'
+import { importPrompt, KIND_ORDER, KINDS, markdownExport, planImport } from '../registry.ts'
+import { backupNote, backupSummary } from '../shared/ui/backup.ts'
+import { Fold } from '../shared/ui/Fold.tsx'
 import { CHANGES } from '../changes.ts'
-import { ChangeList } from './WhatsNew.tsx'
-import { InstallNote } from '../ui/Install.tsx'
-import { ReportBug } from '../ui/Report.tsx'
-import { isEmptyBase } from './firstRun.ts'
-import { ImportRecords } from './ImportRecords.tsx'
-import { SyncSettings } from '../ui/SyncSettings.tsx'
-import { useSyncStatus } from '../ui/useSync.ts'
+import { ChangeList } from '../shared/screens/WhatsNew.tsx'
+import { InstallNote } from '../shared/ui/Install.tsx'
+import { ReportBug } from '../shared/ui/Report.tsx'
+import { isEmptyBase } from '../shared/screens/firstRun.ts'
+import { ImportRecords } from '../shared/screens/ImportRecords.tsx'
+import { SyncSettings } from '../shared/ui/SyncSettings.tsx'
+import { useSyncStatus } from '../shared/ui/useSync.ts'
 
 const LABELS: Record<SyncedStore, string> = {
   items: 'Позиции циклов',
@@ -178,7 +178,10 @@ function About({ state }: { state: State }) {
       <InstallNote
         empty={
           state.status !== 'ready' ||
-          isEmptyBase(Object.fromEntries(state.rows.map((row) => [row.store, row.live])))
+          isEmptyBase(
+            Object.fromEntries(state.rows.map((row) => [row.store, row.live])),
+            OWN_STORES,
+          )
         }
       />
 
@@ -407,7 +410,12 @@ function DataTransfer({ onChanged }: { onChanged: () => Promise<void> }) {
       {/* Два входа, а не один (Р-60): копия — свой файл, полный, ей верим;
           импорт — чужие записи, их проверяем по полю и показываем до записи. */}
       <Fold id="settings:transfer:import" title="Импорт записей" sub>
-        <ImportRecords onChanged={onChanged} />
+        <ImportRecords
+          planImport={planImport}
+          importPrompt={importPrompt}
+          intro={<p className="muted">Записи из других дневников и сервисов.</p>}
+          onChanged={onChanged}
+        />
       </Fold>
     </Fold>
   )
@@ -701,7 +709,7 @@ function WakeLog({ wakes }: { wakes: Wake[] | null }) {
 /**
  * Где лежит копия данных и стоит ли об этом беспокоиться.
  *
- * Само правило — в `ui/backup.ts`: оно неочевидное и зависит от того,
+ * Само правило — в `shared/ui/backup.ts`: оно неочевидное и зависит от того,
  * проходила ли синхронизация хоть раз, а такое должно проверяться
  * тестами, а не глазами.
  */

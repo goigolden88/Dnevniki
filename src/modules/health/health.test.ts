@@ -10,7 +10,7 @@ import {
   renameTagPlan,
   series,
 } from './health.ts'
-import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
 const T = '2026-09-07T00:00:00.000Z'
 const NOW = '2026-09-09'

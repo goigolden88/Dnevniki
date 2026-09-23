@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { formatScore, statusLabel, TYPES } from './labels.ts'
 import { parseScore, SCORE_MAX, SCORE_MIN } from './content.ts'
 import { currentMonth, type EntryDraft } from './useContent.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import type { ContentEntry } from '../../app/model.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 
 const STATUSES: ContentEntry['status'][] = ['planned', 'active', 'done', 'dropped']

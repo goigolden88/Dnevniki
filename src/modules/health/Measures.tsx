@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from 'react'
-import { formatDate, formatDateLoose, today } from '../../core/dates.ts'
+import { formatDate, formatDateLoose, today } from '../../shared/core/dates.ts'
 import { metricsOf, resolveMetric, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { Health } from './useHealth.ts'
 

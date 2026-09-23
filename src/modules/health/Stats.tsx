@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { days, MONTHS_SHORT } from '../../core/dates.ts'
+import { days, MONTHS_SHORT } from '../../shared/core/dates.ts'
 import { healthStats } from './health.ts'
 import { gapText, healthyText, statsText } from './labels.ts'
 import type { Health } from './useHealth.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 
 /** Что показывается, когда год не выбран. */
 const ALL = 'всё время'

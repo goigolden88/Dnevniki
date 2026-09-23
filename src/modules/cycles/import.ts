@@ -17,8 +17,8 @@ import {
   type ImportContext,
   type ImportPlan,
   type ImportSpec,
-} from '../../core/importing.ts'
-import type { CycleCategory, CycleEvent, CycleItem } from '../../core/model.ts'
+} from '../../shared/core/importing.ts'
+import type { CycleCategory, CycleEvent, CycleItem, StoreRecord } from '../../app/model.ts'
 import { categoryIdFor, findCategory, nextCategoryOrder, sameName } from './cycles.ts'
 import { CATEGORIES } from './labels.ts'
 
@@ -59,7 +59,7 @@ export function importCycles(
     cycleEvents: readonly CycleEvent[]
   },
   ctx: ImportContext,
-): ImportPlan {
+): ImportPlan<StoreRecord> {
   const { records, issues } = recordsOf(SECTION, raw)
   const issue = (title: string, reason: string) => issues.push({ section: SECTION, title, reason })
 

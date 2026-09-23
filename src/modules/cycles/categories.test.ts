@@ -12,7 +12,7 @@ import {
   renamePlan,
   SEED_STAMP,
 } from './cycles.ts'
-import type { CycleCategory, CycleItem } from '../../core/model.ts'
+import type { CycleCategory, CycleItem } from '../../app/model.ts'
 
 /** Категории своими записями — Р-59. */
 

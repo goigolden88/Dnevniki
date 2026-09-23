@@ -8,8 +8,8 @@ import {
   type CycleState,
   type CycleUnit,
 } from './cycles.ts'
-import { plural } from '../../core/dates.ts'
-import type { CycleEvent, CycleItem } from '../../core/model.ts'
+import { plural } from '../../shared/core/dates.ts'
+import type { CycleEvent, CycleItem } from '../../app/model.ts'
 import { CategoryField, GroupField } from './CategoryField.tsx'
 import {
   barPercent,
@@ -20,7 +20,7 @@ import {
   statusText,
 } from './labels.ts'
 import { QuickRow } from './Quick.tsx'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 import { useCycles, type ItemDraft } from './useCycles.ts'
 
 export function CycleList() {

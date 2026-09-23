@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 import { watching } from './content.ts'
 import { Archive } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'

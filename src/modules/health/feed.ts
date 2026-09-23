@@ -8,9 +8,9 @@
  * потом удалили, должен остаться с именем.
  */
 
-import { escapeMarkdown as md, type FeedItem } from '../../core/feed.ts'
-import { formatDateLoose, type DateStr } from '../../core/dates.ts'
-import type { Episode, Measure, Session, Tag } from '../../core/model.ts'
+import { escapeMarkdown as md, type FeedItem } from '../../shared/core/feed.ts'
+import { formatDateLoose, type DateStr } from '../../shared/core/dates.ts'
+import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 import { episodeState, episodeStates } from './health.ts'
 import { episodeText, measureText, metricLabel, sessionText, sourceText, symptomNames } from './labels.ts'
 

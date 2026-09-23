@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { TemplateMark, TemplateState } from './cycles.ts'
 import { formatMoney, parsePrice, templateButtonText, templateLabel } from './labels.ts'
 import { useCycles } from './useCycles.ts'
-import { Fold } from '../../ui/Fold.tsx'
+import { Fold } from '../../shared/ui/Fold.tsx'
 
 /**
  * Быстрые кнопки (Р-49): одна кнопка отмечает сегодня одну или несколько

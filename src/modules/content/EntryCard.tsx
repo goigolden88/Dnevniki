@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { today } from '../../core/dates.ts'
+import { today } from '../../shared/core/dates.ts'
 import { staleDays } from './content.ts'
 import { entryText, staleText, statusLabel } from './labels.ts'
 import { EntryForm } from './EntryForm.tsx'
 import type { Content } from './useContent.ts'
-import type { ContentEntry } from '../../core/model.ts'
+import type { ContentEntry } from '../../app/model.ts'
 
 /** Что предлагается сделать с записью в один тап. Зависит от статуса. */
 function actionFor(

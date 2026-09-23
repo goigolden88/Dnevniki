@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { formatDate } from '../../core/dates.ts'
+import { formatDate } from '../../shared/core/dates.ts'
 import { healthStats, series } from './health.ts'
 import { episodeText, measureText, sourceText, statsText, symptomNames } from './labels.ts'
 import { useHealth } from './useHealth.ts'

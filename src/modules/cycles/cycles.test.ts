@@ -26,7 +26,7 @@ import {
   totalSpent,
   unitsOf,
 } from './cycles.ts'
-import type { CycleEvent, CycleItem, Template } from '../../core/model.ts'
+import type { CycleEvent, CycleItem, Template } from '../../app/model.ts'
 
 describe('marksOfItem — Р-74', () => {
   const at = '2026-09-07T00:00:00.000Z'

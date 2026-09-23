@@ -11,9 +11,9 @@
  * обязано остаться.
  */
 
-import { escapeMarkdown as md, type FeedItem } from '../../core/feed.ts'
-import { formatDateLoose, type DateStr } from '../../core/dates.ts'
-import type { CycleCategory, CycleEvent, CycleItem } from '../../core/model.ts'
+import { escapeMarkdown as md, type FeedItem } from '../../shared/core/feed.ts'
+import { formatDateLoose, type DateStr } from '../../shared/core/dates.ts'
+import type { CycleCategory, CycleEvent, CycleItem } from '../../app/model.ts'
 import { categoryNames, cycleState, priceOf, spent } from './cycles.ts'
 import { CATEGORIES, formatMoney, intervalText, spentText } from './labels.ts'
 
