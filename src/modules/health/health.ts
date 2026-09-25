@@ -10,7 +10,14 @@
  * Общего расчёта у них нет, и сводить их в одну механику незачем.
  */
 
-import { daysBetween, isDateStr, today, type DateStr, type Period as DayPeriod } from '../../shared/core/dates.ts'
+import {
+  daysBetween,
+  inPeriod as inDayPeriod,
+  isDateStr,
+  today,
+  type DateStr,
+  type Period as DayPeriod,
+} from '../../shared/core/dates.ts'
 import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
 // ─── Названия (Р-59) ───────────────────────────────────────────────────────
@@ -488,6 +495,46 @@ export function activityTotals(sessions: Session[], period: Period = {}): Activi
   return [...totals.values()].sort(
     (a, b) => b.sessions - a.sessions || a.activity.localeCompare(b.activity),
   )
+}
+
+export type TrainingTotals = {
+  /** Тренировок в промежутке — всех, с минутами и без. */
+  count: number
+  minutes: number
+  /** У скольких длительность указана: остальные в `minutes` не вошли. */
+  withMinutes: number
+  km: number
+  /** У скольких указана дистанция. */
+  withKm: number
+}
+
+/**
+ * Тренировки за промежуток одним итогом, с основанием (Р-90).
+ *
+ * У `activityTotals` минуты и километры без основания: пробежка без
+ * секундомера там — ноль минут, и «40 минут за неделю» не отличить от
+ * «40 минут у одной из пяти». Здесь рядом с суммой — сколько тренировок
+ * в неё вошло. Виды не различаются: итог один на все.
+ */
+export function trainingTotals(sessions: Session[], period: DayPeriod): TrainingTotals {
+  const totals: TrainingTotals = { count: 0, minutes: 0, withMinutes: 0, km: 0, withKm: 0 }
+
+  for (const session of sessions) {
+    if (session.deleted || !inDayPeriod(session.date, period)) continue
+    totals.count += 1
+    const minutes = positive(session.durationMin)
+    if (minutes > 0) {
+      totals.minutes += minutes
+      totals.withMinutes += 1
+    }
+    const km = positive(session.distanceKm)
+    if (km > 0) {
+      totals.km = Math.round((totals.km + km) * 100) / 100
+      totals.withKm += 1
+    }
+  }
+
+  return totals
 }
 
 // ─── Теги симптомов ────────────────────────────────────────────────────────

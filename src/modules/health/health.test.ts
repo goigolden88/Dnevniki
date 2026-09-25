@@ -10,6 +10,7 @@ import {
   renameMetricPlan,
   renameTagPlan,
   series,
+  trainingTotals,
 } from './health.ts'
 import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
@@ -378,6 +379,37 @@ describe('activityTotals', () => {
   it('удалённые и битые даты не считаются', () => {
     const dirty = [...list, session({ id: 'gone', deleted: true }), session({ id: 'bad', date: '?' })]
     expect(activityTotals(dirty)).toHaveLength(2)
+  })
+})
+
+describe('trainingTotals — Р-90', () => {
+  const week = { from: '2026-09-07', to: '2026-09-13' }
+
+  it('сумма — вместе с тем, у скольких тренировок она есть', () => {
+    const totals = trainingTotals(
+      [
+        session({ id: 'a', date: '2026-09-07', durationMin: 30, distanceKm: 5.25 }),
+        session({ id: 'b', date: '2026-09-09', activity: 'зал', durationMin: 45 }),
+        session({ id: 'c', date: '2026-09-13', distanceKm: 3.1 }),
+        session({ id: 'd', date: '2026-09-10', activity: 'зал' }),
+      ],
+      week,
+    )
+    expect(totals).toEqual({ count: 4, minutes: 75, withMinutes: 2, km: 8.35, withKm: 2 })
+  })
+
+  it('ноль, минус и мусор — не длительность; вне промежутка, надгробие и кривая дата — не в счёт', () => {
+    const totals = trainingTotals(
+      [
+        session({ id: 'a', date: '2026-09-08', durationMin: 0, distanceKm: -1 }),
+        session({ id: 'b', date: '2026-09-08', durationMin: Number.NaN }),
+        session({ id: 'c', date: '2026-09-14', durationMin: 30 }),
+        session({ id: 'd', date: '2026-09-08', durationMin: 30, deleted: true }),
+        session({ id: 'e', date: '08.09.2026', durationMin: 30 }),
+      ],
+      week,
+    )
+    expect(totals).toEqual({ count: 2, minutes: 0, withMinutes: 0, km: 0, withKm: 0 })
   })
 })
 
