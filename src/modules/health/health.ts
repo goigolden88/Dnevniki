@@ -10,7 +10,7 @@
  * Общего расчёта у них нет, и сводить их в одну механику незачем.
  */
 
-import { daysBetween, isDateStr, today, type DateStr } from '../../shared/core/dates.ts'
+import { daysBetween, isDateStr, today, type DateStr, type Period as DayPeriod } from '../../shared/core/dates.ts'
 import type { Episode, Measure, Session, Tag } from '../../app/model.ts'
 
 // ─── Названия (Р-59) ───────────────────────────────────────────────────────
@@ -314,6 +314,60 @@ export function healthStats(
       .map(([tagId, count]) => ({ tagId, count }))
       .sort((a, b) => b.count - a.count || a.tagId.localeCompare(b.tagId)),
   }
+}
+
+// ─── Болезнь в промежутке (Р-88) ───────────────────────────────────────────
+
+export type IllnessInPeriod = {
+  /** Дни болезни в промежутке: наложения склеены, день считается один раз. */
+  days: number
+  /** Эпизоды, шедшие в промежутке хотя бы день. */
+  episodes: number
+  /** Сколько из них в промежутке и началось. */
+  started: number
+}
+
+/**
+ * Сколько дней болел в промежутке (Р-88).
+ *
+ * Не по дате начала, как `healthStats`, а по пересечению: вопрос не «когда
+ * заболел», а «сколько дней недели болел». Эпизод обрезается промежутком
+ * и днём расчёта — дни после него ещё не наступили. Открытый длится
+ * по день расчёта; нечитаемый конец — тоже, как в `episodeState`. Два
+ * эпизода разом — это один день болезни, а не два: наложения склеиваются.
+ *
+ * Эпизод с концом раньше начала — опечатка в дате — дней не даёт и в счёт
+ * не идёт; с нечитаемым началом — тоже.
+ */
+export function illnessInPeriod(episodes: Episode[], period: DayPeriod, day: DateStr): IllnessInPeriod {
+  const last = period.to < day ? period.to : day
+  const spans: [DateStr, DateStr][] = []
+  let started = 0
+
+  for (const episode of liveEpisodes(episodes)) {
+    if (!isDateStr(episode.start)) continue
+    const end = endOf(episode) ?? day
+    const from = episode.start > period.from ? episode.start : period.from
+    const to = end < last ? end : last
+    if (from > to) continue
+    spans.push([from, to])
+    if (episode.start >= period.from) started += 1
+  }
+
+  spans.sort(([a], [b]) => a.localeCompare(b))
+  let days = 0
+  let current: [DateStr, DateStr] | null = null
+  for (const [from, to] of spans) {
+    if (current !== null && from <= current[1]) {
+      if (to > current[1]) current[1] = to
+      continue
+    }
+    if (current !== null) days += daysBetween(current[0], current[1]) + 1
+    current = [from, to]
+  }
+  if (current !== null) days += daysBetween(current[0], current[1]) + 1
+
+  return { days, episodes: spans.length, started }
 }
 
 // ─── Измерения ─────────────────────────────────────────────────────────────

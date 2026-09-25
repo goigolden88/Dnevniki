@@ -4,6 +4,7 @@ import {
   episodeState,
   episodeStates,
   healthStats,
+  illnessInPeriod,
   metricsOf,
   openEpisodes,
   renameMetricPlan,
@@ -225,6 +226,75 @@ describe('healthStats', () => {
     expect(stats.count).toBe(0)
     expect(stats.byMonth).toHaveLength(12)
     expect(stats.symptoms).toEqual([])
+  })
+})
+
+describe('illnessInPeriod — Р-88', () => {
+  const week = { from: '2026-09-07', to: '2026-09-13' }
+  const DAY = '2026-09-20'
+
+  it('эпизод внутри промежутка — его дни, начало и конец включительно', () => {
+    const result = illnessInPeriod([episode({ start: '2026-09-08', end: '2026-09-10' })], week, DAY)
+    expect(result).toEqual({ days: 3, episodes: 1, started: 1 })
+  })
+
+  it('эпизод через границу обрезается промежутком и в «началось» не идёт', () => {
+    const result = illnessInPeriod([episode({ start: '2026-09-03', end: '2026-09-08' })], week, DAY)
+    expect(result).toEqual({ days: 2, episodes: 1, started: 0 })
+  })
+
+  it('наложения склеены: два эпизода разом — один день болезни', () => {
+    const result = illnessInPeriod(
+      [
+        episode({ id: 'a', start: '2026-09-08', end: '2026-09-11' }),
+        episode({ id: 'b', start: '2026-09-10', end: '2026-09-12' }),
+        episode({ id: 'c', start: '2026-09-09', end: '2026-09-09' }),
+      ],
+      week,
+      DAY,
+    )
+    expect(result).toEqual({ days: 5, episodes: 3, started: 3 })
+  })
+
+  it('разнесённые эпизоды складываются', () => {
+    const result = illnessInPeriod(
+      [
+        episode({ id: 'a', start: '2026-09-07', end: '2026-09-07' }),
+        episode({ id: 'b', start: '2026-09-12', end: '2026-09-20' }),
+      ],
+      week,
+      DAY,
+    )
+    expect(result.days).toBe(3)
+  })
+
+  it('открытый длится до дня расчёта, в идущем промежутке — не дальше', () => {
+    const open = [episode({ start: '2026-09-09', end: null })]
+    expect(illnessInPeriod(open, week, '2026-09-11').days).toBe(3)
+    expect(illnessInPeriod(open, week, DAY).days).toBe(5)
+  })
+
+  it('конец позже дня расчёта обрезается днём расчёта', () => {
+    const result = illnessInPeriod([episode({ start: '2026-09-08', end: '2026-09-30' })], week, '2026-09-10')
+    expect(result.days).toBe(3)
+  })
+
+  it('начатый позже дня расчёта и после промежутка — не в счёт', () => {
+    expect(illnessInPeriod([episode({ start: '2026-09-12', end: null })], week, '2026-09-10').episodes).toBe(0)
+    expect(illnessInPeriod([episode({ start: '2026-09-14', end: '2026-09-15' })], week, DAY).episodes).toBe(0)
+  })
+
+  it('конец раньше начала, нечитаемое начало и надгробие — не в счёт', () => {
+    const result = illnessInPeriod(
+      [
+        episode({ id: 'a', start: '2026-09-10', end: '2026-09-08' }),
+        episode({ id: 'b', start: '10.09.2026' }),
+        episode({ id: 'c', start: '2026-09-08', end: '2026-09-09', deleted: true }),
+      ],
+      week,
+      DAY,
+    )
+    expect(result).toEqual({ days: 0, episodes: 0, started: 0 })
   })
 })
 
