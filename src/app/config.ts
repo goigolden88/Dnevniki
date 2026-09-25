@@ -10,6 +10,7 @@
 
 import type { AppConfig } from '../shared/core/model.ts'
 import { migrations, SCHEMA_VERSION, SYNCED_STORES, type StoreRecord } from './model.ts'
+import { summary } from '../summary.ts'
 
 export const config: AppConfig<StoreRecord> = {
   name: 'Дневники',
@@ -96,4 +97,8 @@ export const config: AppConfig<StoreRecord> = {
     privacy: 'внутри история болезней и всё остальное, что человек пишет в дневник о себе',
     sources: 'заметки, таблицы или скриншоты из других сервисов',
   },
+
+  // Срез итогов для метаприложения (Р-91): `summary.json` в репозитории
+  // данных, пишет проход синхронизации. Только из записей и дня расчёта.
+  summary,
 }

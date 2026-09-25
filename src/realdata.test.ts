@@ -8,6 +8,8 @@ import { contentStats, staleWatching } from './modules/content/content.ts'
 import { cycleStates, spendTree } from './modules/cycles/cycles.ts'
 import { healthStats, openEpisodes } from './modules/health/health.ts'
 import { feedItems, KIND_ORDER, markdownExport } from './registry.ts'
+import { buildSummary, checkSummary } from './shared/core/summary.ts'
+import { summary, type SummaryData } from './summary.ts'
 
 /**
  * Проверка на копии настоящих данных (Р-72).
@@ -102,6 +104,13 @@ describe.skipIf(!FILE)('копия настоящих данных — Р-72', (
     const markdown = markdownExport(data, day, KIND_ORDER)
     expect(markdown.startsWith('# Дневники')).toBe(true)
     report.push(`Позиций на «Сейчас»: ${states.length}, строк ленты: ${feed.length}, markdown: ${markdown.length} знаков`)
+
+    // Срез итогов (Р-91) — как его собирает проход: живые записи, форма ядра.
+    const live = Object.fromEntries(
+      SYNCED_STORES.map((store) => [store, data[store].filter((record) => !record.deleted)]),
+    ) as SummaryData
+    const cut = checkSummary(buildSummary(summary(live, day), data, day))
+    report.push(`Срез итогов: пунктов «требует внимания» — ${cut.attention.length}`)
 
     if (REPORT) writeFileSync(REPORT, report.join('\n'), 'utf8')
   })
