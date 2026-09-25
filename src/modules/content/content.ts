@@ -22,11 +22,14 @@
 
 import {
   daysBetween,
+  inPeriod,
   isDateOrMonth,
   isMonthStr,
   lastDayOf,
+  monthPeriod,
   toDateStr,
   type DateStr,
+  type Period,
 } from '../../shared/core/dates.ts'
 import type { ContentEntry } from '../../app/model.ts'
 
@@ -481,4 +484,60 @@ export function contentStats(
       .sort((a, b) => (scoreOf(b) ?? 0) - (scoreOf(a) ?? 0) || byStartDesc(a, b))
       .slice(0, 3),
   }
+}
+
+// ─── Промежуток (Р-89) ─────────────────────────────────────────────────────
+
+export type ContentInPeriod = {
+  /** Начато в промежутке: день начала в нём, месяц начала — целиком в нём. */
+  started: number
+  /** Из начатого — нынешний статус «просмотрено» (Р-42), а не событие в промежутке. */
+  done: number
+  /** Из начатого — нынешний статус «брошено». */
+  dropped: number
+  /**
+   * Начато месяцем, который задевает промежуток, но в нём не лежит:
+   * в неделю такая запись не кладётся ни в какую (Р-25). Могла быть
+   * начата здесь, могла — нет; в `started` не входит.
+   */
+  monthOnly: number
+}
+
+/**
+ * Что начато в промежутке и чем кончилось (Р-89).
+ *
+ * Промежуток — любой, не только год, как у `contentStats`. Месячная дата
+ * никогда не становится первым числом: месяц кладётся в промежуток, только
+ * если лежит в нём целиком, — календарный месяц и год считаются точно.
+ * Задевает частично — запись идёт отдельным счётом `monthOnly`.
+ *
+ * Записи без разбираемой даты начала — «к просмотру» и испорченные —
+ * не в счёт, как и в `contentStats`.
+ */
+export function contentInPeriod(entries: readonly ContentEntry[], period: Period): ContentInPeriod {
+  const result: ContentInPeriod = { started: 0, done: 0, dropped: 0, monthOnly: 0 }
+
+  for (const entry of live(entries)) {
+    const start = startOf(entry)
+    if (start === null) continue
+
+    let inside: boolean
+    if (isMonthStr(start)) {
+      const month = monthPeriod(start)
+      if (month.to < period.from || month.from > period.to) continue
+      inside = month.from >= period.from && month.to <= period.to
+    } else {
+      inside = inPeriod(start, period)
+    }
+
+    if (!inside) {
+      if (isMonthStr(start)) result.monthOnly += 1
+      continue
+    }
+    result.started += 1
+    if (entry.status === 'done') result.done += 1
+    else if (entry.status === 'dropped') result.dropped += 1
+  }
+
+  return result
 }

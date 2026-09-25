@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  contentInPeriod,
   contentStats,
   filterEntries,
   groupByMonth,
@@ -555,5 +556,60 @@ describe('contentStats', () => {
   it('испорченная дата не роняет расчёт и в год не попадает', () => {
     const stats = contentStats([...year2026, entry({ id: 'битая', start: '31.02.2026' })], '2026')
     expect(stats.started).toBe(4)
+  })
+})
+
+describe('contentInPeriod — Р-89', () => {
+  // Неделя на стыке месяцев: 28 сентября — 4 октября 2026.
+  const week = { from: '2026-09-28', to: '2026-10-04' }
+  const september = { from: '2026-09-01', to: '2026-09-30' }
+
+  it('день начала — в промежутке по дню; «досмотрено» и «брошено» — нынешний статус', () => {
+    const result = contentInPeriod(
+      [
+        entry({ id: 'a', start: '2026-09-28', status: 'done' }),
+        entry({ id: 'b', start: '2026-10-04', status: 'dropped' }),
+        entry({ id: 'c', start: '2026-10-01', status: 'active' }),
+        entry({ id: 'd', start: '2026-10-05', status: 'done' }),
+      ],
+      week,
+    )
+    expect(result).toEqual({ started: 3, done: 1, dropped: 1, monthOnly: 0 })
+  })
+
+  it('месячная дата в неделю не кладётся — отдельным счётом, и за оба задетых месяца', () => {
+    const result = contentInPeriod(
+      [
+        entry({ id: 'a', start: '2026-09', status: 'done' }),
+        entry({ id: 'b', start: '2026-10', status: 'done' }),
+        entry({ id: 'c', start: '2026-08', status: 'done' }),
+      ],
+      week,
+    )
+    expect(result).toEqual({ started: 0, done: 0, dropped: 0, monthOnly: 2 })
+  })
+
+  it('в календарный месяц месячная дата кладётся точно — не первым числом и не «ещё N»', () => {
+    const result = contentInPeriod(
+      [
+        entry({ id: 'a', start: '2026-09', status: 'done' }),
+        entry({ id: 'b', start: '2026-09-30', status: 'active' }),
+        entry({ id: 'c', start: '2026-10', status: 'done' }),
+      ],
+      september,
+    )
+    expect(result).toEqual({ started: 2, done: 1, dropped: 0, monthOnly: 0 })
+  })
+
+  it('«к просмотру», испорченная дата и надгробие — не в счёт', () => {
+    const result = contentInPeriod(
+      [
+        entry({ id: 'a', start: null, status: 'planned' }),
+        entry({ id: 'b', start: '31.09.2026' }),
+        entry({ id: 'c', start: '2026-09-10', deleted: true }),
+      ],
+      september,
+    )
+    expect(result).toEqual({ started: 0, done: 0, dropped: 0, monthOnly: 0 })
   })
 })
