@@ -236,12 +236,12 @@ describe('illnessInPeriod — Р-88', () => {
 
   it('эпизод внутри промежутка — его дни, начало и конец включительно', () => {
     const result = illnessInPeriod([episode({ start: '2026-09-08', end: '2026-09-10' })], week, DAY)
-    expect(result).toEqual({ days: 3, episodes: 1, started: 1 })
+    expect(result).toEqual({ days: 3, episodes: 1, started: 1, open: 0 })
   })
 
   it('эпизод через границу обрезается промежутком и в «началось» не идёт', () => {
     const result = illnessInPeriod([episode({ start: '2026-09-03', end: '2026-09-08' })], week, DAY)
-    expect(result).toEqual({ days: 2, episodes: 1, started: 0 })
+    expect(result).toEqual({ days: 2, episodes: 1, started: 0, open: 0 })
   })
 
   it('наложения склеены: два эпизода разом — один день болезни', () => {
@@ -254,7 +254,7 @@ describe('illnessInPeriod — Р-88', () => {
       week,
       DAY,
     )
-    expect(result).toEqual({ days: 5, episodes: 3, started: 3 })
+    expect(result).toEqual({ days: 5, episodes: 3, started: 3, open: 0 })
   })
 
   it('разнесённые эпизоды складываются', () => {
@@ -272,7 +272,7 @@ describe('illnessInPeriod — Р-88', () => {
   it('открытый длится до дня расчёта, в идущем промежутке — не дальше', () => {
     const open = [episode({ start: '2026-09-09', end: null })]
     expect(illnessInPeriod(open, week, '2026-09-11').days).toBe(3)
-    expect(illnessInPeriod(open, week, DAY).days).toBe(5)
+    expect(illnessInPeriod(open, week, DAY)).toEqual({ days: 5, episodes: 1, started: 1, open: 1 })
   })
 
   it('конец позже дня расчёта обрезается днём расчёта', () => {
@@ -295,7 +295,7 @@ describe('illnessInPeriod — Р-88', () => {
       week,
       DAY,
     )
-    expect(result).toEqual({ days: 0, episodes: 0, started: 0 })
+    expect(result).toEqual({ days: 0, episodes: 0, started: 0, open: 0 })
   })
 })
 

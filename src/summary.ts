@@ -74,6 +74,7 @@ const EPISODES: [string, string, string] = ['эпизод', 'эпизода', '�
 const TRAININGS_GENITIVE: [string, string, string] = ['тренировки', 'тренировок', 'тренировок']
 const ENTRIES: [string, string, string] = ['запись', 'записи', 'записей']
 const STARTED: [string, string, string] = ['начата', 'начаты', 'начаты']
+const OF_STARTED: [string, string, string] = ['начатого', 'начатых', 'начатых']
 
 /** «аниме, сериалов, фильмов…» — из списка типов, а не буквами (Р-65). */
 const CONTENT_KINDS = TYPES.map((type) => type.forms[2]).join(', ')
@@ -94,9 +95,11 @@ function illnessMetrics(data: SummaryData, period: SummaryPeriod, day: DateStr):
       key: KEYS.illnessDays,
       label: 'Дни болезни',
       value: { n: illness.days, unit: 'days' },
-      basis:
-        `По ${illness.episodes} ${plural(illness.episodes, EPISODES_DATIVE)} в отрезке; ` +
-        'день с двумя эпизодами — один день; незакрытый — по день расчёта',
+      basis: [
+        `По ${illness.episodes} ${plural(illness.episodes, EPISODES_DATIVE)} в отрезке`,
+        ...(illness.episodes > 1 ? ['день с двумя эпизодами — один день'] : []),
+        ...(illness.open > 0 ? ['незакрытый — болезнь по день расчёта'] : []),
+      ].join('; '),
     },
     {
       key: KEYS.illnessEpisodes,
@@ -128,7 +131,11 @@ function trainingMetrics(data: SummaryData, period: SummaryPeriod): Metric[] {
 
   const of = `из ${totals.count} ${plural(totals.count, TRAININGS_GENITIVE)}`
   const part = (known: number, what: string) =>
-    `${what} указана у ${known} ${of}` + (known < totals.count ? `; без неё — не в сумме` : '')
+    known === 0
+      ? 'По записям тренировок'
+      : `${what} указана у ${known} ${of}` + (known < totals.count ? '; без неё — не в сумме' : '')
+  const none = (what: string) =>
+    totals.count === 1 ? `${what} у тренировки не указана` : `${what} не указана ни у одной ${of}`
 
   return [
     count,
@@ -137,7 +144,7 @@ function trainingMetrics(data: SummaryData, period: SummaryPeriod): Metric[] {
       label: 'Тренировки: минуты',
       value:
         totals.withMinutes === 0
-          ? { unknown: OWN_UNKNOWN.noDuration, text: `Длительность не указана ни у одной ${of}` }
+          ? { unknown: OWN_UNKNOWN.noDuration, text: none('Длительность') }
           : { n: totals.minutes, unit: 'minutes' },
       basis: part(totals.withMinutes, 'Длительность'),
     },
@@ -146,7 +153,7 @@ function trainingMetrics(data: SummaryData, period: SummaryPeriod): Metric[] {
       label: 'Тренировки: км',
       value:
         totals.withKm === 0
-          ? { unknown: OWN_UNKNOWN.noDistance, text: `Дистанция не указана ни у одной ${of}` }
+          ? { unknown: OWN_UNKNOWN.noDistance, text: none('Дистанция') }
           : { n: totals.km, unit: 'km' },
       basis: part(totals.withKm, 'Дистанция'),
     },
@@ -158,15 +165,21 @@ function trainingMetrics(data: SummaryData, period: SummaryPeriod): Metric[] {
 function contentMetrics(data: SummaryData, period: SummaryPeriod): Metric[] {
   const content = contentInPeriod(data.content, period)
   const week = period.grain === 'week'
+  // У недели начатое месяцем — своей строкой; у месяца оно точно, и
+  // «ещё N» возможно только у отрезка, который месяц не вмещает (Р-89).
   const rule = week
-    ? 'по дню начала в неделе; начатое месяцем в неделю не кладётся'
+    ? 'по дню начала в неделе; начатые месяцем — строкой «день не записан»'
     : 'по дню или месяцу начала в отрезке'
   const outside =
-    content.monthOnly > 0
+    !week && content.monthOnly > 0
       ? `; ещё ${content.monthOnly} ${plural(content.monthOnly, ENTRIES)} ${plural(content.monthOnly, STARTED)} месяцем, ` +
         'который задевает отрезок, — не в счёте'
       : ''
-  const ofStarted = `нынешний статус у начатых в отрезке (${content.started}), а не дата окончания`
+  const ofStarted = (status: string) =>
+    content.started === 0
+      ? 'Начатого в отрезке нет'
+      : `Нынешний статус «${status}» у ${content.started} ${plural(content.started, OF_STARTED)} в отрезке, ` +
+        'а не дата окончания'
 
   const metrics: Metric[] = [
     {
@@ -179,13 +192,13 @@ function contentMetrics(data: SummaryData, period: SummaryPeriod): Metric[] {
       key: KEYS.contentDone,
       label: `Контент: из начатого ${statusLabel('done')}`,
       value: { n: content.done, unit: 'count' },
-      basis: `«${statusLabel('done')}» — ${ofStarted}`,
+      basis: ofStarted(statusLabel('done')),
     },
     {
       key: KEYS.contentDropped,
       label: `Контент: из начатого ${statusLabel('dropped')}`,
       value: { n: content.dropped, unit: 'count' },
-      basis: `«${statusLabel('dropped')}» — ${ofStarted}`,
+      basis: ofStarted(statusLabel('dropped')),
     },
   ]
   if (week) {

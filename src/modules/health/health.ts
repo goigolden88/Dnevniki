@@ -332,6 +332,8 @@ export type IllnessInPeriod = {
   episodes: number
   /** Сколько из них в промежутке и началось. */
   started: number
+  /** Сколько из них не закрыто: их дни идут по день расчёта. */
+  open: number
 }
 
 /**
@@ -350,6 +352,7 @@ export function illnessInPeriod(episodes: Episode[], period: DayPeriod, day: Dat
   const last = period.to < day ? period.to : day
   const spans: [DateStr, DateStr][] = []
   let started = 0
+  let open = 0
 
   for (const episode of liveEpisodes(episodes)) {
     if (!isDateStr(episode.start)) continue
@@ -359,6 +362,7 @@ export function illnessInPeriod(episodes: Episode[], period: DayPeriod, day: Dat
     if (from > to) continue
     spans.push([from, to])
     if (episode.start >= period.from) started += 1
+    if (episode.end === null) open += 1
   }
 
   spans.sort(([a], [b]) => a.localeCompare(b))
@@ -374,7 +378,7 @@ export function illnessInPeriod(episodes: Episode[], period: DayPeriod, day: Dat
   }
   if (current !== null) days += daysBetween(current[0], current[1]) + 1
 
-  return { days, episodes: spans.length, started }
+  return { days, episodes: spans.length, started, open }
 }
 
 // ─── Измерения ─────────────────────────────────────────────────────────────

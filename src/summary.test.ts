@@ -117,6 +117,9 @@ describe('срез итогов — Р-91', () => {
     expect(metric(periods[0], KEYS.illnessDays).value).toEqual({ n: 5, unit: 'days' })
     expect(metric(periods[0], KEYS.illnessEpisodes).value).toEqual({ n: 2, unit: 'count' })
     expect(metric(periods[0], KEYS.illnessEpisodes).basis).toContain('начались в нём — 1')
+    expect(metric(periods[0], KEYS.illnessDays).basis).toBe(
+      'По 2 эпизодам в отрезке; день с двумя эпизодами — один день; незакрытый — болезнь по день расчёта',
+    )
     // Идущая: незакрытый 21–25, дальше дня расчёта не идёт.
     expect(metric(periods[1], KEYS.illnessDays).value).toEqual({ n: 5, unit: 'days' })
     // Сентябрь: 10–15 и 18–25.
@@ -136,7 +139,10 @@ describe('срез итогов — Р-91', () => {
     expect(metric(current, KEYS.trainingKm).value).toEqual({ n: 5, unit: 'km' })
 
     const past = periods[0]
-    expect(metric(past, KEYS.trainingMinutes).value).toMatchObject({ unknown: OWN_UNKNOWN.noDuration })
+    expect(metric(past, KEYS.trainingMinutes).value).toEqual({
+      unknown: OWN_UNKNOWN.noDuration,
+      text: 'Длительность у тренировки не указана',
+    })
     expect(metric(past, KEYS.trainingKm).value).toMatchObject({ unknown: OWN_UNKNOWN.noDistance })
 
     // Тренировок нет вовсе — ноль с основанием.
@@ -149,7 +155,10 @@ describe('срез итогов — Р-91', () => {
     expect(metric(week, KEYS.contentStarted).value).toEqual({ n: 1, unit: 'count' })
     expect(metric(week, KEYS.contentDropped).value).toEqual({ n: 1, unit: 'count' })
     expect(metric(week, KEYS.contentMonthOnly).value).toEqual({ n: 1, unit: 'count' })
-    expect(metric(week, KEYS.contentStarted).basis).toContain('ещё 1 запись начата месяцем')
+    expect(metric(week, KEYS.contentStarted).basis).toContain('строкой «день не записан»')
+    expect(metric(week, KEYS.contentDropped).basis).toBe(
+      'Нынешний статус «брошено» у 1 начатого в отрезке, а не дата окончания',
+    )
 
     const september = periods[3]
     expect(metric(september, KEYS.contentStarted).value).toEqual({ n: 2, unit: 'count' })
