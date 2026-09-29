@@ -676,6 +676,7 @@ async function scenario() {
     'справка открывается с «Сейчас», вопрос раскрывается — Р-63',
     has(help, 'Справка') && has(help, 'fine-grained токен'),
   )
+  check('справка: токен один для всех приложений семьи на устройстве — Я-35', has(help, 'для всех приложений семьи'))
   // Числа справки собираются из констант (Р-65): раскрыты все вопросы,
   // подставленное читается, а не «undefined».
   await act(`document.querySelectorAll('.fold__btn[aria-expanded="false"]').forEach((el) => el.click())`)
@@ -713,6 +714,84 @@ async function scenario() {
     about.replace(/\s+/g, ' ').slice(0, 200),
   )
   check('в «О приложении» — весь список «Что нового» — Р-71', has(about, 'Что нового'))
+
+  // Общая база семьи (Я-35, Я-41 «FamilyCore»): давние токен, срок и имя
+  // из `settings` при первом запуске на новом ядре переезжают в базу
+  // `family` и из `settings` удаляются. Синхронизация выключена явно —
+  // иначе проход пошёл бы в сеть с выдуманным токеном.
+  // Хранилища нет (ядро до Я-40) — `transaction` бросает внутри обработчика,
+  // и промис без `catch` повис бы: прогон не упал бы, а встал.
+  const idb = (name, stores, mode, body) => `new Promise((resolve, reject) => {
+    const request = indexedDB.open(${JSON.stringify(name)})
+    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      try {
+        const tx = request.result.transaction(${JSON.stringify(stores)}, ${JSON.stringify(mode)})
+        const out = {}
+        ${body}
+        tx.oncomplete = () => {
+          request.result.close()
+          resolve(out)
+        }
+        tx.onerror = () => reject(tx.error)
+      } catch (error) {
+        request.result.close()
+        reject(error)
+      }
+    }
+  })`
+  await run(
+    idb(
+      'dnevniki',
+      ['settings'],
+      'readwrite',
+      `const settings = tx.objectStore('settings')
+      settings.put({ key: 'syncEnabled', value: false })
+      settings.put({ key: 'syncToken', value: 'github_pat_smoke' })
+      settings.put({ key: 'syncTokenExpires', value: '2027-09-01' })
+      settings.put({ key: 'syncRepo', value: 'me/dnevniki-data' })`,
+    ),
+  )
+  await send('Page.reload')
+  await sleep(2000)
+  await go('/settings')
+  await unfold('Синхронизация')
+  const family = await run(
+    idb(
+      'family',
+      ['token', 'repos'],
+      'readonly',
+      `tx.objectStore('token').getAll().onsuccess = (event) => { out.token = event.target.result }
+      tx.objectStore('repos').getAll().onsuccess = (event) => { out.repos = event.target.result }`,
+    ),
+  )
+  const left = await run(
+    idb(
+      'dnevniki',
+      ['settings'],
+      'readonly',
+      `tx.objectStore('settings').getAllKeys().onsuccess = (event) => { out.keys = event.target.result }`,
+    ),
+  )
+  const valueOf = (rows, key) => rows?.find((row) => row.key === key)?.value
+  check(
+    'давний токен, срок и имя переехали в общую базу семьи — Я-35, Я-41',
+    valueOf(family?.token, 'token') === 'github_pat_smoke' &&
+      valueOf(family?.token, 'expires') === '2027-09-01' &&
+      valueOf(family?.repos, 'dnevniki') === 'me/dnevniki-data',
+    JSON.stringify(family),
+  )
+  check(
+    'из своих настроек давние поля удалены — Я-41',
+    Array.isArray(left?.keys) && !left.keys.some((key) => ['syncToken', 'syncTokenExpires', 'syncRepo'].includes(key)),
+    JSON.stringify(left?.keys),
+  )
+  await run(`new Promise((resolve, reject) => {
+    const request = indexedDB.deleteDatabase('family')
+    request.onsuccess = () => resolve(true)
+    request.onerror = () => reject(request.error)
+    request.onblocked = () => reject(new Error('общая база занята'))
+  })`)
 
   // «Сообщить об ошибке» (Р-78): ошибка страницы ложится в журнал, журнал —
   // в отчёт. Событие ошибки — не исключение: консоль прогона оно не трогает.
