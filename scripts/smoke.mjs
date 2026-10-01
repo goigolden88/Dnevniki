@@ -67,6 +67,21 @@ const BROWSERS = [
 
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms))
 
+/**
+ * Месяцы для проверок контента. Скрипт — обычный Node и TypeScript ядра
+ * (`src/shared/core/dates.ts`) не читает, поэтому названия здесь свои:
+ * нужны именно те, что рисует приложение — заголовок группы («Сентябрь 2026»)
+ * и чип выбора месяца («сен»).
+ */
+const MONTH_HEADINGS = [
+  'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
+  'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+]
+const MONTH_CHIPS = [
+  'янв', 'фев', 'мар', 'апр', 'май', 'июн',
+  'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
+]
+
 // ─── Запуск ────────────────────────────────────────────────────────────────
 
 function findBrowser() {
@@ -494,10 +509,30 @@ async function scenario() {
     has(watched, 'по 1 записи'),
     line(watched, 'Средняя оценка'),
   )
+  // Месяц берётся от сегодняшней даты, а не зашит: прогон должен быть
+  // зелёным в любой месяц года. Дата у скрипта и у браузера одна — машина одна.
+  const nowDate = new Date()
+  const thisYear = nowDate.getFullYear()
+  const thisIndex = nowDate.getMonth()
+  // Второй месяц — март, а в марте — январь: он обязан отличаться от текущего.
+  const otherIndex = thisIndex === 2 ? 0 : 2
+  const thisHeading = `${MONTH_HEADINGS[thisIndex]} ${thisYear}`
+  const otherHeading = `${MONTH_HEADINGS[otherIndex]} ${thisYear}`
+  const otherValue = `${thisYear}-${String(otherIndex + 1).padStart(2, '0')}`
+  const thisChip = MONTH_CHIPS[thisIndex]
+  const otherChip = MONTH_CHIPS[otherIndex]
+  // Соседние месяцы приложение склеивает в отрезок («фев–мар»), остальные
+  // перечисляет через запятую, по порядку в году.
+  const [first, second] = [thisIndex, otherIndex].sort((a, b) => a - b)
+  const bothText =
+    second - first === 1
+      ? `${MONTH_CHIPS[first]}–${MONTH_CHIPS[second]}`
+      : `${MONTH_CHIPS[first]}, ${MONTH_CHIPS[second]}`
+
   check(
     'запись легла под заголовок своего месяца',
-    has(watched, 'Сентябрь 2026'),
-    line(watched, 'Сентябрь'),
+    has(watched, thisHeading),
+    line(watched, MONTH_HEADINGS[thisIndex]),
   )
 
   // Вторая запись другим месяцем — иначе фильтр по месяцам не из чего
@@ -505,8 +540,8 @@ async function scenario() {
   await act(`byText('button', 'Добавить запись')?.click()`)
   await sleep(300)
   await act(`
-    set(document.querySelector('form input'), 'Мартовский фильм')
-    set(document.querySelector('form input[type=month]'), '2026-03')
+    set(document.querySelector('form input'), 'Второй фильм')
+    set(document.querySelector('form input[type=month]'), '${otherValue}')
     byText('button', 'просмотрено')?.click()
   `)
   await sleep(400)
@@ -515,8 +550,8 @@ async function scenario() {
   const twoMonths = await screen()
   check(
     'два месяца — два заголовка',
-    has(twoMonths, 'Сентябрь 2026') && has(twoMonths, 'Март 2026'),
-    line(twoMonths, 'Март'),
+    has(twoMonths, thisHeading) && has(twoMonths, otherHeading),
+    line(twoMonths, MONTH_HEADINGS[otherIndex]),
   )
 
   // Период слоями: готовый ответ, потом выбор месяцев руками (Р-47).
@@ -525,23 +560,23 @@ async function scenario() {
   const thisMonth = await screen()
   const inThisMonth = await run(`document.querySelectorAll('.cycles li').length`)
   check('готовый период «этот месяц» отбирает свой месяц', inThisMonth === 1, `карточек ${inThisMonth}`)
-  check('и это правда сентябрь', has(thisMonth, 'Пробное аниме') && !has(thisMonth, 'Март 2026'))
+  check('и это правда текущий месяц', has(thisMonth, 'Пробное аниме') && !has(thisMonth, otherHeading))
 
   await act(`byText('button', 'Выбрать период')?.click()`)
   await sleep(400)
-  await act(`byText('button', 'мар')?.click()`)
+  await act(`byText('button', '${otherChip}')?.click()`)
   await sleep(500)
   const twoPicked = await screen()
   const inTwo = await run(`document.querySelectorAll('.cycles li').length`)
   check('месяцы отмечаются несколькими', inTwo === 2, `карточек ${inTwo}`)
-  check('и период назван словами', has(twoPicked, 'мар, сен'), line(twoPicked, 'Показано'))
+  check('и период назван словами', has(twoPicked, bothText), line(twoPicked, 'Показано'))
 
-  await act(`byText('button', 'сен')?.click()`)
+  await act(`byText('button', '${thisChip}')?.click()`)
   await sleep(500)
   const onlyMarch = await screen()
   const inMarch = await run(`document.querySelectorAll('.cycles li').length`)
   check('повторный тап снимает месяц', inMarch === 1, `карточек ${inMarch}`)
-  check('остался март', has(onlyMarch, 'Мартовский фильм') && !has(onlyMarch, 'Сентябрь 2026'))
+  check('остался второй месяц', has(onlyMarch, 'Второй фильм') && !has(onlyMarch, thisHeading))
 
   await act(`byText('button', 'Все месяцы')?.click()`)
   await sleep(500)
@@ -587,7 +622,7 @@ async function scenario() {
   const feedText = await screen()
   check(
     'лента собирает записи всех трёх модулей',
-    has(feedText, 'Стрижка') && has(feedText, 'Пробный эпизод') && has(feedText, 'Мартовский фильм'),
+    has(feedText, 'Стрижка') && has(feedText, 'Пробный эпизод') && has(feedText, 'Второй фильм'),
     line(feedText, 'запис'),
   )
   check(
@@ -613,13 +648,13 @@ async function scenario() {
   // Через переменную: строка, начатая с «[», склеилась бы с концом
   // помощников в одно выражение — и вышла бы синтаксическая ошибка.
   await act(`const row = [...document.querySelectorAll('.feed__row')]
-      .find((each) => each.textContent.includes('Мартовский фильм'))
+      .find((each) => each.textContent.includes('Второй фильм'))
     row?.click()`)
   await sleep(900)
   const focused = await run(`document.querySelector('.cycle--focus')?.innerText ?? ''`)
   check(
     'тап в ленте разворачивает саму запись — Р-56',
-    has(focused, 'Мартовский фильм') && has(focused, 'Правка'),
+    has(focused, 'Второй фильм') && has(focused, 'Правка'),
     focused.replace(/\s+/g, ' ').slice(0, 70),
   )
 
