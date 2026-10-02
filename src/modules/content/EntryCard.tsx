@@ -51,6 +51,8 @@ export function EntryCard({
     return (
       <li className="cycle">
         <EntryForm
+          entries={content.entries}
+          selfId={entry.id}
           draft={{
             type: entry.type,
             title: entry.title,

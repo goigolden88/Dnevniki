@@ -11,6 +11,7 @@ import {
   monthsOf,
   parseScore,
   scoreBucket,
+  sameTitle,
   sortEntries,
   scoreOf,
   STALE_AFTER_DAYS,
@@ -134,6 +135,39 @@ describe('sortEntries', () => {
     const all = [entry({ id: 'б', start: '2026-01' }), entry({ id: 'а', start: '2026-02' })]
     sortEntries(all)
     expect(all.map((each) => each.id)).toEqual(['б', 'а'])
+  })
+})
+
+describe('sameTitle — запись с таким названием уже есть', () => {
+  const list = [
+    entry({ id: 'a', title: 'Фрирен', titleOrig: 'Sousou no Frieren' }),
+    entry({ id: 'b', title: 'Берсерк' }),
+    entry({ id: 'c', title: 'Фрирен', deleted: true }),
+  ]
+
+  it('регистр, «ё/е» и лишние пробелы не в счёт', () => {
+    expect(sameTitle(list, '  фРИРЕН ').map((each) => each.id)).toEqual(['a'])
+    expect(sameTitle([entry({ id: 'e', title: 'Тёмный рыцарь' })], 'темный  рыцарь')).toHaveLength(1)
+  })
+
+  it('новое название — совпадений нет', () => {
+    expect(sameTitle(list, 'Монстр')).toEqual([])
+  })
+
+  it('оригинальное название не сравнивается', () => {
+    expect(sameTitle(list, 'Sousou no Frieren')).toEqual([])
+  })
+
+  it('надгробия не в счёт', () => {
+    expect(sameTitle([list[2]!], 'Фрирен')).toEqual([])
+  })
+
+  it('правимая запись о себе не предупреждает', () => {
+    expect(sameTitle(list, 'Фрирен', 'a')).toEqual([])
+  })
+
+  it('пустое название ни с чем не совпадает', () => {
+    expect(sameTitle([entry({ title: '' })], '  ')).toEqual([])
   })
 })
 

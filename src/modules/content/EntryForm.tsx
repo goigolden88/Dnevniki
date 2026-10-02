@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { formatScore, statusLabel, TYPES } from './labels.ts'
-import { parseScore, SCORE_MAX, SCORE_MIN } from './content.ts'
+import { duplicateText, formatScore, statusLabel, TYPES } from './labels.ts'
+import { parseScore, SCORE_MAX, SCORE_MIN, sameTitle } from './content.ts'
 import { currentMonth, type EntryDraft } from './useContent.ts'
 import type { ContentEntry } from '../../app/model.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
@@ -76,11 +76,17 @@ function PrecisionDate({
  */
 export function EntryForm({
   draft,
+  entries,
+  selfId,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   draft: EntryDraft
+  /** Записи, среди которых ищется совпадение названия. */
+  entries: readonly ContentEntry[]
+  /** Правимая запись: о самой себе форма не предупреждает. */
+  selfId?: string
   submitLabel: string
   onSubmit: (draft: EntryDraft) => Promise<void>
   onCancel?: () => void
@@ -93,6 +99,9 @@ export function EntryForm({
   const [end, setEnd] = useState(draft.end)
   const [score, setScore] = useState(draft.score === null ? '' : formatScore(draft.score))
   const [comment, setComment] = useState(draft.comment ?? '')
+
+  // Предупреждение, а не запрет: сохранить можно и с ним.
+  const duplicate = duplicateText(sameTitle(entries, title, selfId))
 
   const showStart = status !== 'planned'
   const showEnd = status === 'done' || status === 'dropped'
@@ -154,6 +163,11 @@ export function EntryForm({
           autoFocus
           onChange={(event) => setTitle(event.target.value)}
         />
+        {duplicate && (
+          <small className="field__warn" role="status">
+            {duplicate}
+          </small>
+        )}
       </label>
 
       <label className="field">

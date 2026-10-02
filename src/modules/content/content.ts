@@ -31,6 +31,7 @@ import {
   type DateStr,
   type Period,
 } from '../../shared/core/dates.ts'
+import { normalize } from '../../shared/core/feed.ts'
 import type { ContentEntry } from '../../app/model.ts'
 
 export type EntryType = ContentEntry['type']
@@ -81,6 +82,25 @@ export function byStartDesc(a: ContentEntry, b: ContentEntry): number {
  */
 export function sortEntries(entries: readonly ContentEntry[]): ContentEntry[] {
   return [...entries].sort(byStartDesc)
+}
+
+/**
+ * Живые записи с тем же названием, что у `title`.
+ *
+ * Регистр, «ё/е» и лишние пробелы не в счёт — приведение то же, что в
+ * поиске ленты. Оригинальное название не сравнивается: «Frieren» и
+ * «Фрирен» человек заведёт под тем, что вспомнилось, и совпадением это
+ * считать нельзя. `exceptId` — правимая запись: о самой себе не предупреждать.
+ * Пустое название ни с чем не совпадает.
+ */
+export function sameTitle(
+  entries: readonly ContentEntry[],
+  title: string,
+  exceptId?: string,
+): ContentEntry[] {
+  const wanted = normalize(title)
+  if (!wanted) return []
+  return live(entries).filter((entry) => entry.id !== exceptId && normalize(entry.title) === wanted)
 }
 
 /** Что смотрю прямо сейчас — для главного экрана и верха вкладки. */

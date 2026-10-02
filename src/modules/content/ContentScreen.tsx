@@ -105,6 +105,7 @@ function NewEntry({ content }: { content: Content }) {
 
   return (
     <EntryForm
+      entries={content.entries}
       draft={{
         type: 'anime',
         title: '',
