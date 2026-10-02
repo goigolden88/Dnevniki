@@ -10,6 +10,7 @@ import {
   monthRanges,
   monthsOf,
   parseScore,
+  sameTitle,
   scoreBucket,
   sortEntries,
   scoreOf,
@@ -151,6 +152,39 @@ describe('watching', () => {
 
   it('надгробия не попадают', () => {
     expect(watching([entry({ status: 'active', deleted: true })])).toHaveLength(0)
+  })
+})
+
+describe('sameTitle', () => {
+  const all = [
+    entry({ id: 'ёлки', title: 'Ёлки  Палки', titleOrig: 'Yolki' }),
+    entry({ id: 'фрирен', title: 'Фрирен' }),
+  ]
+  const ids = (title: string, except: string | null = null) =>
+    sameTitle(all, title, except).map((each) => each.id)
+
+  it('регистр, «ё» и лишние пробелы не в счёт', () => {
+    expect(ids('  елки палки ')).toEqual(['ёлки'])
+    expect(ids('ФРИРЕН')).toEqual(['фрирен'])
+  })
+
+  it('новое название — совпадений нет', () => {
+    expect(ids('Фрирен 2')).toEqual([])
+    expect(ids('')).toEqual([])
+    expect(ids('   ')).toEqual([])
+  })
+
+  it('оригинальное название не сравнивается', () => {
+    expect(ids('Yolki')).toEqual([])
+  })
+
+  it('правка не совпадает сама с собой', () => {
+    expect(ids('Фрирен', 'фрирен')).toEqual([])
+    expect(ids('Фрирен', 'ёлки')).toEqual(['фрирен'])
+  })
+
+  it('надгробия не в счёт', () => {
+    expect(sameTitle([entry({ title: 'Фрирен', deleted: true })], 'Фрирен')).toEqual([])
   })
 })
 

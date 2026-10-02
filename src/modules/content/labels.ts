@@ -63,6 +63,18 @@ export function statusLabel(status: ContentEntry['status']): string {
 }
 
 /**
+ * Предупреждение под названием: такая запись уже есть (`sameTitle`).
+ *
+ * Предупреждение, а не запрет: пересмотр — законная вторая запись.
+ * Пусто — совпадений нет, и говорить не о чем.
+ */
+export function sameTitleText(twins: readonly ContentEntry[]): string {
+  if (twins.length === 0) return ''
+  const list = twins.map((each) => `«${each.title}» — ${statusLabel(each.status)}`).join(', ')
+  return `Уже есть: ${list}`
+}
+
+/**
  * Оценка на экран: «7», «7,5».
  *
  * Десятичная запятая, а не точка, — по-русски пишут так. Целая оценка

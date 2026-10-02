@@ -61,6 +61,8 @@ export function EntryCard({
             score: entry.score,
             ...(entry.comment === undefined ? {} : { comment: entry.comment }),
           }}
+          entries={content.entries}
+          self={entry.id}
           submitLabel="Сохранить"
           onCancel={() => setEditing(false)}
           onSubmit={async (draft) => {

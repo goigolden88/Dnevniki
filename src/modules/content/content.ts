@@ -31,6 +31,7 @@ import {
   type DateStr,
   type Period,
 } from '../../shared/core/dates.ts'
+import { normalize } from '../../shared/core/feed.ts'
 import type { ContentEntry } from '../../app/model.ts'
 
 export type EntryType = ContentEntry['type']
@@ -86,6 +87,26 @@ export function sortEntries(entries: readonly ContentEntry[]): ContentEntry[] {
 /** Что смотрю прямо сейчас — для главного экрана и верха вкладки. */
 export function watching(entries: readonly ContentEntry[]): ContentEntry[] {
   return sortEntries(live(entries).filter((entry) => entry.status === 'active'))
+}
+
+/**
+ * Записи с тем же названием — чтобы не завести одно и то же дважды.
+ *
+ * Название сравнивается так же, как в поиске ленты: регистр, «ё» и лишние
+ * пробелы не в счёт. Оригинальное название не сравнивается: его вписывают
+ * не всегда и по-разному. `except` — запись, которую правят: сама с собой
+ * она не совпадает.
+ */
+export function sameTitle(
+  entries: readonly ContentEntry[],
+  title: string,
+  except: string | null = null,
+): ContentEntry[] {
+  const needle = normalize(title)
+  if (!needle) return []
+  return sortEntries(
+    live(entries).filter((entry) => entry.id !== except && normalize(entry.title) === needle),
+  )
 }
 
 // ─── Зависшее в «смотрю» (Р-58) ────────────────────────────────────────────

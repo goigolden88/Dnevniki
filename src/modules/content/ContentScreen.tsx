@@ -113,6 +113,7 @@ function NewEntry({ content }: { content: Content }) {
         status: 'active',
         score: null,
       }}
+      entries={content.entries}
       submitLabel="Добавить"
       onCancel={() => setOpen(false)}
       onSubmit={async (draft) => {

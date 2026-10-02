@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
-import { formatScore, statusLabel, TYPES } from './labels.ts'
-import { parseScore, SCORE_MAX, SCORE_MIN } from './content.ts'
+import { formatScore, sameTitleText, statusLabel, TYPES } from './labels.ts'
+import { parseScore, sameTitle, SCORE_MAX, SCORE_MIN } from './content.ts'
 import { currentMonth, type EntryDraft } from './useContent.ts'
 import type { ContentEntry } from '../../app/model.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
@@ -76,11 +76,17 @@ function PrecisionDate({
  */
 export function EntryForm({
   draft,
+  entries,
+  self = null,
   submitLabel,
   onSubmit,
   onCancel,
 }: {
   draft: EntryDraft
+  /** Все записи — для предупреждения о том же названии. */
+  entries: readonly ContentEntry[]
+  /** Id записи, которую правят: о ней самой не предупреждать. */
+  self?: string | null
   submitLabel: string
   onSubmit: (draft: EntryDraft) => Promise<void>
   onCancel?: () => void
@@ -96,6 +102,7 @@ export function EntryForm({
 
   const showStart = status !== 'planned'
   const showEnd = status === 'done' || status === 'dropped'
+  const twins = sameTitleText(sameTitle(entries, title, self))
 
   /**
    * Смена статуса чинит дату, а не оставляет её в противоречии.
@@ -154,6 +161,8 @@ export function EntryForm({
           autoFocus
           onChange={(event) => setTitle(event.target.value)}
         />
+        {/* Предупреждение, а не запрет: кнопка остаётся рабочей. */}
+        {twins && <span role="status">{twins}</span>}
       </label>
 
       <label className="field">

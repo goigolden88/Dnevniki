@@ -8,6 +8,7 @@ import {
   monthsText,
   peakMonthText,
   periodText,
+  sameTitleText,
   staleNotice,
   staleText,
   startedText,
@@ -33,6 +34,24 @@ function entry(over: Partial<ContentEntry> = {}): ContentEntry {
     ...over,
   }
 }
+
+describe('sameTitleText', () => {
+  it('совпадений нет — пусто', () => {
+    expect(sameTitleText([])).toBe('')
+  })
+
+  it('называет запись и её состояние', () => {
+    expect(sameTitleText([entry({ title: 'Фрирен', status: 'planned' })])).toBe(
+      'Уже есть: «Фрирен» — к просмотру',
+    )
+    expect(
+      sameTitleText([
+        entry({ title: 'Фрирен', status: 'done' }),
+        entry({ title: 'фрирен', status: 'dropped' }),
+      ]),
+    ).toBe('Уже есть: «Фрирен» — просмотрено, «фрирен» — брошено')
+  })
+})
 
 describe('«Ещё смотришь?» — Р-58', () => {
   it('строка на карточке', () => {
