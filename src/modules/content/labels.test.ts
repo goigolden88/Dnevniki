@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   averageText,
+  duplicateText,
   entriesText,
   entryText,
   formatScore,
@@ -33,6 +34,27 @@ function entry(over: Partial<ContentEntry> = {}): ContentEntry {
     ...over,
   }
 }
+
+describe('duplicateText', () => {
+  it('нет совпадений — пусто', () => {
+    expect(duplicateText([])).toBe('')
+  })
+
+  it('называет запись и её состояние', () => {
+    const text = duplicateText([entry({ title: 'Фрирен', status: 'planned' })])
+    expect(text).toBe('Такая запись уже есть: «Фрирен» — аниме, к просмотру.')
+  })
+
+  it('несколько записей — списком', () => {
+    const text = duplicateText([
+      entry({ title: 'Фрирен', status: 'done' }),
+      entry({ id: 'c2', title: 'фрирен', type: 'series', status: 'dropped' }),
+    ])
+    expect(text).toBe(
+      'Такие записи уже есть: «Фрирен» — аниме, просмотрено; «фрирен» — сериал, брошено.',
+    )
+  })
+})
 
 describe('«Ещё смотришь?» — Р-58', () => {
   it('строка на карточке', () => {

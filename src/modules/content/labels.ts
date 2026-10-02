@@ -63,6 +63,20 @@ export function statusLabel(status: ContentEntry['status']): string {
 }
 
 /**
+ * Предупреждение под названием: такая запись уже есть. Пусто — совпадений нет.
+ *
+ * Называет, какая запись и в каком она состоянии: по одному «уже есть»
+ * не понять, дубль это или другой сезон. Запрета нет — это предупреждение.
+ */
+export function duplicateText(found: readonly ContentEntry[]): string {
+  if (found.length === 0) return ''
+  const list = found
+    .map((entry) => `«${entry.title}» — ${typeLabel(entry.type).toLowerCase()}, ${statusLabel(entry.status)}`)
+    .join('; ')
+  return found.length === 1 ? `Такая запись уже есть: ${list}.` : `Такие записи уже есть: ${list}.`
+}
+
+/**
  * Оценка на экран: «7», «7,5».
  *
  * Десятичная запятая, а не точка, — по-русски пишут так. Целая оценка
