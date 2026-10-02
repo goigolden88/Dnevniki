@@ -18,6 +18,7 @@ import {
   staleDays,
   staleWatching,
   startOf,
+  statusForMonth,
   watching,
   yearsOf,
 } from './content.ts'
@@ -413,6 +414,36 @@ describe('keepAvailable', () => {
 
   it('порядок выбора сохраняется', () => {
     expect(keepAvailable([5, 3], [3, 5])).toEqual([5, 3])
+  })
+})
+
+describe('statusForMonth', () => {
+  const all = [
+    entry({ id: '1', start: '2026-04', status: 'done' }),
+    entry({ id: '2', start: '2026-04-12', status: 'dropped' }),
+    entry({ id: '3', start: '2026-05', status: 'dropped' }),
+    entry({ id: '4', start: '2026-06', status: 'active', score: null }),
+    entry({ id: '5', start: '2025-07', status: 'done' }),
+    entry({ id: '6', start: '2026-08', status: 'done', deleted: true }),
+  ]
+
+  it('нынешний статус остаётся, если месяцу есть что показать', () => {
+    expect(statusForMonth(all, '2026', 4, 'dropped')).toBe('dropped')
+    expect(statusForMonth(all, '2026', 4, 'done')).toBe('done')
+  })
+
+  it('пусто у нынешнего — первый статус, у которого есть', () => {
+    expect(statusForMonth(all, '2026', 5, 'done')).toBe('dropped')
+  })
+
+  it('с «к просмотру» уходит на статус с датой: у намерений периода нет', () => {
+    expect(statusForMonth(all, '2026', 4, 'planned')).toBe('done')
+  })
+
+  it('только «смотрю», чужой год, надгробие — показать нечего', () => {
+    expect(statusForMonth(all, '2026', 6, 'done')).toBeNull()
+    expect(statusForMonth(all, '2026', 7, 'done')).toBeNull()
+    expect(statusForMonth(all, '2026', 8, 'done')).toBeNull()
   })
 })
 

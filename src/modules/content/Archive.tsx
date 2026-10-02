@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { MONTHS_SHORT, today } from '../../shared/core/dates.ts'
 import {
   filterEntries,
@@ -8,6 +8,7 @@ import {
   monthsOf,
   sortEntries,
   startOf,
+  statusForMonth,
   yearsOf,
   type EntryStatus,
   type EntryType,
@@ -39,6 +40,14 @@ type Period = {
   months: number[]
 }
 
+/** Месяц, выбранный тапом по столбику «Итогов». */
+export type MonthJump = {
+  /** `YYYY`. */
+  year: string
+  /** 1..12. */
+  month: number
+}
+
 /**
  * Статусы отдельными переключателями.
  *
@@ -64,11 +73,17 @@ export function Archive({
   entries,
   content,
   focus = null,
+  jump = null,
+  onJumped,
 }: {
   entries: ContentEntry[]
   content: Content
   /** Запись, к которой пришли из ленты (Р-56). Активная живёт выше, не здесь. */
   focus?: ContentEntry | null
+  /** Месяц из «Итогов»: выставить его периодом и доехать сюда. */
+  jump?: MonthJump | null
+  /** Месяц выставлен — тот, кто его прислал, может о нём забыть. */
+  onJumped?: () => void
 }) {
   const years = yearsOf(entries)
   const thisYear = today().slice(0, 4)
@@ -88,6 +103,38 @@ export function Archive({
   })
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+
+  // Доехать до блока после тапа по месяцу. Свёрнутый блок разворачивается
+  // уже после того, как месяц выставлен, — тогда якорь появится позже,
+  // и прокрутка случится в момент его появления.
+  const anchor = useRef<HTMLDivElement | null>(null)
+  const scrollPending = useRef(false)
+  const scrollIfPending = useCallback(() => {
+    if (!scrollPending.current || anchor.current === null) return
+    scrollPending.current = false
+    anchor.current.closest('section')?.scrollIntoView({ block: 'start' })
+  }, [])
+  const setAnchor = useCallback(
+    (node: HTMLDivElement | null) => {
+      anchor.current = node
+      scrollIfPending()
+    },
+    [scrollIfPending],
+  )
+
+  // Тап по месяцу в «Итогах» — тот же отбор, что «Выбрать период» → год
+  // и месяц. Тип и поиск не трогаются: ручной выбор периода их тоже не
+  // сбрасывает. Статус меняется, только если в нынешнем месяцу показать нечего.
+  useEffect(() => {
+    if (jump === null) return
+    setStatus(statusForMonth(entries, jump.year, jump.month, status) ?? status)
+    setPeriod({ year: jump.year, months: [jump.month] })
+    setOpen(true)
+    scrollPending.current = true
+    scrollIfPending()
+    onJumped?.()
+    // Срабатывает на сам тап, а не на смену списка или статуса.
+  }, [jump])
 
   // У намерений даты нет по определению (Р-21), как и у записей с испорченной
   // датой. Выбор периода над ними — переключатель, которому нечего переключать.
@@ -161,10 +208,10 @@ export function Archive({
       id="content:archive"
       title="Записи"
       summary={entries.filter((entry) => entry.status !== 'active').length}
-      reveal={target !== null}
+      reveal={target !== null || jump !== null}
     >
 
-      <div className="chips">
+      <div className="chips" ref={setAnchor}>
         {TABS.map((each) => (
           <button
             key={each}

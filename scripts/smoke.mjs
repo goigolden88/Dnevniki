@@ -564,14 +564,16 @@ async function scenario() {
 
   await act(`byText('button', 'Выбрать период')?.click()`)
   await sleep(400)
-  await act(`byText('button', '${otherChip}')?.click()`)
+  // Чип, а не любая кнопка: столбики месяцев в «Итогах» — тоже кнопки
+  // с теми же сокращениями, и стоят они выше.
+  await act(`byText('button.chip', '${otherChip}')?.click()`)
   await sleep(500)
   const twoPicked = await screen()
   const inTwo = await run(`document.querySelectorAll('.cycles li').length`)
   check('месяцы отмечаются несколькими', inTwo === 2, `карточек ${inTwo}`)
   check('и период назван словами', has(twoPicked, bothText), line(twoPicked, 'Показано'))
 
-  await act(`byText('button', '${thisChip}')?.click()`)
+  await act(`byText('button.chip', '${thisChip}')?.click()`)
   await sleep(500)
   const onlyMarch = await screen()
   const inMarch = await run(`document.querySelectorAll('.cycles li').length`)
@@ -582,6 +584,23 @@ async function scenario() {
   await sleep(500)
   const wholeYear = await run(`document.querySelectorAll('.cycles li').length`)
   check('«все месяцы» возвращают обе записи', wholeYear === 2, `карточек ${wholeYear}`)
+
+  // Столбик месяца в «Итогах» — тот же отбор, что выбор месяца руками.
+  // Нажимаются только месяцы, где «Записям» есть что показать.
+  const bars = await run(`document.querySelectorAll('.months button').length`)
+  check('в «Итогах» нажимаются только месяцы с записями', bars === 2, `столбиков-кнопок ${bars}`)
+  await act(`byText('button.months__cell', '${otherChip}')?.click()`)
+  await sleep(500)
+  const byBar = await screen()
+  const inBar = await run(`document.querySelectorAll('.cycles li').length`)
+  check('тап по столбику месяца отбирает его в «Записях»', inBar === 1, `карточек ${inBar}`)
+  check(
+    'и период назван, как при выборе руками',
+    has(byBar, 'Второй фильм') && has(byBar, `${thisYear}, ${otherChip}`),
+    line(byBar, 'Показано'),
+  )
+  await act(`byText('button', 'Все месяцы')?.click()`)
+  await sleep(500)
 
   await act(`byText('button', 'брошено')?.click()`)
   await sleep(500)

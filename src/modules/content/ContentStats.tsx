@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { MONTHS_SHORT } from '../../shared/core/dates.ts'
-import { contentStats, scoreOf, SCORE_MIN, yearsOf } from './content.ts'
+import { contentStats, scoreOf, SCORE_MIN, statusForMonth, yearsOf } from './content.ts'
 import {
   averageText,
   formatScore,
+  monthHeading,
   peakMonthText,
   startedText,
   typeCountText,
@@ -24,7 +25,14 @@ const ALL = 'всё время'
  * и половина из них аниме» стоит. Числа считает `contentStats`, здесь
  * только выбор периода и подача.
  */
-export function ContentStats({ entries }: { entries: ContentEntry[] }) {
+export function ContentStats({
+  entries,
+  onMonth,
+}: {
+  entries: ContentEntry[]
+  /** Тап по столбику месяца выбранного года. */
+  onMonth?: (year: string, month: number) => void
+}) {
   const years = yearsOf(entries)
   const [year, setYear] = useState<string>(years[0] ?? ALL)
 
@@ -80,17 +88,48 @@ export function ContentStats({ entries }: { entries: ContentEntry[] }) {
 
           {/* По месяцам: когда смотрел больше. За год это лента года,
               за «всё время» — в какие месяцы смотрится вообще больше.
-              Тот же приём, что у сезонности болезней. */}
-          <div className="months" aria-hidden="true">
-            {stats.byMonth.map((count, index) => (
-              <div className="months__cell" key={MONTHS_SHORT[index]} title={`${count}`}>
+              Тот же приём, что у сезонности болезней.
+              За год столбик ведёт в «Записи» этого месяца. За «всё время»
+              не ведёт: месяц любого года — не период (Р-47). */}
+          <div className="months" aria-hidden={year === ALL}>
+            {stats.byMonth.map((count, index) => {
+              const month = index + 1
+              const bar = (
+                <>
+                  <div
+                    className="months__bar"
+                    style={{ height: `${(count / peakMonth) * 100}%` }}
+                  />
+                  <span className="months__name">{MONTHS_SHORT[index]}</span>
+                </>
+              )
+              const linked =
+                year !== ALL &&
+                onMonth !== undefined &&
+                statusForMonth(entries, year, month, 'done') !== null
+
+              return linked ? (
+                <button
+                  type="button"
+                  className="months__cell months__cell--link"
+                  key={MONTHS_SHORT[index]}
+                  title={`${count}`}
+                  aria-label={`Записи: ${monthHeading(`${year}-${String(month).padStart(2, '0')}`)}`}
+                  onClick={() => onMonth(year, month)}
+                >
+                  {bar}
+                </button>
+              ) : (
                 <div
-                  className="months__bar"
-                  style={{ height: `${(count / peakMonth) * 100}%` }}
-                />
-                <span className="months__name">{MONTHS_SHORT[index]}</span>
-              </div>
-            ))}
+                  className="months__cell"
+                  key={MONTHS_SHORT[index]}
+                  title={`${count}`}
+                  aria-hidden="true"
+                >
+                  {bar}
+                </div>
+              )
+            })}
           </div>
           {peakMonthText(stats) && <p className="muted">{peakMonthText(stats)}.</p>}
 
