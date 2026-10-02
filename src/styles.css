@@ -449,6 +449,21 @@
   gap: 3px;
 }
 
+/* Столбик, который нажимается: тот же вид, что у картинки, без рамки кнопки. */
+.months__cell--tap {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.months__cell--tap:active .months__bar {
+  opacity: 0.6;
+}
+
 .months__bar {
   width: 100%;
   min-height: 2px;

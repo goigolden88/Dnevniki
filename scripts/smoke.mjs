@@ -564,14 +564,17 @@ async function scenario() {
 
   await act(`byText('button', 'Выбрать период')?.click()`)
   await sleep(400)
-  await act(`byText('button', '${otherChip}')?.click()`)
+  // Чип месяца — в ряду «Записей»: такое же название стоит и на столбиках «Итогов».
+  const archiveChip = (chip) =>
+    `;[...document.querySelectorAll('.chips--nested button')].find((el) => el.textContent.trim() === '${chip}')?.click()`
+  await act(archiveChip(otherChip))
   await sleep(500)
   const twoPicked = await screen()
   const inTwo = await run(`document.querySelectorAll('.cycles li').length`)
   check('месяцы отмечаются несколькими', inTwo === 2, `карточек ${inTwo}`)
   check('и период назван словами', has(twoPicked, bothText), line(twoPicked, 'Показано'))
 
-  await act(`byText('button', '${thisChip}')?.click()`)
+  await act(archiveChip(thisChip))
   await sleep(500)
   const onlyMarch = await screen()
   const inMarch = await run(`document.querySelectorAll('.cycles li').length`)
@@ -582,6 +585,23 @@ async function scenario() {
   await sleep(500)
   const wholeYear = await run(`document.querySelectorAll('.cycles li').length`)
   check('«все месяцы» возвращают обе записи', wholeYear === 2, `карточек ${wholeYear}`)
+
+  // Столбик месяца в «Итогах» ведёт в «Записи» на этот месяц. Нажимаются
+  // только столбики с записями: в году их два.
+  const tappable = await run(`document.querySelectorAll('.months button').length`)
+  check('в году с записями нажимаются только столбики с записями', tappable === 2, `нажимаемых ${tappable}`)
+  await act(
+    `;[...document.querySelectorAll('.months button')].find((el) => el.textContent.trim() === '${otherChip}')?.click()`,
+  )
+  await sleep(600)
+  const byBar = await screen()
+  const inBar = await run(`document.querySelectorAll('.cycles li').length`)
+  check('тап по столбику месяца оставляет записи этого месяца', inBar === 1, `карточек ${inBar}`)
+  check(
+    'и период назван, как при ручном выборе',
+    has(byBar, 'Второй фильм') && has(byBar, `${thisYear}, ${otherChip}`),
+    line(byBar, 'Показано'),
+  )
 
   await act(`byText('button', 'брошено')?.click()`)
   await sleep(500)

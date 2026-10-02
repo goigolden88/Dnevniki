@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { MONTHS_SHORT, today } from '../../shared/core/dates.ts'
 import {
   filterEntries,
@@ -30,6 +30,9 @@ const ALL_YEARS = 'всё время'
  * только если такие записи есть.
  */
 const UNDATED = 'без даты'
+
+/** Тап по столбику месяца в «Итогах». `n` растёт с каждым тапом — по нему список заводится заново. */
+export type MonthJump = { n: number; year: string; month: number }
 
 /** Что выбрано в периоде. Год и месяцы связаны, и живут они вместе. */
 type Period = {
@@ -64,23 +67,34 @@ export function Archive({
   entries,
   content,
   focus = null,
+  jump = null,
 }: {
   entries: ContentEntry[]
   content: Content
   /** Запись, к которой пришли из ленты (Р-56). Активная живёт выше, не здесь. */
   focus?: ContentEntry | null
+  /**
+   * Месяц, на который нажали в «Итогах». Читается один раз, при заведении:
+   * экран меняет ключ списка на каждый тап, и фильтры встают заново.
+   */
+  jump?: MonthJump | null
 }) {
   const years = yearsOf(entries)
   const thisYear = today().slice(0, 4)
   const thisMonth = Number(today().slice(5, 7))
-  const target = focus !== null && focus.status !== 'active' ? focus : null
+  // Тап по месяцу главнее записи, к которой пришли раньше: он позже.
+  const target = jump === null && focus !== null && focus.status !== 'active' ? focus : null
 
-  const [status, setStatus] = useState<EntryStatus>(target ? target.status : 'done')
+  const [status, setStatus] = useState<EntryStatus>(() => {
+    if (jump !== null) return statusOfMonth(entries, jump)
+    return target ? target.status : 'done'
+  })
   const [type, setType] = useState<EntryType | null>(null)
   // Свежий год по умолчанию — то же, что в «Итогах». Иначе при появлении
   // второго года экран открывался бы сразу обоими, и чем дальше, тем длиннее.
   // Пришли к записи — год её, иначе она окажется за фильтром.
   const [period, setPeriod] = useState<Period>(() => {
+    if (jump !== null) return { year: jump.year, months: [jump.month] }
     const fallback = { year: years[0] ?? ALL_YEARS, months: [] }
     if (!target || target.status === 'planned') return fallback
     const start = startOf(target)
@@ -88,6 +102,16 @@ export function Archive({
   })
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
+
+  // К «Записям» после тапа по месяцу: развернуть блок и доехать до него.
+  // Раскрытие — один раз: пока оно включено, блок не свернуть обратно.
+  const root = useRef<HTMLDivElement>(null)
+  const [arriving, setArriving] = useState(jump !== null)
+  useEffect(() => {
+    if (jump === null) return
+    root.current?.scrollIntoView({ block: 'start' })
+    setArriving(false)
+  }, [jump])
 
   // У намерений даты нет по определению (Р-21), как и у записей с испорченной
   // датой. Выбор периода над ними — переключатель, которому нечего переключать.
@@ -157,11 +181,12 @@ export function Archive({
   const adjustable = periods.length > 2 || months.length > 1
 
   return (
+    <div ref={root}>
     <Fold
       id="content:archive"
       title="Записи"
       summary={entries.filter((entry) => entry.status !== 'active').length}
-      reveal={target !== null}
+      reveal={target !== null || arriving}
     >
 
       <div className="chips">
@@ -321,5 +346,25 @@ export function Archive({
         </>
       )}
     </Fold>
+    </div>
   )
+}
+
+/**
+ * Статус, под которым открыть месяц после тапа в «Итогах».
+ *
+ * Столбик считает записи любого статуса, а в списке они разведены по
+ * переключателям: открыть «просмотрено», когда весь месяц брошен, значило бы
+ * показать пустоту там, где столбик обещал записи. Первый из переключателей,
+ * где в месяце что-то есть; ничего нет (месяц целиком из «смотрю», они стоят
+ * блоком выше) — «просмотрено», как по умолчанию.
+ */
+function statusOfMonth(entries: ContentEntry[], jump: MonthJump): EntryStatus {
+  const found = TABS.find((each) =>
+    monthsOf(
+      entries.filter((entry) => entry.status === each),
+      jump.year,
+    ).includes(jump.month),
+  )
+  return found ?? 'done'
 }
