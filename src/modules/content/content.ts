@@ -306,6 +306,36 @@ export function keepAvailable(
 }
 
 /**
+ * Статусы, у которых в «Записях» есть выбор периода. «Смотрю» стоит
+ * блоком над ними, у «к просмотру» даты нет (Р-21).
+ */
+export const DATED_STATUSES: readonly EntryStatus[] = ['done', 'dropped']
+
+/**
+ * С каким статусом открыть «Записи» на месяце, выбранном в «Итогах».
+ *
+ * Нынешний, если в этом месяце для него что-то есть: его выбрал человек,
+ * и перескакивать незачем. Иначе — первый, у которого есть. Null — в
+ * «Записях» месяцу показать нечего: в нём ничего не начато либо всё ещё
+ * «смотрю». Тогда и столбик не нажимается — тап вёл бы к пустому списку.
+ */
+export function statusForMonth(
+  entries: readonly ContentEntry[],
+  year: string,
+  month: number,
+  current: EntryStatus,
+): EntryStatus | null {
+  const there = live(entries).filter((entry) => {
+    const start = startOf(entry)
+    return start !== null && start.slice(0, 4) === year && Number(start.slice(5, 7)) === month
+  })
+  const has = (status: EntryStatus) => there.some((entry) => entry.status === status)
+
+  if (DATED_STATUSES.includes(current) && has(current)) return current
+  return DATED_STATUSES.find(has) ?? null
+}
+
+/**
  * Сплошные отрезки в наборе месяцев: `[1,2,3,5]` → `[[1,3],[5,5]]`.
  *
  * Ради подписи: «янв–мар, май» короче и читается лучше, чем
