@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Fold } from '../../shared/ui/Fold.tsx'
 import { watching } from './content.ts'
-import { Archive } from './Archive.tsx'
+import { Archive, type MonthJump } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'
 import { EntryCard } from './EntryCard.tsx'
 import { EntryForm } from './EntryForm.tsx'
@@ -29,6 +29,9 @@ export function ContentScreen() {
   // её и прокрутить к ней. Список сам подстраивается под её статус и год.
   const [params] = useSearchParams()
   const focusId = params.get('open')
+  // Месяц, по столбику которого тапнули в «Итогах»: «Записи» выставляют
+  // его периодом и сбрасывают сюда null — следующий тап снова новость.
+  const [jump, setJump] = useState<MonthJump | null>(null)
 
   if (content.status === 'loading') return <p className="muted">Открываю базу…</p>
   if (content.status === 'failed') {
@@ -77,10 +80,20 @@ export function ContentScreen() {
 
       <NewEntry content={content} />
 
-      <ContentStats entries={content.entries} />
+      <ContentStats
+        entries={content.entries}
+        onMonth={(year, month) => setJump({ year, month })}
+      />
 
       {/* Ключ по записи: переход к другой записи заново выставляет фильтры. */}
-      <Archive key={focus?.id ?? ''} entries={content.entries} content={content} focus={focus} />
+      <Archive
+        key={focus?.id ?? ''}
+        entries={content.entries}
+        content={content}
+        focus={focus}
+        jump={jump}
+        onJumped={() => setJump(null)}
+      />
     </>
   )
 }
