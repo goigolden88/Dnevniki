@@ -474,6 +474,84 @@ async function scenario() {
   const summary = await screen()
   check('сводка для врача собирается', has(summary, 'Хронология'))
 
+  // Правка тренировки и измерения: тап по записи — та же форма, запись та же.
+  await go('/health')
+  await unfold('Тренировки')
+  await act(`byText('button', 'Записать тренировку')?.click()`)
+  await sleep(300)
+  await act(`
+    const form = document.querySelector('input[placeholder="бег, зал, растяжка"]').closest('form')
+    set(form.querySelector('input[placeholder="бег, зал, растяжка"]'), 'бег')
+    set(form.querySelector('input[placeholder="мин"]'), '30')
+    set(form.querySelector('textarea'), 'тяжело')
+    form.querySelector('button[type=submit]').click()
+  `)
+  await sleep(800)
+  await unfold('Последние записи')
+  await act(`const row = [...document.querySelectorAll('tr.tap')].find((el) => el.textContent.includes('30 мин'))
+    row?.click()`)
+  await sleep(400)
+  const filled = await run(`JSON.stringify((() => {
+    const form = document.querySelector('td form')
+    return {
+      kind: form?.querySelector('input[placeholder="бег, зал, растяжка"]')?.value,
+      minutes: form?.querySelector('input[placeholder="мин"]')?.value,
+      note: form?.querySelector('textarea')?.value,
+    }
+  })())`)
+  check(
+    'тап по тренировке открывает форму с её значениями',
+    filled === JSON.stringify({ kind: 'бег', minutes: '30', note: 'тяжело' }),
+    filled,
+  )
+  await act(`
+    const form = document.querySelector('td form')
+    set(form.querySelector('input[placeholder="мин"]'), '45')
+    set(form.querySelector('textarea'), 'полегче')
+    byText('button', 'Сохранить')?.click()
+  `)
+  await sleep(800)
+  const trained = await screen()
+  check(
+    'поправленная тренировка — новые значения, свод пересчитан',
+    has(trained, 'полегче') && !has(trained, 'тяжело') && has(trained, '1 раз') && has(trained, '45 мин') && !has(trained, '30 мин'),
+    line(trained, 'раз'),
+  )
+
+  await unfold('Измерения')
+  await act(`
+    const input = document.querySelector('input[placeholder="кг"]')
+    set(input, '80')
+    input.closest('form').querySelector('button[type=submit]').click()
+  `)
+  await sleep(800)
+  await act(`const row = [...document.querySelectorAll('tr.tap')].find((el) => el.textContent.includes('80 кг'))
+    row?.click()`)
+  await sleep(400)
+  const weighed = await run(`document.querySelector('td form input[placeholder="кг"]')?.value ?? ''`)
+  await act(`
+    const form = document.querySelector('td form')
+    set(form.querySelector('input[placeholder="кг"]'), '78,5')
+    byText('button', 'Сохранить')?.click()
+  `)
+  await sleep(800)
+  const measured = await screen()
+  check(
+    'поправленное измерение — «Сейчас» с новым значением',
+    weighed === '80' && has(measured, 'Сейчас 78.5 кг') && !has(measured, '80 кг'),
+    `в форме было ${weighed}; ${line(measured, 'Сейчас')}`,
+  )
+
+  await go('/feed')
+  const feedRows = (text) =>
+    act(`set(document.querySelector('.search'), ${JSON.stringify(text)})`)
+      .then(() => sleep(400))
+      .then(() => run(`document.querySelectorAll('.feed li').length`))
+  const edited = await feedRows('полегче')
+  const stale = await feedRows('тяжело')
+  await act(`set(document.querySelector('.search'), '')`)
+  check('в ленте поправленная тренировка одна, без дубля', edited === 1 && stale === 0, `«полегче» ${edited}, «тяжело» ${stale}`)
+
   // ─ Контент
   await go('/content')
   check('экран контента открылся', has(await screen(), 'Контент'))

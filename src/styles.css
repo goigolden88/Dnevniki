@@ -46,6 +46,12 @@
   padding-left: 12px;
 }
 
+/* Строка, которая по тапу открывает правку. */
+.stats .tap {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .facts {
   display: grid;
   grid-template-columns: auto 1fr;
@@ -590,6 +596,18 @@
 .feed__kind {
   flex: none;
   font-size: 12px;
+}
+
+/* «Год назад» на «Сейчас»: блок — одна ссылка в ленту, строки внутри неё. */
+.year-ago {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.year-ago .feed {
+  margin: 4px 0;
 }
 
 .search {

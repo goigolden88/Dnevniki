@@ -1,11 +1,12 @@
-import { useState, type FormEvent } from 'react'
+import { Fragment, useState, type FormEvent } from 'react'
 import { formatDate, formatDateLoose, today } from '../../shared/core/dates.ts'
+import type { Measure } from '../../app/model.ts'
 import { metricsOf, resolveMetric, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
 import { Fold } from '../../shared/ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
-import type { Health } from './useHealth.ts'
+import type { Health, MeasureDraft } from './useHealth.ts'
 
 /**
  * Измерения: ряд с графиком и ввод.
@@ -23,6 +24,8 @@ export function Measures({ health }: { health: Health }) {
   const [metric, setMetric] = useState<string>(all[0] ?? 'weight')
   const [naming, setNaming] = useState(false)
   const [newName, setNewName] = useState('')
+  /** Какая из последних записей открыта на правку. */
+  const [editing, setEditing] = useState<string | null>(null)
   // Только что выбранная своя метрика ещё без единого значения — в ряду
   // её нет, а показать выбранное надо.
   const shown = all.includes(metric) ? all : [...all, metric]
@@ -103,24 +106,51 @@ export function Measures({ health }: { health: Health }) {
       {recent.length > 0 && (
         <table className="stats">
           <tbody>
-            {recent.map((measure) => (
-              <tr key={measure.id}>
-                <td>{formatDateLoose(measure.date)}</td>
-                <td className="num">
-                  {measureText(measure.metric, measure.value, measure.value2)}
-                </td>
-                <td className="num">
-                  <button
-                    type="button"
-                    className="link-btn"
-                    onClick={() => void health.removeMeasure(measure.id)}
-                    aria-label={`Удалить измерение ${formatDateLoose(measure.date)}`}
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {recent.map((measure) =>
+              measure.id === editing ? (
+                <tr key={measure.id}>
+                  <td colSpan={3}>
+                    <MeasureForm
+                      metric={measure.metric}
+                      health={health}
+                      measure={measure}
+                      onDone={() => setEditing(null)}
+                    />
+                  </td>
+                </tr>
+              ) : (
+                // Тап по записи — правка, как у тренировки и эпизода.
+                <Fragment key={measure.id}>
+                  <tr className="tap" onClick={() => setEditing(measure.id)}>
+                    <td>{formatDateLoose(measure.date)}</td>
+                    <td className="num">
+                      {measureText(measure.metric, measure.value, measure.value2)}
+                    </td>
+                    <td className="num">
+                      <button
+                        type="button"
+                        className="link-btn"
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          void health.removeMeasure(measure.id)
+                        }}
+                        aria-label={`Удалить измерение ${formatDateLoose(measure.date)}`}
+                      >
+                        ×
+                      </button>
+                    </td>
+                  </tr>
+                  {/* Заметка правится — значит, должна быть видна. */}
+                  {measure.note && (
+                    <tr className="tap" onClick={() => setEditing(measure.id)}>
+                      <td colSpan={3} className="muted">
+                        {measure.note}
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              ),
+            )}
           </tbody>
         </table>
       )}
@@ -132,11 +162,28 @@ function isPreset(metric: string): boolean {
   return METRICS.some((each) => each.key === metric)
 }
 
-/** У давления два числа, у остальных одно. Форма это знает, модель — нет. */
-function MeasureForm({ metric, health }: { metric: string; health: Health }) {
-  const [date, setDate] = useState(today())
-  const [value, setValue] = useState('')
-  const [second, setSecond] = useState('')
+/**
+ * У давления два числа, у остальных одно. Форма это знает, модель — нет.
+ *
+ * Одна на ввод и правку. При правке заполнена значениями записи, и к ним
+ * добавляется заметка — ввод строкой её не спрашивает, а у перенесённых
+ * из дневников измерений она бывает. Метрика при правке не меняется.
+ */
+function MeasureForm({
+  metric,
+  health,
+  measure,
+  onDone,
+}: {
+  metric: string
+  health: Health
+  measure?: Measure
+  onDone?: () => void
+}) {
+  const [date, setDate] = useState(measure?.date ?? today())
+  const [value, setValue] = useState(measure === undefined ? '' : String(measure.value))
+  const [second, setSecond] = useState(measure?.value2 === undefined ? '' : String(measure.value2))
+  const [note, setNote] = useState(measure?.note ?? '')
 
   // Своя метрика пары не имеет: у неё в списке нет записи вовсе.
   const paired = typeof METRICS.find((each) => each.key === metric)?.second === 'string'
@@ -149,18 +196,26 @@ function MeasureForm({ metric, health }: { metric: string; health: Health }) {
     const other = Number(second.replace(',', '.'))
     const hasSecond = paired && second.trim() !== '' && Number.isFinite(other)
 
-    void health.addMeasure({
+    const draft: MeasureDraft = {
       metric,
       date,
       value: first,
       ...(hasSecond ? { value2: other } : {}),
-    })
+      ...(note.trim() ? { note: note.trim() } : {}),
+    }
+
+    if (measure) {
+      void health.updateMeasure(measure.id, draft)
+      onDone?.()
+      return
+    }
+    void health.addMeasure(draft)
     setValue('')
     setSecond('')
   }
 
-  return (
-    <form className="row row--wrap" onSubmit={submit}>
+  const fields = (
+    <>
       <input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
       <TodayButton value={date} onPick={setDate} />
       <input
@@ -179,9 +234,37 @@ function MeasureForm({ metric, health }: { metric: string; health: Health }) {
           onChange={(event) => setSecond(event.target.value)}
         />
       )}
-      <button type="submit" className="btn">
-        Записать
-      </button>
+    </>
+  )
+
+  if (!measure) {
+    return (
+      <form className="row row--wrap" onSubmit={submit}>
+        {fields}
+        <button type="submit" className="btn">
+          Записать
+        </button>
+      </form>
+    )
+  }
+
+  return (
+    <form className="form block" onSubmit={submit}>
+      <div className="row row--wrap">{fields}</div>
+
+      <label className="field">
+        <span>Заметка</span>
+        <textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} />
+      </label>
+
+      <div className="form__actions">
+        <button type="button" className="btn" onClick={onDone}>
+          Отмена
+        </button>
+        <button type="submit" className="btn btn--primary">
+          Сохранить
+        </button>
+      </div>
     </form>
   )
 }

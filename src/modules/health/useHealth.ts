@@ -12,6 +12,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  editedMeasure,
+  editedSession,
   episodeStates,
   openEpisodes,
   renameMetricPlan,
@@ -73,8 +75,12 @@ export type Health = {
   reopenEpisode: (id: string) => Promise<void>
   removeEpisode: (id: string) => Promise<void>
   addMeasure: (draft: MeasureDraft) => Promise<void>
+  /** Поправить измерение: запись та же, поля формы заменяются целиком. */
+  updateMeasure: (id: string, draft: MeasureDraft) => Promise<void>
   removeMeasure: (id: string) => Promise<void>
   addSession: (draft: SessionDraft) => Promise<void>
+  /** Поправить тренировку: запись та же, поля формы заменяются целиком. */
+  updateSession: (id: string, draft: SessionDraft) => Promise<void>
   removeSession: (id: string) => Promise<void>
   /** Id тега по имени. Заводит новый, если такого ещё нет. */
   ensureTag: (name: string, scope: Tag['scope']) => Promise<string | null>
@@ -249,6 +255,23 @@ export function useHealth(): Health {
     [measures, apply],
   )
 
+  const updateMeasure = useCallback(
+    async (id: string, draft: MeasureDraft) => {
+      const previous = measures
+      const current = previous.find((each) => each.id === id)
+      if (!current) return
+
+      const updated: Measure = { ...editedMeasure(current, draft), updatedAt: nowIso() }
+      const saved = await apply(
+        () => setMeasures(previous.map((each) => (each.id === id ? updated : each))),
+        () => setMeasures(previous),
+        () => db.put('measures', updated),
+      )
+      if (saved) setMeasures((all) => all.map((each) => (each.id === saved.id ? saved : each)))
+    },
+    [measures, apply],
+  )
+
   const removeMeasure = useCallback(
     async (id: string) => {
       const previous = measures
@@ -270,6 +293,23 @@ export function useHealth(): Health {
         () => setSessions([...previous, session]),
         () => setSessions(previous),
         () => db.put('sessions', session),
+      )
+      if (saved) setSessions((all) => all.map((each) => (each.id === saved.id ? saved : each)))
+    },
+    [sessions, apply],
+  )
+
+  const updateSession = useCallback(
+    async (id: string, draft: SessionDraft) => {
+      const previous = sessions
+      const current = previous.find((each) => each.id === id)
+      if (!current) return
+
+      const updated: Session = { ...editedSession(current, draft), updatedAt: nowIso() }
+      const saved = await apply(
+        () => setSessions(previous.map((each) => (each.id === id ? updated : each))),
+        () => setSessions(previous),
+        () => db.put('sessions', updated),
       )
       if (saved) setSessions((all) => all.map((each) => (each.id === saved.id ? saved : each)))
     },
@@ -390,8 +430,10 @@ export function useHealth(): Health {
     reopenEpisode,
     removeEpisode,
     addMeasure,
+    updateMeasure,
     removeMeasure,
     addSession,
+    updateSession,
     removeSession,
     ensureTag,
     renameTag,

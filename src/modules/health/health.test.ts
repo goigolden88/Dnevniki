@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   activityTotals,
+  editedMeasure,
+  editedSession,
   episodeState,
   episodeStates,
   healthStats,
@@ -379,6 +381,49 @@ describe('activityTotals', () => {
   it('удалённые и битые даты не считаются', () => {
     const dirty = [...list, session({ id: 'gone', deleted: true }), session({ id: 'bad', date: '?' })]
     expect(activityTotals(dirty)).toHaveLength(2)
+  })
+})
+
+describe('правка измерения и тренировки', () => {
+  it('измерение остаётся той же записью с новыми значениями', () => {
+    const before = measure({ id: 'm7', value: 75, note: 'утром' })
+    const after = editedMeasure(before, { metric: 'weight', date: '2026-09-02', value: 74.2, note: 'натощак' })
+    expect(after).toEqual({
+      id: 'm7',
+      updatedAt: T,
+      metric: 'weight',
+      date: '2026-09-02',
+      value: 74.2,
+      note: 'натощак',
+    })
+  })
+
+  it('стёртые в форме второе значение и заметка пропадают, а не остаются прежними', () => {
+    const before = measure({ metric: 'bp', value: 120, value2: 80, note: 'после бега' })
+    const after = editedMeasure(before, { metric: 'bp', date: before.date, value: 118 })
+    expect(after).not.toHaveProperty('value2')
+    expect(after).not.toHaveProperty('note')
+  })
+
+  it('тренировка: стёртые минуты, километры и заметка пропадают, ссылки остаются', () => {
+    const before = session({ id: 's9', durationMin: 30, distanceKm: 5, note: 'тяжело', refs: ['e1'] })
+    const after = editedSession(before, { activity: 'зал', date: '2026-09-02', durationMin: 45 })
+    expect(after).toEqual({
+      id: 's9',
+      updatedAt: T,
+      activity: 'зал',
+      date: '2026-09-02',
+      durationMin: 45,
+      refs: ['e1'],
+    })
+  })
+
+  it('поправленная тренировка пересчитывает свод, а не прибавляется к нему', () => {
+    const list = [session({ id: 's1', durationMin: 30 }), session({ id: 's2', durationMin: 20 })]
+    const edited = list.map((each) =>
+      each.id === 's1' ? editedSession(each, { activity: 'бег', date: each.date, durationMin: 50 }) : each,
+    )
+    expect(activityTotals(edited)).toEqual([{ activity: 'бег', sessions: 2, minutes: 70, km: 0 }])
   })
 })
 
