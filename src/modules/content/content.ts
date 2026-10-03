@@ -108,6 +108,53 @@ export function watching(entries: readonly ContentEntry[]): ContentEntry[] {
   return sortEntries(live(entries).filter((entry) => entry.status === 'active'))
 }
 
+// ─── «Что посмотреть?» ─────────────────────────────────────────────────────
+
+/** Сколько записей «к просмотру» предлагать за раз. */
+export const SUGGEST_COUNT = 3
+
+/**
+ * Случайный набор из «к просмотру» — ответ на «что посмотреть?».
+ *
+ * Только показ: набор нигде не хранится и не синхронизируется. Записей
+ * меньше `count` — отдаются все. `previous` — набор, показанный до этого:
+ * если записей хватает на другой, повтора не будет. Без этого повторное
+ * нажатие при четырёх записях давало бы тот же набор в каждом четвёртом
+ * случае, и кнопка выглядела бы сломанной.
+ *
+ * `random` — источник случайности, `[0, 1)`; подменяется в тестах.
+ */
+export function suggestPlanned(
+  entries: readonly ContentEntry[],
+  previous: readonly string[] = [],
+  random: () => number = Math.random,
+  count: number = SUGGEST_COUNT,
+): ContentEntry[] {
+  const pool = live(entries).filter((entry) => entry.status === 'planned')
+  const pick = (max: number) => Math.min(Math.floor(random() * max), max - 1)
+
+  // Частичное тасование Фишера — Йетса: первые `taken` мест — выборка.
+  const taken = Math.min(count, pool.length)
+  for (let i = 0; i < taken; i += 1) {
+    const j = i + pick(pool.length - i)
+    const here = pool[i]!
+    pool[i] = pool[j]!
+    pool[j] = here
+  }
+
+  const chosen = pool.slice(0, taken)
+  const rest = pool.slice(taken)
+  const same =
+    rest.length > 0 &&
+    chosen.length === previous.length &&
+    chosen.every((entry) => previous.includes(entry.id))
+  if (same) {
+    // Совпало с прошлым — одна запись меняется на ту, что не показывалась.
+    chosen[pick(chosen.length)] = rest[pick(rest.length)]!
+  }
+  return chosen
+}
+
 // ─── Зависшее в «смотрю» (Р-58) ────────────────────────────────────────────
 
 /** Сколько дней без признаков жизни, прежде чем спросить «Ещё смотришь?». */

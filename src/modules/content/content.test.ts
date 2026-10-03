@@ -19,6 +19,8 @@ import {
   staleWatching,
   startOf,
   statusForMonth,
+  SUGGEST_COUNT,
+  suggestPlanned,
   watching,
   yearsOf,
 } from './content.ts'
@@ -39,6 +41,53 @@ function entry(over: Partial<ContentEntry> = {}): ContentEntry {
     ...over,
   }
 }
+
+describe('«Что посмотреть?»', () => {
+  const planned = (id: string) => entry({ id, title: id, status: 'planned', start: null, score: null })
+  const ids = (list: ContentEntry[]) => list.map((each) => each.id).sort()
+
+  it('только «к просмотру», без удалённых', () => {
+    const list = [
+      planned('a'),
+      planned('b'),
+      entry({ id: 'c', status: 'active' }),
+      entry({ id: 'd', status: 'done' }),
+      entry({ id: 'e', status: 'dropped' }),
+      { ...planned('f'), deleted: true },
+    ]
+    expect(ids(suggestPlanned(list))).toEqual(['a', 'b'])
+  })
+
+  it(`больше ${SUGGEST_COUNT} — ровно ${SUGGEST_COUNT} разных`, () => {
+    const list = ['a', 'b', 'c', 'd', 'e', 'f'].map(planned)
+    for (let run = 0; run < 50; run += 1) {
+      expect(new Set(ids(suggestPlanned(list))).size).toBe(SUGGEST_COUNT)
+    }
+  })
+
+  it('пусто — пусто', () => {
+    expect(suggestPlanned([entry({ status: 'done' })])).toEqual([])
+  })
+
+  it('выбор задаёт случайность', () => {
+    const list = ['a', 'b', 'c', 'd', 'e'].map(planned)
+    expect(ids(suggestPlanned(list, [], () => 0))).toEqual(['a', 'b', 'c'])
+    expect(ids(suggestPlanned(list, [], () => 0.999))).not.toEqual(['a', 'b', 'c'])
+  })
+
+  it('прошлый набор не повторяется, когда есть из чего', () => {
+    const list = ['a', 'b', 'c', 'd'].map(planned)
+    const next = suggestPlanned(list, ['a', 'b', 'c'], () => 0)
+    expect(next).toHaveLength(SUGGEST_COUNT)
+    expect(ids(next)).not.toEqual(['a', 'b', 'c'])
+    expect(new Set(ids(next)).size).toBe(SUGGEST_COUNT)
+  })
+
+  it('не из чего выбрать другое — тот же набор', () => {
+    const list = ['a', 'b'].map(planned)
+    expect(ids(suggestPlanned(list, ['a', 'b']))).toEqual(['a', 'b'])
+  })
+})
 
 describe('зависшее в «смотрю» — Р-58', () => {
   const TODAY = '2026-09-11'
