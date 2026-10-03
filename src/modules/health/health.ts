@@ -455,6 +455,23 @@ export function series(measures: Measure[], metric: string): Series | null {
   }
 }
 
+/** Что правит форма измерения. */
+export type MeasureFields = Pick<Measure, 'metric' | 'date' | 'value' | 'value2' | 'note'>
+
+/**
+ * Измерение после правки. Поля формы заменяются целиком, а не
+ * накладываются: стёртые в форме второе значение и заметка должны
+ * пропасть, а `{ ...current, ...fields }` оставил бы прежние. Id и всё,
+ * чего форма не знает, остаются — запись та же, и синхронизация везёт
+ * её правкой, а не новой.
+ */
+export function editedMeasure(current: Measure, fields: MeasureFields): Measure {
+  const kept: Measure = { ...current }
+  delete kept.value2
+  delete kept.note
+  return { ...kept, ...fields }
+}
+
 // ─── Тренировки ────────────────────────────────────────────────────────────
 
 export type ActivityTotal = {
@@ -539,6 +556,21 @@ export function trainingTotals(sessions: Session[], period: DayPeriod): Training
   }
 
   return totals
+}
+
+/** Что правит форма тренировки. */
+export type SessionFields = Pick<Session, 'activity' | 'date' | 'durationMin' | 'distanceKm' | 'note'>
+
+/**
+ * Тренировка после правки — как `editedMeasure`: стёртые минуты, километры
+ * и заметка пропадают, ссылки и id остаются.
+ */
+export function editedSession(current: Session, fields: SessionFields): Session {
+  const kept: Session = { ...current }
+  delete kept.durationMin
+  delete kept.distanceKm
+  delete kept.note
+  return { ...kept, ...fields }
 }
 
 // ─── Теги симптомов ────────────────────────────────────────────────────────
