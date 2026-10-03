@@ -7,10 +7,12 @@
  * значением и основанием. Состав — таблица «Срез итогов» в 02-Архитектуре:
  * дни болезни и счёт эпизодов (Р-88), тренировки (Р-90), контент по
  * промежутку (Р-89); «требует внимания» — незакрытая болезнь, просроченное
- * в циклах, зависшее в «смотрю».
+ * в циклах, зависшее в «смотрю»; списки названий — «смотрю» и три случайных
+ * из «к просмотру» (Р-94; Я-43 «FamilyCore»).
  *
  * Чего здесь нет никогда (Я-14, Я-19 «FamilyCore»): названий эпизодов,
- * симптомов, `note`, `comment`, названий позиций и записей контента.
+ * симптомов, `note`, `comment`, названий позиций. Из записей контента —
+ * только `title` и только в списках: ни `titleOrig`, ни оценки, ни дат.
  * Измерений и цен отметок — тоже: их не просит ни один потребитель.
  * Настроек устройства — дня прошлого «Ещё смотришь?» и окна напоминаний —
  * тоже: срез считается только из синхронизируемых записей (Я-16).
@@ -23,12 +25,20 @@ import {
   summaryPeriods,
   type Attention,
   type Metric,
+  type NameList,
   type PeriodSummary,
   type SummaryBody,
   type SummaryPeriod,
 } from './shared/core/summary.ts'
-import type { StoreRecord, SyncedStore } from './app/model.ts'
-import { contentInPeriod, STALE_AFTER_DAYS, staleWatching } from './modules/content/content.ts'
+import type { ContentEntry, StoreRecord, SyncedStore } from './app/model.ts'
+import {
+  contentInPeriod,
+  STALE_AFTER_DAYS,
+  staleWatching,
+  SUGGEST_COUNT,
+  suggestPlanned,
+  watching,
+} from './modules/content/content.ts'
 import { statusLabel, TYPES } from './modules/content/labels.ts'
 import { cycleStates, MIN_INTERVALS } from './modules/cycles/cycles.ts'
 import { illnessInPeriod, openEpisodes, trainingTotals } from './modules/health/health.ts'
@@ -65,7 +75,13 @@ export const KEYS = {
   illnessOpen: 'illness.open',
   cyclesOverdue: 'cycles.overdue',
   contentStale: 'content.stale',
+  /** Списки названий на день расчёта (Р-94). */
+  contentWatching: 'content.watching',
+  contentSuggest: 'content.suggest',
 } as const
+
+/** Сколько названий «смотрю» уходит в срез; остальные — числом в основании (Р-94). */
+export const WATCHING_LIMIT = 10
 
 // ─── Слова ─────────────────────────────────────────────────────────────────
 
@@ -75,6 +91,7 @@ const TRAININGS_GENITIVE: [string, string, string] = ['тренировки', '�
 const ENTRIES: [string, string, string] = ['запись', 'записи', 'записей']
 const STARTED: [string, string, string] = ['начата', 'начаты', 'начаты']
 const OF_STARTED: [string, string, string] = ['начатого', 'начатых', 'начатых']
+const RANDOM: [string, string, string] = ['случайная', 'случайных', 'случайных']
 
 /** «аниме, сериалов, фильмов…» — из списка типов, а не буквами (Р-65). */
 const CONTENT_KINDS = TYPES.map((type) => type.forms[2]).join(', ')
@@ -270,11 +287,75 @@ function attention(data: SummaryData, day: DateStr): Attention[] {
   return items
 }
 
+// ─── Списки названий (Р-94) ────────────────────────────────────────────────
+
+/**
+ * Генератор `[0, 1)` от дня расчёта: тот же день — та же последовательность.
+ * Срез обязан быть побайтно одинаковым у двух устройств в один день (Я-16
+ * «FamilyCore»), так что `Math.random` здесь нельзя. Строка дня — в число
+ * хешем FNV-1a, дальше — mulberry32.
+ */
+export function dayRandom(day: DateStr): () => number {
+  let state = 0x811c9dc5
+  for (let i = 0; i < day.length; i += 1) {
+    state = Math.imul(state ^ day.charCodeAt(i), 0x01000193)
+  }
+  return () => {
+    state = (state + 0x6d2b79f5) | 0
+    let t = Math.imul(state ^ (state >>> 15), state | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const byId = (a: ContentEntry, b: ContentEntry) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+
+function lists(data: SummaryData, day: DateStr): NameList[] {
+  const active = statusLabel('active')
+  const planned = statusLabel('planned')
+
+  const now = watching(data.content)
+  const shown = now.slice(0, WATCHING_LIMIT)
+  const rest = now.length - shown.length
+  const watchingBasis =
+    now.length === 0
+      ? `В «${active}» ничего нет`
+      : rest > 0
+        ? `Первые ${shown.length} из ${now.length} в «${active}», как на главном экране; ещё ${rest} не вошли`
+        : `${now.length} ${plural(now.length, ENTRIES)} в «${active}» — все, как на главном экране`
+
+  // Вход — по id: порядок чтения хранилища на выбор не влияет.
+  const pool = data.content.filter((entry) => !entry.deleted && entry.status === 'planned')
+  const picked = suggestPlanned([...pool].sort(byId), [], dayRandom(day), SUGGEST_COUNT)
+  const suggestBasis =
+    pool.length === 0
+      ? `Список «${planned}» пуст`
+      : `${picked.length} из ${pool.length} в «${planned}»; набор меняется со днём расчёта`
+
+  return [
+    {
+      key: KEYS.contentWatching,
+      label: active[0]!.toUpperCase() + active.slice(1),
+      names: shown.map((entry) => entry.title),
+      link: '/content',
+      basis: watchingBasis,
+    },
+    {
+      key: KEYS.contentSuggest,
+      label: `Что посмотреть — ${SUGGEST_COUNT} ${plural(SUGGEST_COUNT, RANDOM)}`,
+      names: picked.map((entry) => entry.title),
+      link: '/content',
+      basis: suggestBasis,
+    },
+  ]
+}
+
 // ─── Срез ──────────────────────────────────────────────────────────────────
 
 /**
  * Срез на день расчёта (Р-91): все четыре отрезка ядра, у каждого — здоровье,
- * тренировки и контент; идущий отрезок верен по день расчёта.
+ * тренировки и контент; идущий отрезок верен по день расчёта. Списки
+ * названий — состояние на день расчёта, а не итог отрезка (Р-94).
  */
 export function summary(data: SummaryData, day: DateStr): SummaryBody {
   const periods: PeriodSummary[] = summaryPeriods(day).map((period) => ({
@@ -286,5 +367,5 @@ export function summary(data: SummaryData, day: DateStr): SummaryBody {
       ...contentMetrics(data, period),
     ],
   }))
-  return { periods, attention: attention(data, day) }
+  return { periods, attention: attention(data, day), lists: lists(data, day) }
 }
