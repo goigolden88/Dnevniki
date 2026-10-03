@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { contentFeed, contentMarkdown } from './feed.ts'
+import { filterFeed } from '../../shared/core/feed.ts'
+import { ulid } from '../../shared/core/id.ts'
 import type { ContentEntry } from '../../app/model.ts'
 
 function entry(id: string, over: Partial<ContentEntry> = {}): ContentEntry {
@@ -29,7 +31,7 @@ describe('contentFeed', () => {
   const feed = contentFeed(entries)
   const byId = (id: string) => feed.find((each) => each.id === id)
 
-  it('«к просмотру» и удалённое в ленту не входят — Р-52', () => {
+  it('удалённое и «к просмотру» без читаемого времени в id в ленту не входят — Р-84, Р-93', () => {
     expect(feed.map((each) => each.id).sort()).toEqual(['a', 'b', 'd', 'f'])
   })
 
@@ -53,6 +55,45 @@ describe('contentFeed', () => {
 
   it('тап ведёт к самой записи, а не просто на вкладку — Р-56', () => {
     expect(byId('a')?.link).toBe('/content?open=a')
+  })
+})
+
+describe('«к просмотру» в ленте — Р-93', () => {
+  // Полдень по местному времени: день добавления не уезжает от часового пояса.
+  const added = ulid(new Date(2026, 8, 5, 12).getTime())
+  const startedId = ulid(new Date(2026, 7, 1, 12).getTime())
+  const removedId = ulid(new Date(2026, 8, 6, 12).getTime())
+  const feed = contentFeed([
+    entry(added, { title: 'Дюна', type: 'film', status: 'planned', start: null, score: null, titleOrig: 'Dune' }),
+    entry(startedId, { title: 'Фрирен', status: 'active', start: '2026-09-02', score: null }),
+    entry(removedId, { title: 'Удалённое', status: 'planned', start: null, score: null, deleted: true }),
+  ])
+  const byId = (id: string) => feed.filter((each) => each.id === id)
+
+  it('строка — в день добавления, из времени в id', () => {
+    expect(byId(added).map((each) => each.date)).toEqual(['2026-09-05'])
+  })
+
+  it('подпись — тип и «к просмотру»', () => {
+    expect(byId(added)[0]?.detail).toBe('фильм · к просмотру')
+  })
+
+  it('тап ведёт в «Контент», к самой записи', () => {
+    expect(byId(added)[0]?.link).toBe(`/content?open=${added}`)
+  })
+
+  it('поиск ленты её находит — по названию, подписи и дню добавления', () => {
+    for (const query of ['дюна', 'к просмотру', 'dune', '05.09.2026']) {
+      expect(filterFeed(feed, { query }).map((each) => each.id)).toEqual([added])
+    }
+  })
+
+  it('начатая — одной строкой по дате начала, без строки «добавлено»', () => {
+    expect(byId(startedId).map((each) => each.date)).toEqual(['2026-09-02'])
+  })
+
+  it('удалённая не видна', () => {
+    expect(byId(removedId)).toEqual([])
   })
 })
 

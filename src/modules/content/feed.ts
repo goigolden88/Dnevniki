@@ -1,9 +1,13 @@
 /**
  * Контент в ленте и в выгрузке markdown (Р-48).
  *
- * Список «к просмотру» в ленту не входит (Р-52): это намерение без даты
- * (Р-21), а лента — хроника того, что было. В выгрузку он входит: выгрузка —
- * это всё, что есть.
+ * Запись «к просмотру» входит в ленту строкой в день, когда её добавили
+ * (Р-93, пересматривает Р-52): своей даты у намерения нет (Р-21), но
+ * добавить в список — тоже событие. День берётся из времени, зашитого
+ * в `id`; поля под него нет. `id` без читаемого времени — строки нет: группа
+ * «дата не читается» наверху — только для поломок (Р-84). Начатая запись —
+ * по дате начала, второй строки «добавлено» у неё нет. В выгрузку список
+ * входит своим разделом, как прежде: выгрузка — это всё, что есть.
  *
  * Дата отдаётся как лежит — `YYYY-MM` остаётся месяцем (Р-25). Запись,
  * начатая без даты или с испорченной, идёт в ленту с тем, что есть: там
@@ -11,7 +15,8 @@
  */
 
 import { escapeMarkdown as md, type FeedItem } from '../../shared/core/feed.ts'
-import { formatDate, isDateOrMonth, isDateStr } from '../../shared/core/dates.ts'
+import { formatDate, isDateOrMonth, isDateStr, toDateStr } from '../../shared/core/dates.ts'
+import { ulidTime } from '../../shared/core/id.ts'
 import type { ContentEntry } from '../../app/model.ts'
 import { groupByMonth, scoreOf, sortEntries } from './content.ts'
 import { formatScore, monthHeading, statusLabel, typeLabel } from './labels.ts'
@@ -25,22 +30,36 @@ function detailOf(entry: ContentEntry): string {
   return parts.join(' · ')
 }
 
+/** День добавления записи — из времени в её `id`. null — время не читается. */
+function addedOn(entry: ContentEntry): string | null {
+  const ms = ulidTime(entry.id)
+  if (ms === null) return null
+  const day = toDateStr(new Date(ms))
+  return isDateStr(day) ? day : null
+}
+
 export function contentFeed(entries: readonly ContentEntry[]): FeedItem[] {
   return entries
-    .filter((entry) => !entry.deleted && entry.status !== 'planned')
-    .map((entry) => {
+    .filter((entry) => !entry.deleted)
+    .flatMap((entry) => {
+      const planned = entry.status === 'planned'
+      const date = planned ? addedOn(entry) : (entry.start ?? '')
+      if (date === null) return []
       const extra = [entry.titleOrig ?? '', entry.comment ?? ''].filter(Boolean).join(' ')
-      return {
-        kind: 'content',
-        id: entry.id,
-        date: entry.start ?? '',
-        title: entry.title,
-        detail: detailOf(entry),
-        // Отдельного экрана записи нет — карточка разворачивается на месте
-        // (Р-44). Номер записи в адресе: вкладка откроет и развернёт её (Р-56).
-        link: `/content?open=${entry.id}`,
-        ...(extra ? { extra } : {}),
-      }
+      return [
+        {
+          kind: 'content',
+          id: entry.id,
+          date,
+          title: entry.title,
+          // «фильм · к просмотру»: оценки у намерения нет (Р-93).
+          detail: planned ? `${typeLabel(entry.type).toLowerCase()} · ${statusLabel('planned')}` : detailOf(entry),
+          // Отдельного экрана записи нет — карточка разворачивается на месте
+          // (Р-44). Номер записи в адресе: вкладка откроет и развернёт её (Р-56).
+          link: `/content?open=${entry.id}`,
+          ...(extra ? { extra } : {}),
+        },
+      ]
     })
 }
 
