@@ -6,6 +6,7 @@ import { Archive, type MonthJump } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'
 import { EntryCard } from './EntryCard.tsx'
 import { EntryForm } from './EntryForm.tsx'
+import { Suggest } from './Suggest.tsx'
 import { currentMonth, useContent, type Content } from './useContent.ts'
 
 /**
@@ -77,6 +78,8 @@ export function ContentScreen() {
           </ul>
         </Fold>
       )}
+
+      <Suggest content={content} />
 
       <NewEntry content={content} />
 
