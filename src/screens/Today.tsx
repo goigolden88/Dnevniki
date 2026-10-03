@@ -11,6 +11,7 @@ import { useFirstRun } from '../shared/screens/useFirstRun.ts'
 import { useWhatsNew } from '../shared/screens/useWhatsNew.ts'
 import { Welcome } from './Welcome.tsx'
 import { WhatsNew } from '../shared/screens/WhatsNew.tsx'
+import { YearAgo } from './YearAgo.tsx'
 
 export function Today() {
   const status = useSyncStatus()
@@ -69,6 +70,9 @@ export function Today() {
       <Watching />
 
       <CycleList />
+
+      {/* Последним: это повод вспомнить, а не дело на сегодня. */}
+      <YearAgo />
     </>
   )
 }

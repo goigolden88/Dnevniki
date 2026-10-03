@@ -592,6 +592,18 @@
   font-size: 12px;
 }
 
+/* «Год назад» на «Сейчас»: блок — одна ссылка в ленту, строки внутри неё. */
+.year-ago {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.year-ago .feed {
+  margin: 4px 0;
+}
+
 .search {
   width: 100%;
   min-height: 44px;
