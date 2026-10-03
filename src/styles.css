@@ -46,6 +46,12 @@
   padding-left: 12px;
 }
 
+/* Строка, которая по тапу открывает правку. */
+.stats .tap {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
 .facts {
   display: grid;
   grid-template-columns: auto 1fr;
