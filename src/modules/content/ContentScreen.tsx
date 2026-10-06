@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Fold } from '../../shared/ui/Fold.tsx'
-import { watching } from './content.ts'
+import { unrated, watching } from './content.ts'
 import { Archive, type MonthJump } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'
 import { EntryCard } from './EntryCard.tsx'
@@ -40,6 +40,7 @@ export function ContentScreen() {
   }
 
   const active = watching(content.entries)
+  const rate = unrated(content.entries)
   const focus = focusId === null ? null : content.entryOf(focusId)
 
   return (
@@ -74,6 +75,19 @@ export function ContentScreen() {
                 content={content}
                 focused={entry.id === focus?.id}
               />
+            ))}
+          </ul>
+        </Fold>
+      )}
+
+      {/* Досмотрел, а оценку не поставил: разобрать всё разом. Оценка
+          ставится правкой в карточке. Цель перехода раскрывает «Записи» —
+          здесь вторая копия той же карточки не нужна. */}
+      {rate.length > 0 && (
+        <Fold id="content:unrated" title="Без оценки" summary={rate.length} folded>
+          <ul className="cycles">
+            {rate.map((entry) => (
+              <EntryCard key={entry.id} entry={entry} content={content} />
             ))}
           </ul>
         </Fold>

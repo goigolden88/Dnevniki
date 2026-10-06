@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   averageText,
+  contentNotice,
   duplicateText,
   entriesText,
   entryText,
@@ -15,6 +16,7 @@ import {
   statusLabel,
   typeCountText,
   typeLabel,
+  unratedText,
 } from './labels.ts'
 import { contentStats } from './content.ts'
 import type { ContentEntry } from '../../app/model.ts'
@@ -85,6 +87,50 @@ describe('«Ещё смотришь?» — Р-58', () => {
     expect(lines).toHaveLength(7)
     expect(lines[5]).toBe('и ещё 2')
     expect(lines[6]).toBe('Досмотрел, бросил или ещё смотришь?')
+  })
+})
+
+describe('«Ещё смотришь?» с просмотренным без оценки', () => {
+  const stale = { entry: entry({ id: 's1', title: 'Забытый сериал', status: 'active' }), days: 103 }
+  const dune = entry({ id: 'u1', title: 'Дюна', score: null })
+  const shogun = entry({ id: 'u2', title: 'Шогун', score: null })
+
+  it('ни зависшего, ни без оценки — молчит', () => {
+    expect(contentNotice([], [])).toBeNull()
+    expect(unratedText([])).toBe('')
+  })
+
+  it('только без оценки — одна часть, тап на «Контент»', () => {
+    expect(contentNotice([], [dune, shogun])).toEqual({
+      title: 'Без оценки',
+      body: 'Без оценки — 2: Дюна, Шогун. Поставь оценку',
+      target: '/content',
+    })
+  })
+
+  it('одна запись без оценки — тап к её карточке', () => {
+    expect(contentNotice([], [dune])?.target).toBe('/content?open=u1')
+  })
+
+  it('только зависшее — как было', () => {
+    expect(contentNotice([stale], [])).toEqual(staleNotice([stale]))
+  })
+
+  it('обе части — обе в тексте, тап на «Контент»', () => {
+    expect(contentNotice([stale], [dune])).toEqual({
+      title: 'Ещё смотришь?',
+      body:
+        'Забытый сериал — без новостей 103 дня. Досмотрел, бросил или ещё смотришь?\n' +
+        'Без оценки — 1: Дюна. Поставь оценку',
+      target: '/content',
+    })
+  })
+
+  it('длинный список без оценки — пять названий и «и ещё»', () => {
+    const many = Array.from({ length: 7 }, (_, index) => entry({ id: `u${index}`, title: `Фильм ${index}`, score: null }))
+    expect(unratedText(many)).toBe(
+      'Без оценки — 7: Фильм 0, Фильм 1, Фильм 2, Фильм 3, Фильм 4 и ещё 2. Поставь оценку',
+    )
   })
 })
 

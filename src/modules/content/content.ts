@@ -168,8 +168,7 @@ export const STALE_AFTER_DAYS = 90
 export function lastSign(entry: ContentEntry): DateStr | null {
   const start = startOf(entry)
   const started = start === null ? null : isMonthStr(start) ? lastDayOf(start) : start
-  const time = Date.parse(entry.updatedAt)
-  const edited = Number.isNaN(time) ? null : toDateStr(new Date(time))
+  const edited = editedDay(entry)
   if (started === null) return edited
   if (edited === null) return started
   return started > edited ? started : edited
@@ -201,6 +200,37 @@ export function staleWatching(entries: readonly ContentEntry[], today: DateStr):
     if (days !== null) stale.push({ entry, days })
   }
   return stale.sort((a, b) => b.days - a.days)
+}
+
+// ─── Просмотренное без оценки ──────────────────────────────────────────────
+
+/** День последней правки записи. Null — время правки не читается. */
+function editedDay(entry: ContentEntry): DateStr | null {
+  const time = Date.parse(entry.updatedAt)
+  return Number.isNaN(time) ? null : toDateStr(new Date(time))
+}
+
+/**
+ * Досмотренное без оценки — свежие правки сверху. Брошенное сюда
+ * не входит: оценка ему не обязательна. Кривая оценка считается
+ * отсутствующей — в итоги она не идёт так же, как пустая.
+ */
+export function unrated(entries: readonly ContentEntry[]): ContentEntry[] {
+  return live(entries)
+    .filter((entry) => entry.status === 'done' && scoreOf(entry) === null)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'ru'))
+}
+
+/**
+ * Свежее без оценки — о нём напоминание. Правлено не раньше `since`, дня,
+ * когда напоминание впервые посчиталось на устройстве: иначе старые записи
+ * из импорта без оценок напоминали бы каждую неделю.
+ */
+export function freshUnrated(entries: readonly ContentEntry[], since: DateStr): ContentEntry[] {
+  return unrated(entries).filter((entry) => {
+    const day = editedDay(entry)
+    return day !== null && day >= since
+  })
 }
 
 export type EntryFilter = {

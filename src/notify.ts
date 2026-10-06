@@ -1,6 +1,6 @@
 /**
  * Напоминания (Р-50, Р-54, Р-57, Р-58): о просроченном в циклах, о незакрытой
- * болезни и «Ещё смотришь?».
+ * болезни и «Ещё смотришь?» — о зависшем и о просмотренном без оценки.
  *
  * Механика — окно со звуком, тихое вне окна, со звуком не чаще раза в день,
  * журнал пробуждений, разрешение и фоновая проверка — ядра (`shared/notify.ts`,
@@ -18,8 +18,9 @@
 import { db } from './app/core.ts'
 import { daysBetween } from './shared/core/dates.ts'
 import { createReminders, DAY_KEYS, type ReminderStatus } from './shared/notify.ts'
-import { staleWatching } from './modules/content/content.ts'
-import { staleNotice } from './modules/content/labels.ts'
+import type { ContentEntry } from './app/model.ts'
+import { freshUnrated, staleWatching, type Stale } from './modules/content/content.ts'
+import { contentNotice } from './modules/content/labels.ts'
 import { cycleStates } from './modules/cycles/cycles.ts'
 import { overdueNotice } from './modules/cycles/labels.ts'
 import { openEpisodes } from './modules/health/health.ts'
@@ -41,6 +42,12 @@ export const ILLNESS_KEYS = { loud: 'reminderIllnessDay', quiet: 'reminderIllnes
  * обновлением.
  */
 export const CONTENT_KEYS = { loud: 'reminderContentDay', quiet: 'reminderContentQuietDay' } as const
+
+/**
+ * День, когда напоминание впервые посчиталось на устройстве. Без оценки
+ * напоминает только правленное с этого дня: старое — в блоке на экране.
+ */
+export const UNRATED_SINCE_KEY = 'reminderUnratedSince'
 
 /**
  * Имя фоновой проверки до перевода на ядро (Р-54). Ядро проверяет под своим
@@ -69,22 +76,43 @@ function lastAsked(loud: string | undefined, quiet: string | undefined): string 
   return days.length === 0 ? null : days.reduce((a, b) => (a > b ? a : b))
 }
 
+/**
+ * Тема «Ещё смотришь?» на сегодня: зависшее и свежее без оценки — одна
+ * тема и одна неделя. Null — не о чем или неделя не прошла.
+ */
+export function contentTopic(
+  stale: readonly Stale[],
+  fresh: readonly ContentEntry[],
+  last: { loud?: string | undefined; quiet?: string | undefined },
+  day: string,
+): ReturnType<typeof contentNotice> {
+  const notice = contentNotice(stale, fresh)
+  return notice !== null && contentDue(lastAsked(last.loud, last.quiet), day) ? notice : null
+}
+
 // ─── Напоминания приложения ────────────────────────────────────────────────
 
 export const reminders = createReminders(db.settings, {
   async topics(day) {
-    const [items, events, episodes, entries, contentLoud, contentQuiet] = await Promise.all([
+    const [items, events, episodes, entries, contentLoud, contentQuiet, unratedSince] = await Promise.all([
       db.getAll('items'),
       db.getAll('cycleEvents'),
       db.getAll('episodes'),
       db.getAll('content'),
       db.settings.get<string>(CONTENT_KEYS.loud),
       db.settings.get<string>(CONTENT_KEYS.quiet),
+      db.settings.get<string>(UNRATED_SINCE_KEY),
     ])
 
+    let since = unratedSince
+    if (typeof since !== 'string') {
+      since = day
+      await db.settings.set(UNRATED_SINCE_KEY, since)
+    }
+
     const illness = illnessNotice(openEpisodes(episodes, day))
-    const stale = staleNotice(staleWatching(entries, day))
-    const askContent = stale !== null && contentDue(lastAsked(contentLoud, contentQuiet), day)
+    const fresh = freshUnrated(entries, since)
+    const content = contentTopic(staleWatching(entries, day), fresh, { loud: contentLoud, quiet: contentQuiet }, day)
 
     return [
       {
@@ -103,9 +131,9 @@ export const reminders = createReminders(db.settings, {
         quietKey: ILLNESS_KEYS.quiet,
       },
       {
-        notice: askContent ? stale : null,
+        notice: content,
         tag: 'content',
-        target: stale?.target ?? '/content',
+        target: content?.target ?? '/content',
         loudKey: CONTENT_KEYS.loud,
         quietKey: CONTENT_KEYS.quiet,
       },
@@ -113,7 +141,7 @@ export const reminders = createReminders(db.settings, {
   },
   idle: {
     title: 'Напоминать не о чем',
-    body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло.',
+    body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло, новое просмотренное оценено.',
     tag: 'overdue',
     target: '/',
   },

@@ -3,6 +3,7 @@ import {
   contentInPeriod,
   contentStats,
   filterEntries,
+  freshUnrated,
   groupByMonth,
   hasUndated,
   keepAvailable,
@@ -21,6 +22,7 @@ import {
   statusForMonth,
   SUGGEST_COUNT,
   suggestPlanned,
+  unrated,
   watching,
   yearsOf,
 } from './content.ts'
@@ -131,6 +133,44 @@ describe('зависшее в «смотрю» — Р-58', () => {
       TODAY,
     )
     expect(list.map((each) => each.entry.id)).toEqual(['jan', 'may'])
+  })
+})
+
+describe('просмотренное без оценки', () => {
+  const done = (id: string, updatedAt: string, over: Partial<ContentEntry> = {}) =>
+    entry({ id, title: id, score: null, updatedAt, ...over })
+
+  it('только живые «просмотрено» без оценки', () => {
+    const list = [
+      done('a', T),
+      done('scored', T, { score: 8 }),
+      done('gone', T, { deleted: true }),
+      done('dropped', T, { status: 'dropped' }),
+      done('active', T, { status: 'active' }),
+      done('planned', T, { status: 'planned' }),
+      done('broken', T, { score: 42 }),
+    ]
+    expect(unrated(list).map((each) => each.id)).toEqual(['a', 'broken'])
+  })
+
+  it('свежие правки сверху', () => {
+    const list = [
+      done('old', '2026-01-01T10:00:00.000Z'),
+      done('new', '2026-09-01T10:00:00.000Z'),
+      done('mid', '2026-05-01T10:00:00.000Z'),
+    ]
+    expect(unrated(list).map((each) => each.id)).toEqual(['new', 'mid', 'old'])
+  })
+
+  it('напоминание — только о правленном не раньше дня включения', () => {
+    const list = [
+      done('before', '2026-09-09T10:00:00.000Z'),
+      done('same', '2026-09-10T10:00:00.000Z'),
+      done('after', '2026-09-11T10:00:00.000Z'),
+      done('scored', '2026-09-11T10:00:00.000Z', { score: 6 }),
+      done('broken', 'не время'),
+    ]
+    expect(freshUnrated(list, '2026-09-10').map((each) => each.id)).toEqual(['after', 'same'])
   })
 })
 
