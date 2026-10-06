@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   contentInPeriod,
   contentStats,
+  editedDay,
   filterEntries,
+  freshUnrated,
   groupByMonth,
   hasUndated,
   keepAvailable,
@@ -21,6 +23,7 @@ import {
   statusForMonth,
   SUGGEST_COUNT,
   suggestPlanned,
+  unrated,
   watching,
   yearsOf,
 } from './content.ts'
@@ -131,6 +134,57 @@ describe('зависшее в «смотрю» — Р-58', () => {
       TODAY,
     )
     expect(list.map((each) => each.entry.id)).toEqual(['jan', 'may'])
+  })
+})
+
+describe('досмотренное без оценки — Р-95', () => {
+  // Полдень: день правки по часам устройства тот же в любом поясе от −11 до +11.
+  const at = (day: string) => `${day}T12:00:00.000Z`
+  const done = (over: Partial<ContentEntry>) => entry({ score: null, ...over })
+  const ids = (list: ContentEntry[]) => list.map((each) => each.id)
+
+  it('только живые «просмотрено» без оценки', () => {
+    const list = unrated([
+      done({ id: 'a' }),
+      done({ id: 'scored', score: 7 }),
+      done({ id: 'dropped', status: 'dropped' }),
+      done({ id: 'active', status: 'active' }),
+      done({ id: 'planned', status: 'planned', start: null }),
+      done({ id: 'deleted', deleted: true }),
+    ])
+    expect(ids(list)).toEqual(['a'])
+  })
+
+  it('кривая оценка из файла — всё равно что нет её', () => {
+    expect(ids(unrated([done({ id: 'a', score: 42 })]))).toEqual(['a'])
+  })
+
+  it('свежие правки сверху', () => {
+    const list = unrated([
+      done({ id: 'old', updatedAt: at('2026-01-10') }),
+      done({ id: 'new', updatedAt: at('2026-09-10') }),
+      done({ id: 'mid', updatedAt: at('2026-05-10') }),
+    ])
+    expect(ids(list)).toEqual(['new', 'mid', 'old'])
+  })
+
+  it('напоминание — о правленном не раньше дня включения, день включительно', () => {
+    const list = freshUnrated(
+      [
+        done({ id: 'before', updatedAt: at('2026-10-04') }),
+        done({ id: 'same', updatedAt: at('2026-10-05') }),
+        done({ id: 'after', updatedAt: at('2026-10-06') }),
+        done({ id: 'broken', updatedAt: 'когда-то' }),
+        done({ id: 'scored', score: 8, updatedAt: at('2026-10-06') }),
+      ],
+      '2026-10-05',
+    )
+    expect(ids(list)).toEqual(['after', 'same'])
+  })
+
+  it('день правки — по часам устройства', () => {
+    expect(editedDay(done({ updatedAt: at('2026-10-05') }))).toBe('2026-10-05')
+    expect(editedDay(done({ updatedAt: 'когда-то' }))).toBeNull()
   })
 })
 

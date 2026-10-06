@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Fold } from '../../shared/ui/Fold.tsx'
-import { watching } from './content.ts'
+import { unrated, watching } from './content.ts'
+import { UNRATED_TITLE } from './labels.ts'
 import { Archive, type MonthJump } from './Archive.tsx'
 import { ContentStats } from './ContentStats.tsx'
 import { EntryCard } from './EntryCard.tsx'
@@ -40,7 +41,11 @@ export function ContentScreen() {
   }
 
   const active = watching(content.entries)
+  const toRate = unrated(content.entries)
   const focus = focusId === null ? null : content.entryOf(focusId)
+  // Пришли к записи без оценки (Р-95) — она раскрывается в своём блоке,
+  // а не второй раз в «Записях»: у экрана одна цель перехода.
+  const rateFocus = focus !== null && toRate.some((entry) => entry.id === focus.id)
 
   return (
     <>
@@ -79,6 +84,29 @@ export function ContentScreen() {
         </Fold>
       )}
 
+      {/* Досмотренное без оценки (Р-95): разобрать всё разом. Оценка
+          ставится правкой в карточке. */}
+      {toRate.length > 0 && (
+        <Fold
+          id="content:unrated"
+          title={UNRATED_TITLE}
+          summary={toRate.length}
+          folded
+          reveal={rateFocus}
+        >
+          <ul className="cycles">
+            {toRate.map((entry) => (
+              <EntryCard
+                key={entry.id}
+                entry={entry}
+                content={content}
+                focused={rateFocus && entry.id === focus?.id}
+              />
+            ))}
+          </ul>
+        </Fold>
+      )}
+
       <Suggest content={content} />
 
       <NewEntry content={content} />
@@ -93,7 +121,7 @@ export function ContentScreen() {
         key={focus?.id ?? ''}
         entries={content.entries}
         content={content}
-        focus={focus}
+        focus={rateFocus ? null : focus}
         jump={jump}
         onJumped={() => setJump(null)}
       />

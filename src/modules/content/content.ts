@@ -168,8 +168,7 @@ export const STALE_AFTER_DAYS = 90
 export function lastSign(entry: ContentEntry): DateStr | null {
   const start = startOf(entry)
   const started = start === null ? null : isMonthStr(start) ? lastDayOf(start) : start
-  const time = Date.parse(entry.updatedAt)
-  const edited = Number.isNaN(time) ? null : toDateStr(new Date(time))
+  const edited = editedDay(entry)
   if (started === null) return edited
   if (edited === null) return started
   return started > edited ? started : edited
@@ -201,6 +200,39 @@ export function staleWatching(entries: readonly ContentEntry[], today: DateStr):
     if (days !== null) stale.push({ entry, days })
   }
   return stale.sort((a, b) => b.days - a.days)
+}
+
+// ─── Без оценки (Р-95) ─────────────────────────────────────────────────────
+
+/** День последней правки по часам устройства. Null — время не читается. */
+export function editedDay(entry: ContentEntry): DateStr | null {
+  const time = Date.parse(entry.updatedAt)
+  return Number.isNaN(time) ? null : toDateStr(new Date(time))
+}
+
+/**
+ * Досмотренное без оценки: живые записи «просмотрено», у которых годной
+ * оценки нет. Брошенное не в счёт — оценка ему не обязательна. Кривая
+ * оценка из файла считается отсутствующей: карточка её тоже не показывает.
+ *
+ * Свежие правки сверху: только что досмотренное ближе всего к руке.
+ */
+export function unrated(entries: readonly ContentEntry[]): ContentEntry[] {
+  return live(entries)
+    .filter((entry) => entry.status === 'done' && scoreOf(entry) === null)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.title.localeCompare(b.title, 'ru'))
+}
+
+/**
+ * Свежее без оценки — о нём напоминание (Р-95): правлено не раньше дня
+ * `since`, когда напоминание впервые посчиталось на устройстве. Старое
+ * без оценки, в том числе из импорта, — только в блоке на экране.
+ */
+export function freshUnrated(entries: readonly ContentEntry[], since: DateStr): ContentEntry[] {
+  return unrated(entries).filter((entry) => {
+    const day = editedDay(entry)
+    return day !== null && day >= since
+  })
 }
 
 export type EntryFilter = {

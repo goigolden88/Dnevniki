@@ -248,3 +248,42 @@ export function staleNotice(
   if (rest > 0) lines.push(`и ещё ${rest}`)
   return { title: 'Ещё смотришь?', body: [...lines, ask].join('\n'), target: '/content' }
 }
+
+// ─── Без оценки (Р-95) ─────────────────────────────────────────────────────
+
+/** Заголовок блока на «Контенте» и начало строки в уведомлении. */
+export const UNRATED_TITLE = 'Без оценки'
+
+/**
+ * Строка уведомления о досмотренном без оценки: «Без оценки — 2: Дюна,
+ * Шогун. Поставь оценку». Названий не больше `NOTICE_LINES`, дальше —
+ * «и ещё N». Пусто — напоминать не о чем.
+ */
+export function unratedText(entries: readonly ContentEntry[]): string {
+  if (entries.length === 0) return ''
+  const names = entries.slice(0, NOTICE_LINES).map((entry) => entry.title)
+  const rest = entries.length - NOTICE_LINES
+  if (rest > 0) names.push(`и ещё ${rest}`)
+  return `${UNRATED_TITLE} — ${entries.length}: ${names.join(', ')}. Поставь оценку`
+}
+
+/**
+ * Уведомление темы «Ещё смотришь?» (Р-58, Р-95): о зависшем в «смотрю»
+ * и о свежем без оценки — обе части, какие есть. Null — ни того, ни другого.
+ *
+ * Тап — к самой записи, когда запись одна на обе части; иначе — на «Контент».
+ */
+export function contentNotice(
+  stale: readonly Stale[],
+  fresh: readonly ContentEntry[],
+): { title: string; body: string; target: string } | null {
+  const asked = staleNotice(stale)
+  const rating = unratedText(fresh)
+  if (asked === null && rating === '') return null
+
+  const named = [...stale.map((each) => each.entry), ...fresh]
+  const target = named.length === 1 ? `/content?open=${named[0]!.id}` : '/content'
+  if (asked === null) return { title: UNRATED_TITLE, body: rating, target }
+  if (rating === '') return asked
+  return { title: asked.title, body: `${asked.body}\n${rating}`, target }
+}

@@ -1,6 +1,6 @@
 /**
- * Напоминания (Р-50, Р-54, Р-57, Р-58): о просроченном в циклах, о незакрытой
- * болезни и «Ещё смотришь?».
+ * Напоминания (Р-50, Р-54, Р-57, Р-58, Р-95): о просроченном в циклах,
+ * о незакрытой болезни и «Ещё смотришь?» — вместе с досмотренным без оценки.
  *
  * Механика — окно со звуком, тихое вне окна, со звуком не чаще раза в день,
  * журнал пробуждений, разрешение и фоновая проверка — ядра (`shared/notify.ts`,
@@ -18,8 +18,9 @@
 import { db } from './app/core.ts'
 import { daysBetween } from './shared/core/dates.ts'
 import { createReminders, DAY_KEYS, type ReminderStatus } from './shared/notify.ts'
-import { staleWatching } from './modules/content/content.ts'
-import { staleNotice } from './modules/content/labels.ts'
+import type { ContentEntry } from './app/model.ts'
+import { freshUnrated, staleWatching } from './modules/content/content.ts'
+import { contentNotice } from './modules/content/labels.ts'
 import { cycleStates } from './modules/cycles/cycles.ts'
 import { overdueNotice } from './modules/cycles/labels.ts'
 import { openEpisodes } from './modules/health/health.ts'
@@ -64,27 +65,57 @@ export function contentDue(lastDay: string | null, day: string): boolean {
 }
 
 /** День последнего вопроса — поздний из громкого и тихого. */
-function lastAsked(loud: string | undefined, quiet: string | undefined): string | null {
+export function lastAsked(loud: string | undefined, quiet: string | undefined): string | null {
   const days = [loud, quiet].filter((day): day is string => typeof day === 'string')
   return days.length === 0 ? null : days.reduce((a, b) => (a > b ? a : b))
+}
+
+/**
+ * День, когда напоминание впервые посчиталось на устройстве (Р-95): о
+ * досмотренном без оценки напоминает, только если запись правлена не раньше.
+ * Имя лежит в настройках устройств и не меняется никогда.
+ */
+export const UNRATED_SINCE_KEY = 'reminderUnratedSince'
+
+/**
+ * Уведомление темы «Ещё смотришь?» на день `day` (Р-58, Р-95): зависшее
+ * в «смотрю» и свежее без оценки — и неделя у них общая. `lastDay` — день
+ * прошлого вопроса, `since` — день из `UNRATED_SINCE_KEY`.
+ */
+export function contentReminder(
+  entries: readonly ContentEntry[],
+  day: string,
+  since: string,
+  lastDay: string | null,
+): { title: string; body: string; target: string } | null {
+  const notice = contentNotice(staleWatching(entries, day), freshUnrated(entries, since))
+  return notice !== null && contentDue(lastDay, day) ? notice : null
+}
+
+/** День из `UNRATED_SINCE_KEY`; не записан — сегодняшний, и он записывается. */
+async function unratedSince(day: string): Promise<string> {
+  const stored = await db.settings.get<unknown>(UNRATED_SINCE_KEY)
+  if (typeof stored === 'string') return stored
+  await db.settings.set(UNRATED_SINCE_KEY, day)
+  return day
 }
 
 // ─── Напоминания приложения ────────────────────────────────────────────────
 
 export const reminders = createReminders(db.settings, {
   async topics(day) {
-    const [items, events, episodes, entries, contentLoud, contentQuiet] = await Promise.all([
+    const [items, events, episodes, entries, contentLoud, contentQuiet, since] = await Promise.all([
       db.getAll('items'),
       db.getAll('cycleEvents'),
       db.getAll('episodes'),
       db.getAll('content'),
       db.settings.get<string>(CONTENT_KEYS.loud),
       db.settings.get<string>(CONTENT_KEYS.quiet),
+      unratedSince(day),
     ])
 
     const illness = illnessNotice(openEpisodes(episodes, day))
-    const stale = staleNotice(staleWatching(entries, day))
-    const askContent = stale !== null && contentDue(lastAsked(contentLoud, contentQuiet), day)
+    const content = contentReminder(entries, day, since, lastAsked(contentLoud, contentQuiet))
 
     return [
       {
@@ -103,9 +134,9 @@ export const reminders = createReminders(db.settings, {
         quietKey: ILLNESS_KEYS.quiet,
       },
       {
-        notice: askContent ? stale : null,
+        notice: content,
         tag: 'content',
-        target: stale?.target ?? '/content',
+        target: content?.target ?? '/content',
         loudKey: CONTENT_KEYS.loud,
         quietKey: CONTENT_KEYS.quiet,
       },
@@ -113,7 +144,7 @@ export const reminders = createReminders(db.settings, {
   },
   idle: {
     title: 'Напоминать не о чем',
-    body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло.',
+    body: 'Просроченного нет, незакрытых болезней нет, в «смотрю» ничего не зависло, досмотренное — с оценками.',
     tag: 'overdue',
     target: '/',
   },

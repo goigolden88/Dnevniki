@@ -1,6 +1,7 @@
 import { days, plural, timeSpan } from '../shared/core/dates.ts'
 import { QUIET_MS, RETRY_MS } from '../shared/core/sync.ts'
 import { STALE_AFTER_DAYS } from '../modules/content/content.ts'
+import { UNRATED_TITLE } from '../modules/content/labels.ts'
 import { DUE_PERCENT, MARKS_FOR_INTERVAL } from '../modules/cycles/labels.ts'
 import { CONTENT_EVERY_DAYS, DEFAULT_WINDOW } from '../notify.ts'
 import { STALE_DAYS } from '../shared/ui/backup.ts'
@@ -91,6 +92,11 @@ export function Help() {
           Запись, которая {days(STALE_AFTER_DAYS)} висит в «смотрю» без правок, спросит «Ещё
           смотришь?» — в карточке и напоминанием, не чаще раза в {days(CONTENT_EVERY_DAYS)}. Ответ одним
           тапом прямо в карточке.
+        </p>
+        <p>
+          Досмотренное без оценки собрано в блоке «{UNRATED_TITLE}» — оценка ставится правкой
+          в карточке. О новом без оценки напомнит то же «Ещё смотришь?», с той же неделей; о том,
+          что осталось без оценки до включения напоминаний на этом устройстве, — только блок.
         </p>
       </Fold>
 
