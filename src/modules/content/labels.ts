@@ -248,3 +248,38 @@ export function staleNotice(
   if (rest > 0) lines.push(`и ещё ${rest}`)
   return { title: 'Ещё смотришь?', body: [...lines, ask].join('\n'), target: '/content' }
 }
+
+/**
+ * Строка о свежем без оценки: «Без оценки — 2: Дюна, Шогун. Поставь оценку».
+ * Пусто — оценивать нечего.
+ */
+export function unratedText(entries: readonly ContentEntry[]): string {
+  if (entries.length === 0) return ''
+  const names = entries.slice(0, NOTICE_LINES).map((entry) => entry.title)
+  const rest = entries.length - NOTICE_LINES
+  const list = rest > 0 ? `${names.join(', ')} и ещё ${rest}` : names.join(', ')
+  return `Без оценки — ${entries.length}: ${list}. Поставь оценку`
+}
+
+/**
+ * Тема «Ещё смотришь?» целиком: зависшее в «смотрю» и свежее без оценки —
+ * обе части, какие есть. Null — не о чем.
+ *
+ * Тап ведёт к записи, когда она одна на обе части, иначе — на «Контент».
+ * Заголовок — вопрос о зависшем, если оно есть: он главнее.
+ */
+export function contentNotice(
+  stale: readonly Stale[],
+  fresh: readonly ContentEntry[],
+): { title: string; body: string; target: string } | null {
+  const asked = staleNotice(stale)
+  const rate = unratedText(fresh)
+  if (asked === null && rate === '') return null
+
+  const only = stale.length + fresh.length === 1 ? (stale[0]?.entry ?? fresh[0]) : undefined
+  return {
+    title: asked?.title ?? 'Без оценки',
+    body: [asked?.body, rate].filter(Boolean).join('\n'),
+    target: only === undefined ? '/content' : `/content?open=${only.id}`,
+  }
+}

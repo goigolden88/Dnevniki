@@ -631,6 +631,12 @@ async function scenario() {
     has(twoMonths, thisHeading) && has(twoMonths, otherHeading),
     line(twoMonths, MONTH_HEADINGS[otherIndex]),
   )
+  // Досмотренное с оценкой блока не заводит, без оценки — заводит.
+  check(
+    'просмотренное без оценки — свой блок',
+    !has(watched, 'Без оценки') && has(twoMonths, 'Без оценки'),
+    line(twoMonths, 'Без оценки'),
+  )
 
   // Период слоями: готовый ответ, потом выбор месяцев руками (Р-47).
   await act(`byText('button', 'Этот месяц')?.click()`)
