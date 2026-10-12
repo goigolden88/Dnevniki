@@ -147,6 +147,9 @@ function check(what, passed, seen = '') {
   checks.push({ what, passed, seen })
 }
 
+/** Сколько запросов к api.github.com увидела вкладка. */
+let githubHits = 0
+
 let socket
 let seq = 0
 const waiting = new Map()
@@ -170,6 +173,12 @@ function connect(url) {
 
     if (message.method === 'Runtime.consoleAPICalled' && message.params.type === 'error') {
       problems.push(message.params.args.map((arg) => arg.value ?? arg.description).join(' '))
+    }
+
+    // События сети приходят после `Network.enable`; демо считает по ним
+    // запросы к GitHub — их не должно быть ни одного (Я-44 «FamilyCore»).
+    if (message.method === 'Network.requestWillBeSent' && message.params.request.url.includes('api.github.com')) {
+      githubHits++
     }
   }
 
@@ -300,11 +309,24 @@ async function scenario() {
     has(start, 'С чего начать') && has(start, 'Установка'),
     start.replace(/\s+/g, ' ').slice(0, 160),
   )
+  check(
+    'на пустой базе без токена — предложение демо — Я-45 «FamilyCore»',
+    has(start, 'Посмотреть на демо-данных?') && has(start, 'Открыть демо') && has(start, 'Нет, начну своё'),
+    line(start, 'демо'),
+  )
   await act(`byText('button', 'Понятно')?.click()`)
   await sleep(400)
   await send('Page.reload')
   await sleep(2000)
   check('«Понятно» убирает приветствие и после перезапуска — Р-70', !has(await screen(), 'С чего начать'))
+  await act(`byText('button', 'Нет, начну своё')?.click()`)
+  await sleep(400)
+  await send('Page.reload')
+  await sleep(2000)
+  check(
+    '«Нет, начну своё» — предложение демо больше не показывается — Я-45 «FamilyCore»',
+    !has(await screen(), 'Посмотреть на демо-данных?'),
+  )
 
   // ─ Циклы
   await act(`byText('button', 'Добавить позицию')?.click()`)
@@ -1254,6 +1276,100 @@ async function scenario() {
     downloadThroughput: -1,
     uploadThroughput: -1,
   })
+
+  await demoScenario()
+}
+
+/**
+ * Демо-данные (Я-44, Я-45 «FamilyCore»): вход из настроек на устройстве
+ * со своими записями; в демо — полоса и выдуманные записи всех трёх
+ * модулей, своих не видно, синхронизации нет и к GitHub не уходит ни один
+ * запрос (по событиям сети вкладки); «Выйти» спрашивает, отказ оставляет
+ * в демо; выход возвращает свои записи и стирает демо-базу.
+ */
+async function demoScenario() {
+  const bar = 'Демо: данные выдуманные'
+  await send('Network.enable')
+  await go('/feed')
+  const own = await screen()
+  check('до демо — свои записи на месте', has(own, 'Второй фильм') && !has(own, bar), line(own, 'Второй фильм'))
+
+  // По заголовкам блоков, а не по тексту экрана: «синхронизация» есть
+  // и в строке про справку наверху «Настроек».
+  const syncBlock = `[...document.querySelectorAll('.fold__btn')].some((el) => el.textContent.trim().startsWith('Синхронизация'))`
+  await go('/settings')
+  check('до демо — блок «Синхронизация» в настройках есть', (await run(syncBlock)) === true)
+  await unfold('Демо-данные')
+  // Счёт — с нажатия: перезагрузка в демо тоже не должна звать GitHub.
+  const hitsBefore = githubHits
+  await act(`byText('button', 'Открыть демо')?.click()`)
+  await sleep(2500)
+
+  await go('/')
+  await unfoldAll()
+  const today = await screen()
+  check(
+    'демо «Сейчас»: полоса, позиции по категориям, срок прошёл и подходит — Я-44 «FamilyCore»',
+    has(today, bar) &&
+      has(today, 'Гигиена') &&
+      has(today, 'Авто') &&
+      has(today, 'Зубная щётка') &&
+      has(today, 'перебор') &&
+      has(today, 'подходит к сроку') &&
+      has(today, 'Простуда') &&
+      has(today, 'Звёздный почтальон'),
+    line(today, 'Демо'),
+  )
+
+  await go('/health')
+  await unfoldAll()
+  const health = await screen()
+  check(
+    'демо «Здоровье»: болезнь, измерения, тренировки',
+    has(health, bar) && has(health, 'Простуда') && has(health, 'Измерения') && has(health, 'Бассейн'),
+    health.replace(/\s+/g, ' ').slice(0, 160),
+  )
+
+  await go('/content')
+  const content = await screen()
+  check('демо «Контент»: записи', has(content, bar) && has(content, 'Северный маяк'), line(content, 'маяк'))
+
+  await go('/feed')
+  const feed = await screen()
+  check(
+    'демо «Лента»: всё по датам, своих записей нет',
+    has(feed, bar) && has(feed, 'Простуда') && has(feed, 'Северный маяк') && !has(feed, 'Второй фильм'),
+    line(feed, 'Простуда'),
+  )
+
+  await go('/settings')
+  const settings = await screen()
+  check(
+    'в демо «Синхронизации» в настройках нет, «Демо-данные» — с выходом — Я-44 «FamilyCore»',
+    (await run(syncBlock)) === false && has(settings, 'Выйти из демо'),
+    line(settings, 'демо'),
+  )
+  check('в демо ни одного запроса к GitHub — Я-44 «FamilyCore»', githubHits === hitsBefore, `запросов ${githubHits - hitsBefore}`)
+
+  await act(`window.confirm = () => false; document.querySelector('.demo-bar__leave')?.click()`)
+  await sleep(700)
+  check('«Выйти» с отказом — демо остаётся — Я-45 «FamilyCore»', has(await screen(), bar))
+
+  await act(`window.confirm = (text) => { localStorage.setItem('smokeAsked', text); return true }; document.querySelector('.demo-bar__leave')?.click()`)
+  await sleep(2500)
+  await go('/feed')
+  const back = await screen()
+  const asked = await run(`localStorage.getItem('smokeAsked')`)
+  const bases = await run(`indexedDB.databases().then((list) => list.map((each) => each.name).join(', '))`)
+  check(
+    'выход: спросил, свои записи вернулись, демо-база стёрта — Я-44, Я-45 «FamilyCore»',
+    Boolean(asked) &&
+      has(back, 'Второй фильм') &&
+      !has(back, bar) &&
+      !has(back, 'Северный маяк') &&
+      !String(bases).includes('dnevniki-demo'),
+    `${asked}; базы: ${bases}`,
+  )
 }
 
 /**
