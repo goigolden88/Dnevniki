@@ -5,6 +5,7 @@ import { formatDateLong, today } from '../shared/core/dates.ts'
 import { CycleList } from '../modules/cycles/CycleList.tsx'
 import { OpenEpisodes } from '../modules/health/OpenEpisodes.tsx'
 import { Watching } from '../modules/content/Watching.tsx'
+import { DemoOffer } from '../shared/ui/Demo.tsx'
 import { IosNote } from '../shared/ui/Install.tsx'
 import { useSyncStatus } from '../shared/ui/useSync.ts'
 import { useFirstRun } from '../shared/screens/useFirstRun.ts'
@@ -45,7 +46,10 @@ export function Today() {
         <p className="muted">{formatDateLong(today())}</p>
       </header>
 
-      {/* Первый запуск (Р-70): пока база пуста и приветствие не закрыли. */}
+      {/* Первый запуск (Р-70): демо — один раз и только устройству без токена
+          «семья» (Я-45 «FamilyCore»), затем приветствие, пока база пуста
+          и его не закрыли. */}
+      <DemoOffer own={OWN_STORES} />
       {first.welcome && <Welcome onDone={first.dismissWelcome} />}
 
       {/* После обновления (Р-71): что поменялось. */}
