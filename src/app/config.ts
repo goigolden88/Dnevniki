@@ -10,6 +10,7 @@
 
 import type { AppConfig } from '../shared/core/model.ts'
 import { migrations, SCHEMA_VERSION, SYNCED_STORES, type StoreRecord } from './model.ts'
+import { demo } from '../screens/demo.ts'
 import { summary } from '../summary.ts'
 
 export const config: AppConfig<StoreRecord> = {
@@ -101,4 +102,8 @@ export const config: AppConfig<StoreRecord> = {
   // Срез итогов для метаприложения (Р-91): `summary.json` в репозитории
   // данных, пишет проход синхронизации. Только из записей и дня расчёта.
   summary,
+
+  // Демо-данные (Я-44, Я-45 «FamilyCore»): выдуманные записи от дня входа —
+  // своя база `dnevniki-demo` без синхронизации. Полнота — `demo.test.ts`.
+  demo,
 }

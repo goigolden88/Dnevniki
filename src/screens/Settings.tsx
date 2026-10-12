@@ -24,6 +24,7 @@ import { QuickSettings } from '../modules/cycles/Quick.tsx'
 import { HealthNames } from '../modules/health/Names.tsx'
 import { importPrompt, KIND_ORDER, KINDS, markdownExport, planImport } from '../registry.ts'
 import { backupNote, backupSummary } from '../shared/ui/backup.ts'
+import { DemoSettings } from '../shared/ui/Demo.tsx'
 import { Fold } from '../shared/ui/Fold.tsx'
 import { CHANGES } from '../changes.ts'
 import { ChangeList } from '../shared/screens/WhatsNew.tsx'
@@ -123,6 +124,9 @@ export function Settings() {
       <QuickSettings />
 
       <DataTransfer onChanged={load} />
+
+      {/* Демо-данные (Я-44 «FamilyCore»): вход в любой момент, в демо — выход. */}
+      <DemoSettings />
 
       <About state={state} />
     </>
