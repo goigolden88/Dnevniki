@@ -132,6 +132,7 @@ export function Measures({ health }: { health: Health }) {
                         className="link-btn"
                         onClick={(event) => {
                           event.stopPropagation()
+                          if (!window.confirm(`Удалить измерение ${formatDateLoose(measure.date)}?`)) return
                           void health.removeMeasure(measure.id)
                         }}
                         aria-label={`Удалить измерение ${formatDateLoose(measure.date)}`}

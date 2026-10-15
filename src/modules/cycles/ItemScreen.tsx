@@ -243,7 +243,10 @@ function History({
                   <button
                     type="button"
                     className="link-btn"
-                    onClick={() => void onRemove(mark.id)}
+                    onClick={() => {
+                      if (!window.confirm(`Удалить отметку ${formatDateLoose(mark.date)}?`)) return
+                      void onRemove(mark.id)
+                    }}
                     aria-label={`Удалить отметку ${formatDateLoose(mark.date)}`}
                   >
                     ×
