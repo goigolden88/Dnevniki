@@ -135,7 +135,10 @@ export function EntryCard({
             <button
               type="button"
               className="link-btn btn--danger"
-              onClick={() => void content.removeEntry(entry.id)}
+              onClick={() => {
+                if (!window.confirm(`Удалить «${entry.title}»?`)) return
+                void content.removeEntry(entry.id)
+              }}
             >
               Удалить
             </button>

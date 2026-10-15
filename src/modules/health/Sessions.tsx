@@ -97,6 +97,7 @@ export function Sessions({ health }: { health: Health }) {
                           className="link-btn"
                           onClick={(event) => {
                             event.stopPropagation()
+                            if (!window.confirm(`Удалить тренировку ${formatDateLoose(session.date)}?`)) return
                             void health.removeSession(session.id)
                           }}
                           aria-label={`Удалить тренировку ${formatDateLoose(session.date)}`}
