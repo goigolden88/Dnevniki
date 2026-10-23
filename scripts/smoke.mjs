@@ -275,6 +275,47 @@ async function unfold(title) {
   await sleep(400)
 }
 
+/**
+ * Удаление с вопросом (`window.confirm`): «Отмена» оставляет запись,
+ * «ОК» убирает. В безголовом браузере отвечать некому, поэтому вопрос
+ * подменяется ответом прогона, а его текст запоминается: не спросили —
+ * значит, удаляют без спроса, и проверка падает. После каждого ответа
+ * родной `confirm` возвращается на место. Точка с запятой перед шагом —
+ * не лишняя: шаг может начинаться с «[» и склеился бы с подменой.
+ *
+ * `press` — шаг, нажимающий «удалить»; `count` — выражение: сколько таких
+ * записей на экране. До удаления их ровно одна — заведённая ради проверки,
+ * чтобы проверки дальше по прогону не лишились своих записей.
+ */
+async function askedRemoval(what, press, count) {
+  const answer = async (ok) => {
+    await act(`window.smokeConfirm ??= window.confirm
+      window.smokeAsked = null
+      window.confirm = (text) => { window.smokeAsked = text; return ${ok} };
+      ${press}`)
+    await sleep(700)
+    const asked = await run('window.smokeAsked')
+    const left = await run(count)
+    await run('window.confirm = window.smokeConfirm')
+    return { asked, left }
+  }
+  const said = (asked) => (typeof asked === 'string' ? `спросил «${asked}»` : 'вопроса не было')
+
+  const before = await run(count)
+  const kept = await answer(false)
+  check(
+    `${what}: перед удалением вопрос, «Отмена» оставляет запись`,
+    before === 1 && typeof kept.asked === 'string' && kept.left === 1,
+    `записей до ${before}; ${said(kept.asked)}; после «Отмены» ${kept.left}`,
+  )
+  const gone = await answer(true)
+  check(
+    `${what}: «ОК» удаляет запись`,
+    typeof gone.asked === 'string' && gone.left === 0,
+    `${said(gone.asked)}; после «ОК» ${gone.left}`,
+  )
+}
+
 // ─── Сценарий ──────────────────────────────────────────────────────────────
 
 /**
@@ -564,6 +605,37 @@ async function scenario() {
     `в форме было ${weighed}; ${line(measured, 'Сейчас')}`,
   )
 
+  // Удаление измерения и тренировки спрашивает. Удаляются заведённые
+  // здесь же: поправленные выше нужны ленте ниже.
+  await act(`
+    const input = document.querySelector('input[placeholder="кг"]')
+    set(input, '91')
+    input.closest('form').querySelector('button[type=submit]').click()
+  `)
+  await sleep(800)
+  const measureRows = `[...document.querySelectorAll('tr.tap')].filter((el) => el.textContent.includes('91 кг'))`
+  await askedRemoval(
+    'измерение',
+    `${measureRows}[0]?.querySelector('button[aria-label^="Удалить измерение"]')?.click()`,
+    `${measureRows}.length`,
+  )
+
+  await act(`byText('button', 'Записать тренировку')?.click()`)
+  await sleep(300)
+  await act(`
+    const form = document.querySelector('input[placeholder="бег, зал, растяжка"]').closest('form')
+    set(form.querySelector('input[placeholder="бег, зал, растяжка"]'), 'бег')
+    set(form.querySelector('input[placeholder="мин"]'), '20')
+    form.querySelector('button[type=submit]').click()
+  `)
+  await sleep(800)
+  const sessionRows = `[...document.querySelectorAll('tr.tap')].filter((el) => el.textContent.includes('20 мин'))`
+  await askedRemoval(
+    'тренировка',
+    `${sessionRows}[0]?.querySelector('button[aria-label^="Удалить тренировку"]')?.click()`,
+    `${sessionRows}.length`,
+  )
+
   await go('/feed')
   const feedRows = (text) =>
     act(`set(document.querySelector('.search'), ${JSON.stringify(text)})`)
@@ -717,6 +789,26 @@ async function scenario() {
   const cards = await run(`document.querySelectorAll('.cycles li').length`)
   check('просмотренное в брошенные не затесалось', cards === 0, `карточек ${cards}`)
 
+  // Удаление записи спрашивает. Удаляется заведённая здесь же, в «Смотрю
+  // сейчас»: две записи выше нужны ленте ниже.
+  await act(`byText('button', 'Добавить запись')?.click()`)
+  await sleep(300)
+  await act(`
+    set(document.querySelector('form input'), 'Запись на удаление')
+    byText('button', 'Добавить')?.click()
+  `)
+  await sleep(800)
+  const entryCards = `[...document.querySelectorAll('li.cycle')]
+    .filter((el) => el.querySelector('.cycle__name')?.textContent.trim() === 'Запись на удаление')`
+  await act(`const card = ${entryCards}[0]
+    card?.querySelector('.cycle__name')?.click()`)
+  await sleep(400)
+  await askedRemoval(
+    'запись контента',
+    `${entryCards}[0]?.querySelector('.btn--danger')?.click()`,
+    `${entryCards}.length`,
+  )
+
   // ─ Удаление позиции вместе с отметками (Р-74): пробная уходит и из ленты.
   await go('/')
   await act(`byText('button', 'Добавить позицию')?.click()`)
@@ -736,6 +828,15 @@ async function scenario() {
       .find((el) => el.textContent.trim() === 'Пробная позиция')
     link?.click()`)
   await sleep(800)
+  // Удаление отметки спрашивает. Удаляется июньская, заведённая здесь же:
+  // сегодняшняя нужна проверке удаления позиции ниже.
+  await act(`
+    set([...document.querySelectorAll('input[type=date]')].at(-1), '2026-06-01')
+    byText('button', 'Добавить')?.click()
+  `)
+  await sleep(600)
+  const juneMark = `document.querySelectorAll('button[aria-label="Удалить отметку 01.06.2026"]')`
+  await askedRemoval('отметка обслуживания', `${juneMark}[0]?.click()`, `${juneMark}.length`)
   await act(`byText('button', 'Удалить')?.click()`)
   await sleep(300)
   const asked = await screen()
