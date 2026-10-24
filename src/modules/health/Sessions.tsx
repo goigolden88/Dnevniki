@@ -1,8 +1,9 @@
 import { Fragment, useId, useState, type FormEvent } from 'react'
 import { formatDateLoose, plural, today } from '../../shared/core/dates.ts'
 import type { Session } from '../../app/model.ts'
-import { activityTotals } from './health.ts'
+import { activityTotals, RECENT_LIMIT, recentWithFocus } from './health.ts'
 import { sessionText } from './labels.ts'
+import { ScrollRow } from './ScrollRow.tsx'
 import type { Health, SessionDraft } from './useHealth.ts'
 import { Fold } from '../../shared/ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
@@ -17,17 +18,83 @@ import { TodayButton } from '../../ui/TodayButton.tsx'
  *
  * Форма — за кнопкой, как у эпизода и записи контента (Р-73): раскрытая
  * всегда, она занимала экран, а свод по видам уезжал под неё.
+ *
+ * `focusId` — запись, к которой пришли из ленты (Р-97): она открыта на
+ * правку. Id не тренировки — блок его не замечает.
  */
-export function Sessions({ health }: { health: Health }) {
+export function Sessions({ health, focusId }: { health: Health; focusId: string | null }) {
+  const focus = health.sessions.find((each) => each.id === focusId) ?? null
   const [adding, setAdding] = useState(false)
   /** Какая из последних записей открыта на правку. */
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(focus?.id ?? null)
+  /** Цель перехода, пока её правка не закрыта: к ней прокрутить, ради неё развернуть блок. */
+  const [target, setTarget] = useState<string | null>(focus?.id ?? null)
   const totals = activityTotals(health.sessions)
-  const recent = [...health.sessions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10)
+  const { recent, apart } = recentWithFocus(health.sessions, focus?.id ?? null)
   const names = new Map(health.tags.map((tag) => [tag.id, tag.name]))
 
+  function done() {
+    setEditing(null)
+    setTarget(null)
+  }
+
+  function rows(list: readonly Session[]) {
+    return list.map((session) =>
+      session.id === editing ? (
+        <ScrollRow key={session.id} scroll={session.id === target}>
+          <td colSpan={4}>
+            <SessionForm
+              health={health}
+              session={session}
+              submitLabel="Сохранить"
+              onSubmit={(draft) => health.updateSession(session.id, draft)}
+              onDone={done}
+            />
+          </td>
+        </ScrollRow>
+      ) : (
+        // Тап по записи — правка, как у эпизода: тем же видом формы, что ввод.
+        <Fragment key={session.id}>
+          <tr className="tap" onClick={() => setEditing(session.id)}>
+            <td>{formatDateLoose(session.date)}</td>
+            <td>{names.get(session.activity) ?? '?'}</td>
+            <td className="num muted">
+              {sessionText(session.durationMin ?? 0, session.distanceKm ?? 0)}
+            </td>
+            <td className="num">
+              <button
+                type="button"
+                className="link-btn"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (!window.confirm(`Удалить тренировку ${formatDateLoose(session.date)}?`)) return
+                  void health.removeSession(session.id)
+                }}
+                aria-label={`Удалить тренировку ${formatDateLoose(session.date)}`}
+              >
+                ×
+              </button>
+            </td>
+          </tr>
+          {session.note && (
+            <tr className="tap" onClick={() => setEditing(session.id)}>
+              <td colSpan={4} className="muted">
+                {session.note}
+              </td>
+            </tr>
+          )}
+        </Fragment>
+      ),
+    )
+  }
+
   return (
-    <Fold id="health:sessions" title="Тренировки" summary={health.sessions.length}>
+    <Fold
+      id="health:sessions"
+      title="Тренировки"
+      summary={health.sessions.length}
+      reveal={target !== null}
+    >
       {adding ? (
         <SessionForm
           health={health}
@@ -65,58 +132,27 @@ export function Sessions({ health }: { health: Health }) {
       )}
 
       {/* Тем же сворачиванием, что блоки, а не ссылкой-треугольником (Р-73). */}
-      {recent.length > 0 && (
-        <Fold id="health:sessions:recent" title="Последние записи" summary={recent.length} sub folded>
+      {/* Запись из ленты старше последних — отдельно над ними (Р-97). */}
+      {apart && (
+        <>
+          <p className="muted">Из ленты — старше последних {RECENT_LIMIT}:</p>
           <table className="stats">
-            <tbody>
-              {recent.map((session) =>
-                session.id === editing ? (
-                  <tr key={session.id}>
-                    <td colSpan={4}>
-                      <SessionForm
-                        health={health}
-                        session={session}
-                        submitLabel="Сохранить"
-                        onSubmit={(draft) => health.updateSession(session.id, draft)}
-                        onDone={() => setEditing(null)}
-                      />
-                    </td>
-                  </tr>
-                ) : (
-                  // Тап по записи — правка, как у эпизода: тем же видом формы, что ввод.
-                  <Fragment key={session.id}>
-                    <tr className="tap" onClick={() => setEditing(session.id)}>
-                      <td>{formatDateLoose(session.date)}</td>
-                      <td>{names.get(session.activity) ?? '?'}</td>
-                      <td className="num muted">
-                        {sessionText(session.durationMin ?? 0, session.distanceKm ?? 0)}
-                      </td>
-                      <td className="num">
-                        <button
-                          type="button"
-                          className="link-btn"
-                          onClick={(event) => {
-                            event.stopPropagation()
-                            if (!window.confirm(`Удалить тренировку ${formatDateLoose(session.date)}?`)) return
-                            void health.removeSession(session.id)
-                          }}
-                          aria-label={`Удалить тренировку ${formatDateLoose(session.date)}`}
-                        >
-                          ×
-                        </button>
-                      </td>
-                    </tr>
-                    {session.note && (
-                      <tr className="tap" onClick={() => setEditing(session.id)}>
-                        <td colSpan={4} className="muted">
-                          {session.note}
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                ),
-              )}
-            </tbody>
+            <tbody>{rows([apart])}</tbody>
+          </table>
+        </>
+      )}
+
+      {recent.length > 0 && (
+        <Fold
+          id="health:sessions:recent"
+          title="Последние записи"
+          summary={recent.length}
+          sub
+          folded
+          reveal={target !== null && apart === null}
+        >
+          <table className="stats">
+            <tbody>{rows(recent)}</tbody>
           </table>
         </Fold>
       )}

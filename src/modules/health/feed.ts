@@ -76,7 +76,8 @@ export function measureFeed(measures: readonly Measure[]): FeedItem[] {
       date: measure.date,
       title: `${metricLabel(measure.metric)} ${measureText(measure.metric, measure.value, measure.value2)}`,
       detail: measure.note ?? '',
-      link: '/health',
+      // Номер записи в адресе: вкладка откроет её на правку, как у контента (Р-97).
+      link: `/health?open=${measure.id}`,
     }))
 }
 
@@ -114,7 +115,7 @@ export function sessionFeed(sessions: readonly Session[], tags: readonly Tag[]):
       // Тег приедет позже эпизода или тренировки — строка нужна и без него.
       title: names.get(session.activity) ?? 'Вид не найден',
       detail: sessionText(session.durationMin ?? 0, session.distanceKm ?? 0),
-      link: '/health',
+      link: `/health?open=${session.id}`,
       ...(session.note ? { extra: session.note } : {}),
     }))
 }

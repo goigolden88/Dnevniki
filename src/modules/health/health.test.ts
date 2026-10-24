@@ -9,6 +9,8 @@ import {
   illnessInPeriod,
   metricsOf,
   openEpisodes,
+  RECENT_LIMIT,
+  recentWithFocus,
   renameMetricPlan,
   renameTagPlan,
   series,
@@ -39,6 +41,34 @@ function measure(over: Partial<Measure> = {}): Measure {
 function session(over: Partial<Session> = {}): Session {
   return { id: 's1', updatedAt: T, activity: 'бег', date: '2026-09-01', ...over }
 }
+
+describe('последние записи и цель из ленты — Р-97', () => {
+  // Записей на две больше, чем видно: первая по дню — самая старая.
+  const rows = Array.from({ length: RECENT_LIMIT + 2 }, (_, index) =>
+    session({ id: `s${index}`, date: `2026-08-${String(index + 1).padStart(2, '0')}` }),
+  )
+
+  it('без цели — последние, новые сверху', () => {
+    const { recent, apart } = recentWithFocus(rows, null)
+    expect(recent).toHaveLength(RECENT_LIMIT)
+    expect(recent[0]?.id).toBe(`s${RECENT_LIMIT + 1}`)
+    expect(apart).toBeNull()
+  })
+
+  it('цель среди последних — отдельно не показывается', () => {
+    expect(recentWithFocus(rows, `s${RECENT_LIMIT}`).apart).toBeNull()
+  })
+
+  it('цель старше последних — отдельно, список прежний', () => {
+    const { recent, apart } = recentWithFocus(rows, 's0')
+    expect(apart?.id).toBe('s0')
+    expect(recent).toEqual(recentWithFocus(rows, null).recent)
+  })
+
+  it('цели нет — удалена на другом устройстве', () => {
+    expect(recentWithFocus(rows, 'нет-такой').apart).toBeNull()
+  })
+})
 
 describe('названия — Р-59', () => {
   const tag = (id: string, name: string, scope: Tag['scope'] = 'symptom'): Tag => ({ id, updatedAt: T, name, scope })

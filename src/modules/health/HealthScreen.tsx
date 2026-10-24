@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { today } from '../../shared/core/dates.ts'
 import type { Episode } from '../../app/model.ts'
 import { Fold } from '../../shared/ui/Fold.tsx'
@@ -21,6 +21,10 @@ import { useHealth, type EpisodeDraft, type Health } from './useHealth.ts'
  */
 export function HealthScreen() {
   const health = useHealth()
+  // Измерение или тренировка, к которой пришли из ленты (Р-97): открыть
+  // её на правку. Чьё это id, решают блоки — чужое каждый пропустит.
+  const [params] = useSearchParams()
+  const focusId = params.get('open')
 
   if (health.status === 'loading') return <p className="muted">Открываю базу…</p>
   if (health.status === 'failed') return <p className="error">База не открылась: {health.error}</p>
@@ -63,9 +67,10 @@ export function HealthScreen() {
 
       <Stats health={health} />
 
-      <Measures health={health} />
+      {/* Ключ по цели: переход к другой записи заново выставляет метрику и правку. */}
+      <Measures key={`m:${focusId ?? ''}`} health={health} focusId={focusId} />
 
-      <Sessions health={health} />
+      <Sessions key={`s:${focusId ?? ''}`} health={health} focusId={focusId} />
 
       <Fold id="health:history" title="История" summary={closed.length}>
         {closed.length === 0 ? (

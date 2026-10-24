@@ -1,9 +1,10 @@
 import { Fragment, useState, type FormEvent } from 'react'
 import { formatDate, formatDateLoose, today } from '../../shared/core/dates.ts'
 import type { Measure } from '../../app/model.ts'
-import { metricsOf, resolveMetric, series } from './health.ts'
+import { metricsOf, RECENT_LIMIT, recentWithFocus, resolveMetric, series } from './health.ts'
 import { measureText, METRICS, metricLabel, metricUnit } from './labels.ts'
 import { Chart } from './Chart.tsx'
+import { ScrollRow } from './ScrollRow.tsx'
 import { Fold } from '../../shared/ui/Fold.tsx'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { Health, MeasureDraft } from './useHealth.ts'
@@ -15,17 +16,23 @@ import type { Health, MeasureDraft } from './useHealth.ts'
  * готовые: вес, давление, рост. Своя заводится чипом «+ своя»: до него
  * завести её было нечем вовсе, хотя модель это позволяла. Дальше она
  * стоит в переключателе сама, как только записано первое значение.
+ *
+ * `focusId` — запись, к которой пришли из ленты (Р-97): выбрана её метрика,
+ * она открыта на правку. Id не измерения — блок его не замечает.
  */
-export function Measures({ health }: { health: Health }) {
+export function Measures({ health, focusId }: { health: Health; focusId: string | null }) {
+  const focus = health.measures.find((each) => each.id === focusId) ?? null
   const known = metricsOf(health.measures)
   // Готовые метрики стоят первыми всегда, даже пустые: без этого не
   // с чего начать, когда измерений ещё нет ни одного.
   const all = [...METRICS.map((each) => each.key), ...known.filter((each) => !isPreset(each))]
-  const [metric, setMetric] = useState<string>(all[0] ?? 'weight')
+  const [metric, setMetric] = useState<string>(focus?.metric ?? all[0] ?? 'weight')
   const [naming, setNaming] = useState(false)
   const [newName, setNewName] = useState('')
   /** Какая из последних записей открыта на правку. */
-  const [editing, setEditing] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(focus?.id ?? null)
+  /** Цель перехода, пока её правка не закрыта: к ней прокрутить, ради неё развернуть блок. */
+  const [target, setTarget] = useState<string | null>(focus?.id ?? null)
   // Только что выбранная своя метрика ещё без единого значения — в ряду
   // её нет, а показать выбранное надо.
   const shown = all.includes(metric) ? all : [...all, metric]
@@ -40,13 +47,65 @@ export function Measures({ health }: { health: Health }) {
   }
 
   const row = series(health.measures, metric)
-  const recent = health.measures
-    .filter((measure) => measure.metric === metric)
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 10)
+  const { recent, apart } = recentWithFocus(
+    health.measures.filter((measure) => measure.metric === metric),
+    focus?.id ?? null,
+  )
+
+  function done() {
+    setEditing(null)
+    setTarget(null)
+  }
+
+  function rows(list: readonly Measure[]) {
+    return list.map((measure) =>
+      measure.id === editing ? (
+        <ScrollRow key={measure.id} scroll={measure.id === target}>
+          <td colSpan={3}>
+            <MeasureForm metric={measure.metric} health={health} measure={measure} onDone={done} />
+          </td>
+        </ScrollRow>
+      ) : (
+        // Тап по записи — правка, как у тренировки и эпизода.
+        <Fragment key={measure.id}>
+          <tr className="tap" onClick={() => setEditing(measure.id)}>
+            <td>{formatDateLoose(measure.date)}</td>
+            <td className="num">{measureText(measure.metric, measure.value, measure.value2)}</td>
+            <td className="num">
+              <button
+                type="button"
+                className="link-btn"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (!window.confirm(`Удалить измерение ${formatDateLoose(measure.date)}?`)) return
+                  void health.removeMeasure(measure.id)
+                }}
+                aria-label={`Удалить измерение ${formatDateLoose(measure.date)}`}
+              >
+                ×
+              </button>
+            </td>
+          </tr>
+          {/* Заметка правится — значит, должна быть видна. */}
+          {measure.note && (
+            <tr className="tap" onClick={() => setEditing(measure.id)}>
+              <td colSpan={3} className="muted">
+                {measure.note}
+              </td>
+            </tr>
+          )}
+        </Fragment>
+      ),
+    )
+  }
 
   return (
-    <Fold id="health:measures" title="Измерения" summary={health.measures.length}>
+    <Fold
+      id="health:measures"
+      title="Измерения"
+      summary={health.measures.length}
+      reveal={target !== null}
+    >
 
       <div className="chips">
         {shown.map((each) => (
@@ -103,56 +162,19 @@ export function Measures({ health }: { health: Health }) {
 
       <MeasureForm metric={metric} health={health} />
 
+      {/* Запись из ленты старше последних — отдельно над ними (Р-97). */}
+      {apart && (
+        <>
+          <p className="muted">Из ленты — старше последних {RECENT_LIMIT}:</p>
+          <table className="stats">
+            <tbody>{rows([apart])}</tbody>
+          </table>
+        </>
+      )}
+
       {recent.length > 0 && (
         <table className="stats">
-          <tbody>
-            {recent.map((measure) =>
-              measure.id === editing ? (
-                <tr key={measure.id}>
-                  <td colSpan={3}>
-                    <MeasureForm
-                      metric={measure.metric}
-                      health={health}
-                      measure={measure}
-                      onDone={() => setEditing(null)}
-                    />
-                  </td>
-                </tr>
-              ) : (
-                // Тап по записи — правка, как у тренировки и эпизода.
-                <Fragment key={measure.id}>
-                  <tr className="tap" onClick={() => setEditing(measure.id)}>
-                    <td>{formatDateLoose(measure.date)}</td>
-                    <td className="num">
-                      {measureText(measure.metric, measure.value, measure.value2)}
-                    </td>
-                    <td className="num">
-                      <button
-                        type="button"
-                        className="link-btn"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          if (!window.confirm(`Удалить измерение ${formatDateLoose(measure.date)}?`)) return
-                          void health.removeMeasure(measure.id)
-                        }}
-                        aria-label={`Удалить измерение ${formatDateLoose(measure.date)}`}
-                      >
-                        ×
-                      </button>
-                    </td>
-                  </tr>
-                  {/* Заметка правится — значит, должна быть видна. */}
-                  {measure.note && (
-                    <tr className="tap" onClick={() => setEditing(measure.id)}>
-                      <td colSpan={3} className="muted">
-                        {measure.note}
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ),
-            )}
-          </tbody>
+          <tbody>{rows(recent)}</tbody>
         </table>
       )}
     </Fold>
