@@ -2,6 +2,7 @@ import { days, plural, timeSpan } from '../shared/core/dates.ts'
 import { QUIET_MS, RETRY_MS } from '../shared/core/sync.ts'
 import { STALE_AFTER_DAYS, SUGGEST_COUNT } from '../modules/content/content.ts'
 import { DUE_PERCENT, MARKS_FOR_INTERVAL } from '../modules/cycles/labels.ts'
+import { RECENT_LIMIT } from '../modules/health/health.ts'
 import { CONTENT_EVERY_DAYS, DEFAULT_WINDOW } from '../notify.ts'
 import { STALE_DAYS } from '../shared/ui/backup.ts'
 import { Fold } from '../shared/ui/Fold.tsx'
@@ -83,7 +84,8 @@ export function Help() {
         </p>
         <p>
           Измерение или тренировку поправить — тап по записи в последних открывает её форму. «×»
-          удаляет запись, но сперва спрашивает.
+          удаляет запись, но сперва спрашивает. Тап по записи в ленте открывает ту же форму; запись
+          старше последних {RECENT_LIMIT} встаёт над ними отдельно.
         </p>
       </Fold>
 

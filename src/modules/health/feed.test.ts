@@ -76,6 +76,13 @@ describe('measureFeed', () => {
     expect(feed[1]?.detail).toBe('утром')
   })
 
+  it('тап ведёт к самой записи — Р-97', () => {
+    expect(measureFeed(measures).map((each) => each.link)).toEqual([
+      '/health?open=m1',
+      '/health?open=m2',
+    ])
+  })
+
   it('markdown — по метрикам', () => {
     const text = measureMarkdown(measures)
     expect(text).toContain('### Вес')
@@ -97,6 +104,13 @@ describe('sessionFeed', () => {
     expect(feed.map((each) => [each.title, each.detail])).toEqual([
       ['бег', '40 мин · 7.5 км'],
       ['Вид не найден', ''],
+    ])
+  })
+
+  it('тап ведёт к самой записи — Р-97', () => {
+    expect(sessionFeed(sessions, tags).map((each) => each.link)).toEqual([
+      '/health?open=s1',
+      '/health?open=s2',
     ])
   })
 

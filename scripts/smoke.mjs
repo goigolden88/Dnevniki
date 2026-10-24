@@ -646,6 +646,38 @@ async function scenario() {
   await act(`set(document.querySelector('.search'), '')`)
   check('в ленте поправленная тренировка одна, без дубля', edited === 1 && stale === 0, `«полегче» ${edited}, «тяжело» ${stale}`)
 
+  // Тап в ленте по тренировке и измерению открывает саму запись на правку (Р-97).
+  await sleep(300)
+  await act(`const row = [...document.querySelectorAll('.feed__row')]
+      .find((each) => each.textContent.includes('45 мин'))
+    row?.click()`)
+  await sleep(900)
+  const trainedOpen = await run(`JSON.stringify({
+    hash: location.hash,
+    note: document.querySelector('td form textarea')?.value ?? '',
+  })`)
+  check(
+    'тап в ленте по тренировке открывает её правку — Р-97',
+    trainedOpen.includes('open=') && JSON.parse(trainedOpen).note === 'полегче',
+    trainedOpen,
+  )
+  await go('/feed')
+  await sleep(300)
+  await act(`const row = [...document.querySelectorAll('.feed__row')]
+      .find((each) => each.textContent.includes('78.5'))
+    row?.click()`)
+  await sleep(900)
+  const weighedOpen = await run(`document.querySelector('td form input[placeholder="кг"]')?.value ?? ''`)
+  check('тап в ленте по измерению открывает его правку — Р-97', weighedOpen === '78.5', `в форме ${weighedOpen}`)
+  // Удалённая запись — просто «Здоровье», без ошибки.
+  await go('/health?open=нет-такой')
+  const missing = await screen()
+  check(
+    'адрес с удалённой записью открывает «Здоровье» как есть — Р-97',
+    has(missing, 'Измерения') && !has(missing, 'Из ленты') && !has(missing, 'Сохранить'),
+    line(missing, 'Здоровье'),
+  )
+
   // ─ Контент
   await go('/content')
   check('экран контента открылся', has(await screen(), 'Контент'))

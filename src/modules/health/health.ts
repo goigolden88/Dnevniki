@@ -573,6 +573,27 @@ export function editedSession(current: Session, fields: SessionFields): Session 
   return { ...kept, ...fields }
 }
 
+// ─── Последние записи ──────────────────────────────────────────────────────
+
+/** Сколько последних измерений метрики и тренировок видно списком. */
+export const RECENT_LIMIT = 10
+
+/**
+ * Последние записи — новые сверху, не больше `RECENT_LIMIT`, — и та,
+ * к которой пришли из ленты (Р-97). Цель среди последних — `apart` пуст:
+ * она откроется на своём месте. Старше — `apart`, её показывают над
+ * списком: иначе к ней не попасть вовсе. Цели нет среди `rows` (удалена,
+ * другая метрика) — тоже пуст.
+ */
+export function recentWithFocus<T extends { id: string; date: string }>(
+  rows: readonly T[],
+  focusId: string | null,
+): { recent: T[]; apart: T | null } {
+  const recent = [...rows].sort((a, b) => b.date.localeCompare(a.date)).slice(0, RECENT_LIMIT)
+  if (focusId === null || recent.some((row) => row.id === focusId)) return { recent, apart: null }
+  return { recent, apart: rows.find((row) => row.id === focusId) ?? null }
+}
+
 // ─── Теги симптомов ────────────────────────────────────────────────────────
 
 /**
