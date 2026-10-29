@@ -119,6 +119,23 @@ export function marksOfItem(events: readonly CycleEvent[], itemId: string): Cycl
     .sort((a, b) => b.date.localeCompare(a.date))
 }
 
+/**
+ * Есть ли у позиции живая отметка на эту дату. Второй отметки в тот же день
+ * не бывает — ни новой, ни перенесённой со старой даты. `except` — сама
+ * переносимая отметка: оставить её на месте не значит занять чужую дату.
+ */
+export function dateTaken(
+  events: readonly CycleEvent[],
+  itemId: string,
+  date: string,
+  except?: string,
+): boolean {
+  return events.some(
+    (event) =>
+      event.itemId === itemId && event.date === date && !event.deleted && event.id !== except,
+  )
+}
+
 /** Промежутки между соседними отметками в днях. На входе — выход `markDates`. */
 export function intervals(dates: DateStr[]): number[] {
   const result: number[] = []

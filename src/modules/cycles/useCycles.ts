@@ -19,6 +19,7 @@ import {
   cycleState,
   cycleStates,
   cycleTemplates,
+  dateTaken,
   findCategory,
   initialCategories,
   lastPrice,
@@ -36,7 +37,7 @@ import {
 } from './cycles.ts'
 import { CATEGORIES } from './labels.ts'
 import { db } from '../../app/core.ts'
-import { nowIso, today, type DateStr } from '../../shared/core/dates.ts'
+import { isDateStr, nowIso, today, type DateStr } from '../../shared/core/dates.ts'
 import { ulid } from '../../shared/core/id.ts'
 import type { CycleCategory, CycleEvent, CycleItem, Template } from '../../app/model.ts'
 
@@ -50,6 +51,9 @@ export type ItemDraft = {
   intervalDays: number | null
   note?: string
 }
+
+/** Чем кончился перенос отметки. 'kept' — переносить было нечего или запись не прошла. */
+export type MoveResult = 'moved' | 'taken' | 'kept'
 
 export type Cycles = {
   status: Status
@@ -74,6 +78,8 @@ export type Cycles = {
   removeMark: (id: string) => Promise<void>
   /** Цена отметки. `null` убирает её совсем. */
   setMarkPrice: (id: string, price: number | null) => Promise<void>
+  /** Дата отметки. 'taken' — на неё у позиции уже есть другая отметка. */
+  setMarkDate: (id: string, date: DateStr) => Promise<MoveResult>
   addItem: (draft: ItemDraft) => Promise<CycleItem | null>
   updateItem: (id: string, patch: Partial<ItemDraft & { archived: boolean }>) => Promise<void>
   /** `withMarks` — и все её отметки надгробиями (Р-74). */
@@ -230,10 +236,7 @@ export function useCycles(): Cycles {
   const addMark = useCallback(
     async (itemId: string, date: DateStr, price?: number | null) => {
       const previous = events
-      const already = previous.some(
-        (event) => event.itemId === itemId && event.date === date && !event.deleted,
-      )
-      if (already) return
+      if (dateTaken(previous, itemId, date)) return
 
       // Цена необязательна, и пустое поле не должно заводить `price: null`
       // в записи: в модели поле или есть, или его нет.
@@ -287,6 +290,32 @@ export function useCycles(): Cycles {
         () => db.put('cycleEvents', updated),
       )
       if (saved) setEvents((all) => all.map((each) => (each.id === saved.id ? saved : each)))
+    },
+    [events, apply],
+  )
+
+  /**
+   * Перенос отметки на другую дату — по тому же правилу, что новая отметка:
+   * любая дата, кроме занятой другой отметкой этой позиции. Цена и всё
+   * остальное едет вместе с ней. Отметка, перешедшая в другой год, сама
+   * переедет и в другой файл репозитория данных (Р-33).
+   */
+  const setMarkDate = useCallback(
+    async (id: string, date: DateStr): Promise<MoveResult> => {
+      const previous = events
+      const current = previous.find((event) => event.id === id)
+      if (!current || !isDateStr(date) || current.date === date) return 'kept'
+      if (dateTaken(previous, current.itemId, date, id)) return 'taken'
+
+      const updated: CycleEvent = { ...current, date }
+      const saved = await apply(
+        () => setEvents(previous.map((event) => (event.id === id ? updated : event))),
+        () => setEvents(previous),
+        () => db.put('cycleEvents', updated),
+      )
+      if (!saved) return 'kept'
+      setEvents((all) => all.map((each) => (each.id === saved.id ? saved : each)))
+      return 'moved'
     },
     [events, apply],
   )
@@ -647,6 +676,7 @@ export function useCycles(): Cycles {
     addMark,
     removeMark,
     setMarkPrice,
+    setMarkDate,
     addItem,
     updateItem,
     removeItem,
