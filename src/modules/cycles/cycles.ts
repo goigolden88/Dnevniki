@@ -687,7 +687,7 @@ export function spendTree(
 
     // Одиночные позиции не сливаются в общий куст: ключ у каждой свой.
     const group = item.group?.trim() || null
-    const key = group ?? ` ${item.id}`
+    const key = group ?? `\x00${item.id}`
     const unit = cat.get(key) ?? { group, items: [], spent: NOTHING }
     if (own.priced > 0) unit.items.push({ item, spent: own })
     unit.spent = plus(unit.spent, own)
