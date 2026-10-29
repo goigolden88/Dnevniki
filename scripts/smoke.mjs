@@ -418,6 +418,47 @@ async function scenario() {
     line(backdated, 'Потрачено'),
   )
 
+  // Дата отметки правится на месте, цена при этом остаётся. На день,
+  // где у позиции уже есть отметка (сегодня), — нет, и сказано почему.
+  const dateForm = `document.querySelector('input[aria-label^="Новая дата отметки"]')?.form`
+  await act(`document.querySelector('[aria-label="Дата отметки 01.07.2026"]')?.click()`)
+  await sleep(300)
+  await act(`
+    const form = ${dateForm}
+    set(form.querySelector('input[type=date]'), '2026-07-02')
+    form.querySelector('[type=submit]').click()
+  `)
+  await sleep(700)
+  const redated = await screen()
+  check(
+    'дата отметки поправилась, цена осталась',
+    has(redated, '02.07.2026') && !has(redated, '01.07.2026') && has(redated, '1 200,50'),
+    line(redated, '02.07.2026'),
+  )
+  await act(`document.querySelector('[aria-label="Дата отметки 02.07.2026"]')?.click()`)
+  await sleep(300)
+  await act(`
+    const form = ${dateForm}
+    form.querySelector('.chip--today').click()
+  `)
+  await sleep(200)
+  await act(`${dateForm}.querySelector('[type=submit]').click()`)
+  await sleep(700)
+  const clash = await screen()
+  check(
+    'на занятый день дата не переносится, сказано почему',
+    has(clash, 'уже есть отметка') && (await run(`Boolean(${dateForm})`)),
+    line(clash, 'уже есть отметка'),
+  )
+  await act(`byText('button', 'Отмена')?.click()`)
+  await sleep(300)
+  const kept = await screen()
+  check(
+    'после «Отмены» отметка на прежней дате, с ценой',
+    has(kept, '02.07.2026') && has(kept, '1 200,50'),
+    line(kept, '02.07.2026'),
+  )
+
   // Траты — отдельный блок, свёрнутый по умолчанию; раскрывается заголовком (Р-55).
   await go('/')
   await act(`byText('button', 'Траты')?.click()`)

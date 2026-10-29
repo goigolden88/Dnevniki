@@ -1,6 +1,14 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { daysBetween, days, formatDateLoose, plural, today } from '../../shared/core/dates.ts'
+import {
+  daysBetween,
+  days,
+  formatDateLoose,
+  isDateStr,
+  plural,
+  today,
+  type DateStr,
+} from '../../shared/core/dates.ts'
 import type { CycleEvent } from '../../app/model.ts'
 import { TodayButton } from '../../ui/TodayButton.tsx'
 import type { CycleState } from './cycles.ts'
@@ -17,7 +25,7 @@ import {
   spentText,
   statusText,
 } from './labels.ts'
-import { useCycles, type ItemDraft } from './useCycles.ts'
+import { useCycles, type ItemDraft, type MoveResult } from './useCycles.ts'
 
 /** Позиция целиком: состояние, история, разброс, правка. */
 export function ItemScreen() {
@@ -131,7 +139,12 @@ export function ItemScreen() {
         </section>
       )}
 
-      <History marks={marks} onRemove={cycles.removeMark} onSetPrice={cycles.setMarkPrice} />
+      <History
+        marks={marks}
+        onRemove={cycles.removeMark}
+        onSetPrice={cycles.setMarkPrice}
+        onSetDate={cycles.setMarkDate}
+      />
 
       <AddMark itemId={id} onAdd={cycles.addMark} />
 
@@ -203,16 +216,24 @@ function Divergence({
  * Здесь же правится цена. Отметка ставится одним тапом на экране «Сейчас»,
  * где формы нет вовсе, и другого места вписать 700 ₽ за стрижку у неё не
  * будет — а без цен нечего складывать (Р-36).
+ *
+ * И дата: тап по ней открывает поле на месте строки. Отметил вечером
+ * за вчера — удалять и заводить заново значило бы потерять цену.
  */
 function History({
   marks,
   onRemove,
   onSetPrice,
+  onSetDate,
 }: {
   marks: CycleEvent[]
   onRemove: (id: string) => Promise<void>
   onSetPrice: (id: string, price: number | null) => Promise<void>
+  onSetDate: (id: string, date: DateStr) => Promise<MoveResult>
 }) {
+  /** Чья дата открыта на правку. */
+  const [dating, setDating] = useState<string | null>(null)
+
   if (marks.length === 0) {
     return (
       <section className="block">
@@ -231,10 +252,33 @@ function History({
         <tbody>
           {marks.map((mark, index) => {
             const older = marks[index + 1]
-            const gap = older ? daysBetween(older.date, mark.date) : null
+            // Старая неточная дата промежутка не даёт, но строку не роняет:
+            // до неё надо добраться, чтобы поправить.
+            const gap =
+              older && isDateStr(older.date) && isDateStr(mark.date)
+                ? daysBetween(older.date, mark.date)
+                : null
+            if (mark.id === dating) {
+              return (
+                <tr key={mark.id}>
+                  <td colSpan={4}>
+                    <DateForm mark={mark} onSet={onSetDate} onDone={() => setDating(null)} />
+                  </td>
+                </tr>
+              )
+            }
             return (
               <tr key={mark.id}>
-                <td>{formatDateLoose(mark.date)}</td>
+                <td>
+                  <button
+                    type="button"
+                    className="link-btn"
+                    onClick={() => setDating(mark.id)}
+                    aria-label={`Дата отметки ${formatDateLoose(mark.date)}`}
+                  >
+                    {formatDateLoose(mark.date)}
+                  </button>
+                </td>
                 <td className="num muted">{gap === null ? '' : `+${days(gap)}`}</td>
                 <td className="num">
                   <PriceCell mark={mark} onSet={onSetPrice} />
@@ -319,6 +363,76 @@ function PriceCell({
         if (e.key === 'Escape') setEditing(false)
       }}
     />
+  )
+}
+
+/**
+ * Правка даты отметки на месте строки истории.
+ *
+ * Не по уходу из поля, как цена: рядом стоит «сегодня», и тап по нему
+ * уводил бы фокус из поля раньше, чем чип успеет нажаться. Поэтому —
+ * кнопка «Сохранить». Занятая дата не записывается: поле остаётся
+ * открытым, и под ним сказано почему.
+ *
+ * Неточная дата из старых дневников в поле даты не встаёт — оно пустое,
+ * а прежняя дата написана рядом, чтобы было видно, что правится.
+ */
+function DateForm({
+  mark,
+  onSet,
+  onDone,
+}: {
+  mark: CycleEvent
+  onSet: (id: string, date: DateStr) => Promise<MoveResult>
+  onDone: () => void
+}) {
+  const [date, setDate] = useState(isDateStr(mark.date) ? mark.date : '')
+  const [taken, setTaken] = useState<string | null>(null)
+
+  /** Другая дата — прежнее «занято» к ней уже не относится. */
+  function pick(day: string) {
+    setDate(day)
+    setTaken(null)
+  }
+
+  function submit(formEvent: FormEvent) {
+    formEvent.preventDefault()
+    if (!isDateStr(date) || date === mark.date) {
+      onDone()
+      return
+    }
+    void onSet(mark.id, date).then((result) => {
+      if (result === 'taken') setTaken(date)
+      else onDone()
+    })
+  }
+
+  return (
+    <form onSubmit={submit}>
+      {!isDateStr(mark.date) && <p className="muted">Было: {mark.date}</p>}
+      <div className="row row--wrap">
+        <input
+          type="date"
+          value={date}
+          autoFocus
+          aria-label={`Новая дата отметки ${formatDateLoose(mark.date)}`}
+          onChange={(e) => pick(e.target.value)}
+        />
+        <TodayButton value={date} onPick={pick} />
+        <button type="submit" className="btn btn--primary">
+          Сохранить
+        </button>
+        <button type="button" className="btn" onClick={onDone}>
+          Отмена
+        </button>
+      </div>
+      {taken && (
+        <p className="error">
+          На {formatDateLoose(taken)} у позиции уже есть отметка — дата не изменилась. Две
+          отметки в один день не ставятся.
+        </p>
+      )}
+    </form>
   )
 }
 

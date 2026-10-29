@@ -5,6 +5,7 @@ import {
   cycleState,
   cycleStates,
   cycleTemplates,
+  dateTaken,
   DUE_RATIO,
   groupByCategory,
   knownGroups,
@@ -44,6 +45,48 @@ describe('marksOfItem — Р-74', () => {
   it('надгробия и чужие позиции не попадают', () => {
     expect(marksOfItem(events, 'i2').map((event) => event.id)).toEqual(['d'])
     expect(marksOfItem(events, 'нет-такой')).toEqual([])
+  })
+})
+
+describe('dateTaken — одна отметка позиции на день', () => {
+  const at = '2026-09-07T00:00:00.000Z'
+  const events: CycleEvent[] = [
+    { id: 'a', updatedAt: at, itemId: 'i1', date: '2026-01-10' },
+    { id: 'b', updatedAt: at, itemId: 'i1', date: '2026-03-10', price: 700 },
+    { id: 'c', updatedAt: at, itemId: 'i1', date: '2026-02-10', deleted: true },
+    { id: 'd', updatedAt: at, itemId: 'i2', date: '2026-04-10' },
+    { id: 'e', updatedAt: at, itemId: 'i1', date: '2025-05' },
+  ]
+
+  it('дата другой живой отметки позиции занята — и для новой, и для переноса', () => {
+    expect(dateTaken(events, 'i1', '2026-01-10')).toBe(true)
+    expect(dateTaken(events, 'i1', '2026-01-10', 'b')).toBe(true)
+  })
+
+  it('своя же дата при переносе не занята', () => {
+    expect(dateTaken(events, 'i1', '2026-03-10', 'b')).toBe(false)
+  })
+
+  it('надгробие и чужая позиция дату не занимают', () => {
+    expect(dateTaken(events, 'i1', '2026-02-10', 'b')).toBe(false)
+    expect(dateTaken(events, 'i1', '2026-04-10', 'b')).toBe(false)
+  })
+
+  it('отметку с неточной датой переносить можно, на её дату — нельзя', () => {
+    expect(dateTaken(events, 'i1', '2025-05-20', 'e')).toBe(false)
+    expect(dateTaken(events, 'i1', '2025-05', 'b')).toBe(true)
+  })
+
+  it('после переноса интервалы и срок считаются по новой дате', () => {
+    const own = (list: CycleEvent[]) => list.filter((event) => event.itemId === 'i1')
+    const moved = events.map((event) => (event.id === 'b' ? { ...event, date: '2026-03-15' } : event))
+    expect(intervals(markDates(own(events)))).toEqual([59])
+    expect(intervals(markDates(own(moved)))).toEqual([64])
+    const state = cycleState(item(), moved, '2026-03-20')
+    expect(state.last).toBe('2026-03-15')
+    expect(state.daysSince).toBe(5)
+    // Цена едет вместе с отметкой.
+    expect(moved.find((event) => event.id === 'b')?.price).toBe(700)
   })
 })
 
